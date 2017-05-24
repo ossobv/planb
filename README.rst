@@ -3,9 +3,9 @@ PlanB
 
 TODO:
 
-  * Add description/title after h1 heading.
-  * Explain what this is (will be).
-  * Add authors/copyright/dates from original project.
+* Add description/title after h1 heading.
+* Explain what this is (will be).
+* Add authors/copyright/dates from original project.
 
 
 -----------------
@@ -14,9 +14,9 @@ Setting it all up
 
 TODO:
 
-  * Explain how you can skip some or all parts here.
-  * Move the optional details, like how to set up a database or ZFS, to a
-    separate heading at the bottom.
+* Explain how you can skip some or all parts here.
+* Move the optional details, like how to set up a database or ZFS, to a
+  separate heading at the bottom.
 
 
 Setting up a ZFS pool
@@ -59,12 +59,11 @@ Installing requirements::
 
 
 
-
+------
 F.A.Q.
 ------
 
 The ``mkvirtualenv`` said ``locale.Error: unsupported locale setting``.
-
     You need to install the right locales until ``perl -e setlocale`` is
     silent. How depends on your system and your config. See ``locale`` and
     e.g. ``locale-gen en_US.UTF-8``.

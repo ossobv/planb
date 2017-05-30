@@ -1,6 +1,12 @@
 #!/bin/sh
 here=$(cd "$(dirname "$0")"; pwd)
-admin=$(which django-admin.py django-admin | head -n1)
+admin=$(which django-admin django-admin.py | head -n1)
 test -z "$admin" && echo "No django-admin found. Missing env?" >&2 && exit 1
 
-PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec "$admin" "$@"
+if [ $(id -u) -eq 0 ]; then
+    # Install daemontools(1); for further reading, see:
+    # http://jdebp.eu./FGA/dont-abuse-su-for-dropping-privileges.html
+    PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec setuidgid planb "$admin" "$@"
+else
+    PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec "$admin" "$@"
+fi

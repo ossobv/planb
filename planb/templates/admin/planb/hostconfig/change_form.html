@@ -3,8 +3,7 @@
 
 {% block extrahead %}
     {{ block.super }}
-    <!--<script type="text/javascript" src="{{ STATIC_URL }}js/jquery-1.7.1.min.js"></script>-->
-    <script type="text/javascript" src="{{ STATIC_URL }}backup/js/jquery-postlink.js"></script>
+    <script type="text/javascript" src="{{ STATIC_URL }}planb/js/jquery-postlink.js"></script>
     <script type="text/javascript">//<![CDATA[
         django.jQuery(document).ready(function() {
             django.jQuery(".postlink").postlink({'csrf_protected': true});
@@ -14,7 +13,7 @@
 
 {% block object-tools-items %}
     {% if user.is_superuser %}
-        <li><a class="postlink" href="enqueue/">{% trans "Enqueue" %}</a></li>
+        <li><a class="postlink" href="{% url "enqueue" original.pk %}">{% trans "Enqueue" %}</a></li>
     {% endif %}
 
     {{ block.super }}

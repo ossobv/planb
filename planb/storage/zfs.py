@@ -1,4 +1,5 @@
 import logging
+import os.path
 import re
 import subprocess
 from datetime import datetime
@@ -110,8 +111,11 @@ class Zfs(BaseFileSystem2):
         return '{0}/{1}-{2}'.format(rootdir, customer, friendly_name)
 
     def data_dir_get(self, rootdir, customer, friendly_name):
-        return '/{0}/data'.format(self.get_dataset_name(rootdir, customer,
-                                  friendly_name))
+        dataset_name = self.get_dataset_name(rootdir, customer, friendly_name)
+        cmd = (
+            self.binary, 'get', '-Ho', 'value', 'mountpoint', dataset_name)
+        out = self._perform_system_command(cmd).rstrip(b'\r\n')
+        return os.path.join(out, b'data').decode('utf-8')  # fail on decode-err
 
     def snapshot_create(self, rootdir, customer, friendly_name, snapname=None):
         datasetname = self.get_dataset_name(rootdir, customer, friendly_name)

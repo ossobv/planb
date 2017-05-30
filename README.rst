@@ -9,13 +9,16 @@ TODO:
 * Add pepcleaning pre-commit hook.
 * Add flake-checking pre-commt hook.
 * Add BCH checks.
-* Replace Customer with HostGroup:
+* Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
-* Replace BackupJob with HostConfig:
+* Alter HostConfig:
   - use fs-name and optionally human-name
   - use asciifield for fs-name?
 * Fix /home/backup => $HOME
+* Check whether the mount-point != zpool-name works properly.
+* Fix 'sudo' usage for all ZFS calls!
+* Fix admin "Planb" name as "PlanB".
 
 
 -----------------
@@ -77,8 +80,14 @@ Setting up the database and a PlanB user::
 
 Setting up a local user::
 
-    adduser planb --disabled-password --home=/srv/planb --shell=/bin/bash \
-      --system
+    adduser planb --disabled-password --home=/var/spool/planb \
+      --shell=/bin/bash --system
+
+    su - planb
+    ssh-keygen -b 8192
+    ^D
+
+You may want to back that ssh key up somewhere.
 
 Setting up uwsgi ``planb.ini``::
 
@@ -130,7 +139,16 @@ Setting up ZFS::
     EOF
 
     zfs create rpool/BACKUP -o mountpoint=/srv/backups
-    chown planb /dev/zfs  # FIXME: no need with the sudo
+    chown planb /srv/backups
+    chmod 700 /srv/backups
+
+Setting up qcluster::
+
+    apt-get install redis-server
+    cp rc.d/planb-queue.service /etc/systemd/system/ &&
+      systemctl enable planb-queue &&
+      systemctl start planb-queue &&
+      systemctl status planb-queue
 
 
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=PlanB Queue server
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+Environment="VIRTUAL_ENV=/srv/venv/planb"
+Environment="PATH=/srv/venv/planb/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="HOME=/var/spool/planb"
+ExecStart=/srv/planb/manage qcluster
+User=planb
+Group=nogroup
+
+[Install]
+WantedBy=multi-user.target

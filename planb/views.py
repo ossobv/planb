@@ -16,23 +16,24 @@ class EnqueueJob(View):
         except HostConfig.DoesNotExist:
             raise PermissionDenied()
 
-        self.enqueue(backupjob)
+        self.enqueue(hostconfig)
 
         return HttpResponseRedirect(
             # Our URL is /bla/bla/123/enqueue/.
             # Drop the "enqueue/".
+            # FIXME: Should use proper reverse() instead!
             self.request.path_info.rsplit('/', 2)[0] + '/')
 
-    def enqueue(self, job):
-        if job.queued or job.running:
+    def enqueue(self, hostconfig):
+        if hostconfig.queued or hostconfig.running:
             messages.add_message(
                 self.request, messages.ERROR,
                 'Job was already queued/running!')
             return False
 
         # Spawn a single run.
-        BackupJob.objects.filter(pk=job.pk).update(queued=True)
-        task_id = async_backup_job(job)
+        HostConfig.objects.filter(pk=hostconfig.pk).update(queued=True)
+        task_id = async_backup_job(hostconfig)
         messages.add_message(
             self.request, messages.INFO,
             'Spawned job %s as requested.' % (task_id,))

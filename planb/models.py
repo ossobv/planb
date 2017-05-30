@@ -320,7 +320,8 @@ class HostConfig(models.Model):
         """
         option = '-e'
         binary = 'ssh'
-        known_hosts_d = '/home/backup/.ssh/known_hosts.d'
+        known_hosts_d = (
+            os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
         known_hosts_file = os.path.join(known_hosts_d, self.host)
         args = [
             '-o HashKnownHosts=no',

@@ -8,31 +8,17 @@ class AddPidFilter(logging.Filter):
         return True
 
 
-# The app/settings dir:
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-# The project root:
-_ROOT_DIR = os.path.dirname(PROJECT_DIR)
-
 TIME_ZONE = 'Europe/Amsterdam'
 LANGUAGE_CODE = 'en_US'
-
-SITE_ID = 1
 
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True  # must be True for Django-Q
 
-# Media/static settings.
-MEDIA_ROOT = os.path.join(_ROOT_DIR, 'media')
-MEDIA_URL = '/media/'
-STATIC_ROOT = os.path.join(_ROOT_DIR, 'static')
+# Static settings.
 STATIC_URL = '/static/'
 
 LOGIN_URL = '/accounts/login/'
-
-# Additional locations of static files.
-STATICFILES_DIRS = (
-)
 
 # List of finder classes that know how to find static files in
 # various locations.
@@ -45,12 +31,25 @@ STATICFILES_FINDERS = (
 # Make this unique, and don't share it with anybody.
 SECRET_KEY = None
 
-# List of callables that know how to import templates from various sources.
-TEMPLATE_LOADERS = (
-    'django.template.loaders.filesystem.Loader',
-    'django.template.loaders.app_directories.Loader',
-    # 'django.template.loaders.eggs.Loader',
-)
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': (
+                'django.contrib.auth.context_processors.auth',
+#                 'django.contrib.messages.context_processors.messages',
+#                 'django.core.context_processors.debug',
+#                 'django.core.context_processors.i18n',
+#                 'django.core.context_processors.static',
+#                 'django.core.context_processors.media',
+#                 'django.core.context_processors.request',
+#                 'django.core.context_processors.tz',
+            ),
+        },
+    },
+]
 
 MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -60,22 +59,10 @@ MIDDLEWARE_CLASSES = (
     'django.contrib.messages.middleware.MessageMiddleware',
 )
 
-TEMPLATE_CONTEXT_PROCESSORS = (
-    'django.contrib.auth.context_processors.auth',
-    'django.contrib.messages.context_processors.messages',
-    'django.core.context_processors.debug',
-    'django.core.context_processors.i18n',
-    'django.core.context_processors.static',
-    'django.core.context_processors.media',
-    'django.core.context_processors.request',
-    'django.core.context_processors.tz',
-)
+# TEMPLATE_CONTEXT_PROCESSORS = (
+# )
 
 ROOT_URLCONF = 'planb.urls'
-
-TEMPLATE_DIRS = (
-    os.path.join(_ROOT_DIR, 'templates'),
-)
 
 INSTALLED_APPS = (
     'django.contrib.admin',

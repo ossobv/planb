@@ -1,6 +1,6 @@
 from planb.default_settings import *  # noqa
 
-# TEMPLATE_DEBUG = DEBUG = TESTING = True
+# DEBUG = True
 
 MANAGERS = ADMINS = (
     # ('My Name', 'myname@example.com'),
@@ -46,3 +46,5 @@ STORAGE_POOLS = (
 
 # Please replace this with the output of: pwgen -ys 58
 SECRET_KEY = r'''pwgen -ys 58'''
+
+STATIC_ROOT = '/srv/http/planb.example.com/static'

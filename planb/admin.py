@@ -83,7 +83,7 @@ class HostConfigAdmin(admin.ModelAdmin):
 
     def options(self, object):
         def crc(data):
-            value = adler32(data)
+            value = adler32(data.encode('utf-8', 'replace'))
             if value < 0:
                 value += 0x100000000
             return value

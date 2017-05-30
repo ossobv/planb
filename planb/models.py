@@ -29,7 +29,8 @@ DEFAULT_INCLUDES = ' '.join(sorted(DEFAULT_DIRS + DEFAULT_FILES))
 
 def get_pools():
     pools = []
-    for pool, name in settings.STORAGE_POOLS:
+    for name, pool, bfs in settings.STORAGE_POOLS:
+        assert bfs == 'zfs', bfs
         val1 = float(subprocess.check_output(
             [settings.ZFS_BIN, 'get', '-Hpo', 'value', 'used',
              pool]).strip())
@@ -79,7 +80,7 @@ class HostGroup(models.Model):
             results[hostconfig.friendly_name]['enabled'] = hostconfig.enabled
         return results
 
-    def __unicode__(self):
+    def __str__(self):
         return self.name
 
 
@@ -141,7 +142,7 @@ class HostConfig(models.Model):
         help_text=_('How many yearly\'s do we need to keep?'))
     backup_size_mb = models.PositiveIntegerField(default=0, db_index=True)
 
-    def __unicode__(self):
+    def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
 
     def can_backup(self):
@@ -464,7 +465,8 @@ class HostConfig(models.Model):
                 self.dest_pool, self.hostgroup.name, self.friendly_name,
                 self.date_complete)['size']
             size_mb = size[0:-6] or '0'  # :P
-            HostConfig.objects.filter(pk=self.pk).update(backup_size_mb=size_mb)
+            HostConfig.objects.filter(pk=self.pk).update(
+                backup_size_mb=size_mb)
 
             self.notify_zabbix()
         finally:
@@ -507,17 +509,21 @@ def create_dataset(sender, instance, created, *args, **kwargs):
         bfs.data_dir_create(
             instance.dest_pool, instance.hostgroup,
             instance.friendly_name)
+        # $ /sbin/zfs mount rpool/BACKUP/example-example
+        # mount: only root can use "--options" option
+        # cannot mount 'rpool/BACKUP/example-example': Invalid argument
         subprocess.check_call([
             'sudo', bfs.binary, 'mount',  # ooh, hacks!
             bfs.get_dataset_name(
                 instance.dest_pool, instance.hostgroup,
                 instance.friendly_name)])
 
-    if not os.path.exists(bfs.data_dir_get(
-            instance.dest_pool, instance.hostgroup,
-            instance.friendly_name)):
-        os.makedirs(
-            bfs.data_dir_get(
-                instance.dest_pool, instance.hostgroup,
-                instance.friendly_name),
-            0o755)
+# This is wrong if the pool-name does not match the mount point!
+#     if not os.path.exists(bfs.data_dir_get(
+#             instance.dest_pool, instance.hostgroup,
+#             instance.friendly_name)):
+#         os.makedirs(
+#             bfs.data_dir_get(
+#                 instance.dest_pool, instance.hostgroup,
+#                 instance.friendly_name),
+#             0o755)

@@ -70,9 +70,68 @@ Installing requirements::
     pip3 install -r requirements.txt
     # (this should be superseded by setup.py-style config)
 
-Setting up the database::
+Setting up the database and a PlanB user::
 
     ./manage migrate
+    ./manage createsuperuser
+
+Setting up a local user::
+
+    adduser planb --disabled-password --home=/srv/planb --shell=/bin/bash \
+      --system
+
+Setting up uwsgi ``planb.ini``::
+
+    [uwsgi]
+    plugin = python3
+    workers = 4
+
+    chdir = /srv/planb
+    wsgi-file = /srv/planb/wsgi.py
+    virtualenv = /srv/venv/planb
+
+    env = DJANGO_SETTINGS_MODULE=settings
+
+    uid = planb
+    gid = www-data
+    chmod-socket = 660
+
+Set up static path::
+
+    mkdir -p /srv/http/planb.example.com/static
+    ./manage collectstatic
+
+Set up log file path::
+
+    mkdir /var/log/planb
+    chown planb /var/log/planb
+
+Setting up nginx config::
+
+    server {
+        listen 80;
+        server_name planb.example.com;
+
+        root /srv/http/planb.example.com;
+
+        location / {
+            uwsgi_pass unix:/run/uwsgi/app/planb/socket;
+            include uwsgi_params;
+        }
+
+        location /static/ {
+        }
+    }
+
+Setting up ZFS::
+
+    cat >/etc/sudoers.d/planb <<EOF
+    planb ALL=NOPASSWD: /sbin/zfs
+    EOF
+
+    zfs create rpool/BACKUP -o mountpoint=/srv/backups
+    chown planb /dev/zfs  # FIXME: no need with the sudo
+
 
 
 ------

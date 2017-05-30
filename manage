@@ -3,10 +3,19 @@ here=$(cd "$(dirname "$0")"; pwd)
 admin=$(which django-admin django-admin.py | head -n1)
 test -z "$admin" && echo "No django-admin found. Missing env?" >&2 && exit 1
 
-if [ $(id -u) -eq 0 ]; then
-    # Install daemontools(1); for further reading, see:
-    # http://jdebp.eu./FGA/dont-abuse-su-for-dropping-privileges.html
-    PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec setuidgid planb "$admin" "$@"
-else
-    PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec "$admin" "$@"
-fi
+case $1 in
+qflush)
+    echo 'update planb_hostconfig set running=0,queued=0;' | "$0" dbshell
+    ;;
+
+*)
+    if [ $(id -u) -eq 0 ]; then
+        # Install daemontools(1); for further reading, see:
+        # http://jdebp.eu./FGA/dont-abuse-su-for-dropping-privileges.html
+        PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec setuidgid planb \
+            "$admin" "$@"
+    else
+        PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec "$admin" "$@"
+    fi
+    ;;
+esac

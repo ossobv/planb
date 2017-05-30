@@ -83,9 +83,7 @@ Setting up a local user::
     adduser planb --disabled-password --home=/var/spool/planb \
       --shell=/bin/bash --system
 
-    su - planb
-    ssh-keygen -b 8192
-    ^D
+    sudo -H -u planb ssh-keygen -b 8192
 
 You may want to back that ssh key up somewhere.
 
@@ -135,7 +133,7 @@ Setting up nginx config::
 Setting up ZFS::
 
     cat >/etc/sudoers.d/planb <<EOF
-    planb ALL=NOPASSWD: /sbin/zfs
+    planb ALL=NOPASSWD: /sbin/zfs, /bin/chown
     EOF
 
     zfs create rpool/BACKUP -o mountpoint=/srv/backups

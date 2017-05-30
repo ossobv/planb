@@ -35,6 +35,7 @@ ALLOWED_HOSTS = ('planb', 'planb.example.com')
 BROKER_URL = 'redis://localhost:6379/0'
 
 # Set the default paths
+SUDO_BIN = '/usr/bin/sudo'
 ZFS_BIN = '/sbin/zfs'
 RSYNC_BIN = '/usr/bin/rsync'
 

@@ -32,11 +32,11 @@ def get_pools():
     for name, pool, bfs in settings.STORAGE_POOLS:
         assert bfs == 'zfs', bfs
         val1 = float(subprocess.check_output(
-            [settings.ZFS_BIN, 'get', '-Hpo', 'value', 'used',
-             pool]).strip())
+            [settings.SUDO_BIN, settings.ZFS_BIN, 'get', '-Hpo', 'value',
+             'used', pool]).strip())
         val2 = float(subprocess.check_output(
-            [settings.ZFS_BIN, 'get', '-Hpo', 'value', 'available',
-             pool]).strip())
+            [settings.SUDO_BIN, settings.ZFS_BIN, 'get', '-Hpo', 'value',
+             'available', pool]).strip())
         pct = '{pct:.0f}%'.format(pct=(100 * (val1 / (val1 + val2))))
         available = int(val2 / 1024 / 1024 / 1024)
         pools.append((pool, '{}, {}G free ({} used)'.format(
@@ -46,7 +46,7 @@ def get_pools():
 
 logger = logging.getLogger(__name__)
 
-bfs = Zfs(binary=settings.ZFS_BIN)
+bfs = Zfs(binary=settings.ZFS_BIN, sudobin=settings.SUDO_BIN)
 
 valid_rsync_codes = (
     24,  # vanished source files
@@ -322,6 +322,10 @@ class HostConfig(models.Model):
         binary = 'ssh'
         known_hosts_d = (
             os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
+        try:
+            os.makedirs(known_hosts_d, 0o755)
+        except FileExistsError:
+            pass
         known_hosts_file = os.path.join(known_hosts_d, self.host)
         args = [
             '-o HashKnownHosts=no',
@@ -454,7 +458,7 @@ class HostConfig(models.Model):
     def run(self):
         if setproctitle:
             oldproctitle = getproctitle()
-            setproctitle('[hostconfig %d %s]' % (self.pk, self.friendly_name))
+            setproctitle('[backing up %d: %s]' % (self.pk, self.friendly_name))
 
         try:
             self.run_rsync()
@@ -504,27 +508,32 @@ class HostConfig(models.Model):
 
 @receiver(post_save, sender=HostConfig)
 def create_dataset(sender, instance, created, *args, **kwargs):
-    if not os.path.exists('/%s' % (bfs.get_dataset_name(
-            instance.dest_pool, instance.hostgroup,
-            instance.friendly_name),)):
+    data_dir_name = bfs.data_dir_get(
+        instance.dest_pool, instance.hostgroup,
+        instance.friendly_name)
+
+    if data_dir_name is None:
         bfs.data_dir_create(
             instance.dest_pool, instance.hostgroup,
             instance.friendly_name)
+        data_dir_name = bfs.data_dir_get(
+            instance.dest_pool, instance.hostgroup,
+            instance.friendly_name)
+        try:
+            # Create the /data subdir.
+            os.makedirs(data_dir_name, 0o755)
+        except FileExistsError:
+            pass
+
+    if not os.path.exists(data_dir_name):
+        # Even if we have user-powers on /dev/zfs, we still cannot call
+        # all commands.
         # $ /sbin/zfs mount rpool/BACKUP/example-example
         # mount: only root can use "--options" option
         # cannot mount 'rpool/BACKUP/example-example': Invalid argument
+        # Might as well use sudo everywhere then.
         subprocess.check_call([
-            'sudo', bfs.binary, 'mount',  # ooh, hacks!
+            settings.SUDO_BIN, bfs.binary, 'mount',
             bfs.get_dataset_name(
                 instance.dest_pool, instance.hostgroup,
                 instance.friendly_name)])
-
-# This is wrong if the pool-name does not match the mount point!
-#     if not os.path.exists(bfs.data_dir_get(
-#             instance.dest_pool, instance.hostgroup,
-#             instance.friendly_name)):
-#         os.makedirs(
-#             bfs.data_dir_get(
-#                 instance.dest_pool, instance.hostgroup,
-#                 instance.friendly_name),
-#             0o755)

@@ -28,15 +28,37 @@ SNAPSHOT_SPECIAL_MAPPING = {
 }
 
 
+class CalledProcessErrorWithOutput(subprocess.CalledProcessError):
+    def __init__(self, error):
+        super(CalledProcessErrorWithOutput, self).__init__(
+            returncode=error.returncode, cmd=error.cmd, output=error.output)
+
+    def __str__(self):
+        return (
+            super(CalledProcessErrorWithOutput, self).__str__() + '\n\n> ' +
+            '\n> '.join(str(self.output.decode('ascii', 'replace')).split(
+                '\n')) +
+            '\n')
+
+
 class BaseFileSystem2(object):
-    def __init__(self, binary):
+    def __init__(self, binary, sudobin):
         self.binary = binary
+        self.sudobin = sudobin
 
     def _perform_system_command(self, cmd):
         try:
             return subprocess.check_output(cmd)
         except subprocess.CalledProcessError as e:
-            print(str(e))
+            raise CalledProcessErrorWithOutput(e)
+
+    def _perform_sudo_command(self, cmd):
+        return self._perform_system_command(
+            (self.sudobin,) + tuple(cmd))
+
+    def _perform_binary_command(self, cmd):
+        return self._perform_sudo_command(
+            (self.binary,) + tuple(cmd))
 
     def get_dataset_name(self, rootdir, customer, friendly_name):
         '''
@@ -101,38 +123,52 @@ class BaseFileSystem2(object):
 class Zfs(BaseFileSystem2):
     def data_dir_create(self, rootdir, customer, friendly_name):
         cmd = (
-            self.binary, 'create',
+            'create',
             self.get_dataset_name(rootdir, customer, friendly_name))
-        self._perform_system_command(cmd)
+        self._perform_binary_command(cmd)
+        # After mount, make it ours.
+        self._perform_sudo_command(
+            ('chown', str(os.getuid()), self._root_dir_get(
+                rootdir, customer, friendly_name)))
+
         logger.info('Created ZFS dataset: %s' % self.get_dataset_name(
             rootdir, customer, friendly_name))
 
     def get_dataset_name(self, rootdir, customer, friendly_name):
         return '{0}/{1}-{2}'.format(rootdir, customer, friendly_name)
 
-    def data_dir_get(self, rootdir, customer, friendly_name):
+    def _root_dir_get(self, rootdir, customer, friendly_name):
         dataset_name = self.get_dataset_name(rootdir, customer, friendly_name)
         cmd = (
-            self.binary, 'get', '-Ho', 'value', 'mountpoint', dataset_name)
-        out = self._perform_system_command(cmd).rstrip(b'\r\n')
-        return os.path.join(out, b'data').decode('utf-8')  # fail on decode-err
+            'get', '-Ho', 'value', 'mountpoint', dataset_name)
+        try:
+            out = self._perform_binary_command(cmd).rstrip(b'\r\n')
+        except subprocess.CalledProcessError:
+            return None
+        return out.decode('utf-8')  # fail on decode-err
+
+    def data_dir_get(self, rootdir, customer, friendly_name):
+        root_dir = self._root_dir_get(rootdir, customer, friendly_name)
+        if not root_dir:
+            return root_dir
+        return os.path.join(root_dir, 'data')
 
     def snapshot_create(self, rootdir, customer, friendly_name, snapname=None):
         datasetname = self.get_dataset_name(rootdir, customer, friendly_name)
         snapshot_name = '{0}@{1}'.format(datasetname, snapname)
-        cmd = (self.binary, 'snapshot', snapshot_name)
-        self._perform_system_command(cmd)
+        cmd = ('snapshot', snapshot_name)
+        self._perform_binary_command(cmd)
         return snapshot_name
 
     def snapshot_delete(self, snapshot):
-        cmd = (self.binary, 'destroy', snapshot)
-        self._perform_system_command(cmd)
+        cmd = ('destroy', snapshot)
+        self._perform_binary_command(cmd)
 
     def snapshots_get(self, rootdir, customer, friendly_name, typ=None):
         cmd = (
-            self.binary, 'list', '-r', '-H', '-t', 'snapshot', '-o', 'name',
+            'list', '-r', '-H', '-t', 'snapshot', '-o', 'name',
             self.get_dataset_name(rootdir, customer, friendly_name))
-        out = self._perform_system_command(cmd)
+        out = self._perform_binary_command(cmd)
         if out:
             snapshots = []
             snapshot_rgx = re.compile('^.*@\w+-\d+$')
@@ -233,17 +269,16 @@ class Zfs(BaseFileSystem2):
     def parse_backup_sizes(self, rootdir, customer, friendly_name,
                            date_complete):
         cmd = (
-            self.binary, 'get', '-o', 'value', '-Hp', 'used',
+            'get', '-o', 'value', '-Hp', 'used',
             self.get_dataset_name(rootdir, customer, friendly_name))
         try:
-            size = subprocess.check_output(
-                cmd, shell=False, stderr=subprocess.STDOUT)
+            out = self._perform_binary_command(cmd)
         except subprocess.CalledProcessError as e:
             msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
             logger.warning(msg)
             size = '0'
         else:
-            size = size.strip()
+            size = out.strip()
 
         return {
             'size': size,

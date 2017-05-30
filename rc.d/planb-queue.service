@@ -7,6 +7,7 @@ Type=simple
 Environment="VIRTUAL_ENV=/srv/venv/planb"
 Environment="PATH=/srv/venv/planb/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="HOME=/var/spool/planb"
+ExecStartPre=/srv/planb/manage qflush
 ExecStart=/srv/planb/manage qcluster
 User=planb
 Group=nogroup

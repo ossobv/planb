@@ -1,2 +1,5 @@
 Django>=1.11.1
 django-q>=0.8.0
+django-multi-email-field>=0.4
+
+mysqlclient>=1.3.7      # APT: python3-mysqldb

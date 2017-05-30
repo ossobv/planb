@@ -1,0 +1,118 @@
+from zlib import adler32
+
+from django.contrib import admin
+
+from .forms import HostConfigAdminForm
+from .models import HostGroup, HostConfig
+
+
+class HostGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'notify_email')
+
+
+class HostConfigAdmin(admin.ModelAdmin):
+    fieldsets = (
+        (None, {
+            'fields': (
+                'friendly_name',
+                'hostgroup',
+                'dest_pool',
+                'host',
+                'includes',
+                'excludes',
+                'enabled'
+            )
+        }),
+        ('Status', {
+            'fields': (
+                'date_complete', 'complete_duration', 'backup_size_mb',
+                'failure_datetime', 'queued', 'running',
+            )
+        }),
+        ('Transport options', {
+            'fields': (
+                'transport',
+                'src_dir',
+                'flags',
+            )
+        }),
+        ('Additional options for SSH transport', {
+            'fields': (
+                'rsync_path',
+                'user',
+                'ionice_path',
+                'use_sudo',
+                'use_ionice',
+            )
+        }),
+        ('Retention', {
+            'fields': (
+                'retention',
+                'keep_weekly',
+                'weekly_retention',
+                'keep_monthly',
+                'monthly_retention',
+                'keep_yearly',
+                'yearly_retention',
+            )
+        }),
+    )
+
+    readonly_fields = tuple(
+        # All status fields are never writable by the admin.
+        [dict_ for title, dict_ in fieldsets
+         if title == 'Status'][0]['fields'])
+    readonly_change_fields = (
+        # friendly_name and hostgroup make up the directory name. Don't touch.
+        'friendly_name', 'hostgroup', 'dest_pool')
+
+    list_display = (
+        'friendly_name', 'hostgroup', 'host', 'backup_size_mb',
+        'complete_duration', 'retentions', 'options',
+        'date_complete', 'failure_datetime',
+        'dest_pool', 'enabled', 'queued', 'running',
+    )
+    list_filter = ('enabled', 'dest_pool', 'hostgroup')
+    form = HostConfigAdminForm
+    search_fields = ('friendly_name', 'host', 'hostgroup__name')
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return self.readonly_change_fields + self.readonly_fields
+        return self.readonly_fields
+
+    def options(self, object):
+        def crc(data):
+            value = adler32(data)
+            if value < 0:
+                value += 0x100000000
+            return value
+
+        ret = [object.user]
+        if object.use_sudo:
+            ret.append('sudo')
+        if object.use_ionice:
+            ret.append('ionice')
+        if object.includes:
+            ret.append('inc=%d:%x' % (
+                len(object.includes.split(' ')), crc(object.includes)))
+        if object.excludes:
+            ret.append('exc=%d:%x' % (
+                len(object.excludes.split(' ')), crc(object.excludes)))
+        return ', '.join(ret)
+
+    def retentions(self, object):
+        retention = []
+        if object.retention:
+            retention.append('%dd' % object.retention)
+        if object.keep_weekly:
+            retention.append('%dw' % object.weekly_retention)
+        if object.keep_monthly:
+            retention.append('%dm' % object.monthly_retention)
+        if object.keep_yearly:
+            retention.append('%dy' % object.yearly_retention)
+        return '/'.join(retention)
+
+
+admin.site.register(HostGroup, HostGroupAdmin)
+admin.site.register(HostConfig, HostConfigAdmin)

@@ -6,6 +6,16 @@ TODO:
 * Add description/title after h1 heading.
 * Explain what this is (will be).
 * Add authors/copyright/dates from original project.
+* Add pepcleaning pre-commit hook.
+* Add flake-checking pre-commt hook.
+* Add BCH checks.
+* Replace Customer with HostGroup:
+  - use fs-name and human-name
+  - use asciifield for fs-name?
+* Replace BackupJob with HostConfig:
+  - use fs-name and optionally human-name
+  - use asciifield for fs-name?
+* Fix /home/backup => $HOME
 
 
 -----------------
@@ -51,12 +61,18 @@ Setting up environment/virtualenv::
 
     mkvirtualenv planb --python=$(which python3)
 
+    cd /srv/planb
+    pwd >$VIRTUAL_ENV/.project
+
 Installing requirements::
 
-    cd /srv/planb
+    workon planb
     pip3 install -r requirements.txt
     # (this should be superseded by setup.py-style config)
 
+Setting up the database::
+
+    ./manage migrate
 
 
 ------

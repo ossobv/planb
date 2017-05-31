@@ -79,7 +79,7 @@ Q_CLUSTER = {
     'retry': 86400,     # an entire day (needed??)
     'catch_up': False,  # no catching up of missed scheduled tasks
     'compress': False,  # don't care about payload size
-    'save_limit': 250,  # store 250 succesful jobs, drop older..
+    'save_limit': 250,  # store 250 successful jobs, drop older..
     'label': 'Task Queue',  # seen in Django Admin
     'redis': {
         'host': '127.0.0.1',

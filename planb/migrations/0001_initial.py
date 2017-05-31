@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
                 ('running', models.BooleanField(default=False)),
                 ('priority', models.IntegerField(default=0)),
                 ('date_complete', models.DateTimeField(default=datetime.datetime(1970, 1, 2, 0, 0), verbose_name='Complete date')),
-                ('complete_duration', models.PositiveIntegerField(default=0, help_text='Duration in seconds of last succesful job.', verbose_name='Time')),
+                ('complete_duration', models.PositiveIntegerField(default=0, help_text='Duration in seconds of last successful job.', verbose_name='Time')),
                 ('enabled', models.BooleanField(default=True)),
                 ('queued', models.BooleanField(default=False)),
                 ('failure_datetime', models.DateTimeField(blank=True, null=True)),

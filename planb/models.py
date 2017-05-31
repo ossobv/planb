@@ -126,7 +126,7 @@ class HostConfig(models.Model):
         'Complete date', default=datetime(1970, 1, 2))
     complete_duration = models.PositiveIntegerField(
         'Time', default=0,  # this value may vary..
-        help_text=_('Duration in seconds of last succesful job.'))
+        help_text=_('Duration in seconds of last successful job.'))
     enabled = models.BooleanField(default=True)
     queued = models.BooleanField(default=False)
     failure_datetime = models.DateTimeField(blank=True, null=True)

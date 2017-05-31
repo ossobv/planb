@@ -48,7 +48,8 @@ class BaseFileSystem2(object):
 
     def _perform_system_command(self, cmd):
         try:
-            return subprocess.check_output(cmd)
+            # FIXME: also fetch stderr for "WithOutput"-error.
+            return subprocess.check_output(cmd).decode('utf-8')
         except subprocess.CalledProcessError as e:
             raise CalledProcessErrorWithOutput(e)
 
@@ -126,7 +127,8 @@ class Zfs(BaseFileSystem2):
             'create',
             self.get_dataset_name(rootdir, customer, friendly_name))
         self._perform_binary_command(cmd)
-        # After mount, make it ours.
+        # After mount, make it ours. Blegh. Unfortunate side-effect of
+        # using sudo for the ZFS create.
         self._perform_sudo_command(
             ('chown', str(os.getuid()), self._root_dir_get(
                 rootdir, customer, friendly_name)))
@@ -142,10 +144,10 @@ class Zfs(BaseFileSystem2):
         cmd = (
             'get', '-Ho', 'value', 'mountpoint', dataset_name)
         try:
-            out = self._perform_binary_command(cmd).rstrip(b'\r\n')
+            out = self._perform_binary_command(cmd).rstrip('\r\n')
         except subprocess.CalledProcessError:
-            return None
-        return out.decode('utf-8')  # fail on decode-err
+            out = None
+        return out
 
     def data_dir_get(self, rootdir, customer, friendly_name):
         root_dir = self._root_dir_get(rootdir, customer, friendly_name)

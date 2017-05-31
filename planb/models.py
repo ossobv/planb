@@ -20,7 +20,8 @@ except ImportError:
     getproctitle = setproctitle = None
 
 DEFAULT_DIRS = tuple(
-    'root etc home srv var/backups var/spool/cron usr/local/bin'.split(' '))
+    'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
+    .split(' '))
 DEFAULT_FILES = tuple(
     (i + '*') for i in  # files need a '*' in them
     'var/lib/dpkg/status var/lib/psdiff.db'.split(' '))

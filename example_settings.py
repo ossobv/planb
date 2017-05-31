@@ -1,5 +1,7 @@
 from planb.default_settings import *  # noqa
 
+# Remember that DEBUG=True causes error-mails to not get sent, while
+# successmails still get sent. This should probably be fixed. (FIXME)
 # DEBUG = True
 
 MANAGERS = ADMINS = (
@@ -30,9 +32,6 @@ DATABASES = {
 }
 
 ALLOWED_HOSTS = ('planb', 'planb.example.com')
-
-# Use redis a broker
-BROKER_URL = 'redis://localhost:6379/0'
 
 # Set the default paths
 SUDO_BIN = '/usr/bin/sudo'

@@ -74,7 +74,7 @@ INSTALLED_APPS = (
 
 Q_CLUSTER = {
     'name': 'PlanB',
-    'workers': 5,
+    'workers': 7,
     'timeout': 86300,   # almost a day
     'retry': 86400,     # an entire day (needed??)
     'catch_up': False,  # no catching up of missed scheduled tasks
@@ -84,7 +84,7 @@ Q_CLUSTER = {
     'redis': {
         'host': '127.0.0.1',
         'port': 6379,
-        'db': 5,
+        'db': 0,
     },
 }
 

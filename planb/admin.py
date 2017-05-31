@@ -1,9 +1,19 @@
 from zlib import adler32
 
 from django.contrib import admin
+from django.utils.translation import ugettext as _
 
 from .forms import HostConfigAdminForm
 from .models import HostGroup, HostConfig
+from .tasks import async_backup_job
+
+
+def enqueue_multiple(modeladmin, request, queryset):
+    for obj in queryset.filter(queued=False):
+        HostConfig.objects.filter(pk=obj.pk).update(queued=True)
+        async_backup_job(obj)
+enqueue_multiple.short_description = _(  # noqa
+    'Enqueue selected hosts for immediate backup')
 
 
 class HostGroupAdmin(admin.ModelAdmin):
@@ -72,7 +82,8 @@ class HostConfigAdmin(admin.ModelAdmin):
         'date_complete', 'failure_datetime',
         'dest_pool', 'enabled', 'queued', 'running',
     )
-    list_filter = ('enabled', 'dest_pool', 'hostgroup')
+    list_filter = ('enabled', 'dest_pool', 'hostgroup', 'failure_datetime')
+    actions = [enqueue_multiple]
     form = HostConfigAdminForm
     search_fields = ('friendly_name', 'host', 'hostgroup__name')
 

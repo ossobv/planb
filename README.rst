@@ -3,22 +3,34 @@ PlanB
 
 TODO:
 
-* Add description/title after h1 heading.
+* Add description/title after h1 heading in docs.
 * Explain what this is (will be).
 * Add authors/copyright/dates from original project.
 * Add pepcleaning pre-commit hook.
-* Add flake-checking pre-commt hook.
+* Add flake-checking pre-commit hook.
 * Add BCH checks.
+* Use proper setup.py-setup and easier settings.py,
+  possibly with uwsgi.ini-only environment?
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
 * Alter HostConfig:
   - use fs-name and optionally human-name
   - use asciifield for fs-name?
-* Fix /home/backup => $HOME
 * Check whether the mount-point != zpool-name works properly.
-* Fix 'sudo' usage for all ZFS calls!
+* Fix System calls to always save stderr for exception output.
+* Check the 'bclone' call: it reports 2 warnings which should be fixed.
 * Fix admin "Planb" name as "PlanB".
+* Fix "iconv=utf8,latin1" on ancient hosts? Doesn't exist there..
+  Fallback to without --iconv and accept code 23 as non-failed?
+* Split off the subparts of the HostConfig to separate configs:
+  - include-config
+  - transport-config
+  - retention-config
+  - host-status (use this as main enqueue-view?)
+* Use hostgroup+hostname in more places. Right now the friendly_name is
+  too short.
+* Don't allow enqueue-ing of enabled=False hosts!
 
 
 -----------------
@@ -158,3 +170,32 @@ The ``mkvirtualenv`` said ``locale.Error: unsupported locale setting``.
     You need to install the right locales until ``perl -e setlocale`` is
     silent. How depends on your system and your config. See ``locale`` and
     e.g. ``locale-gen en_US.UTF-8``.
+
+
+Rsync complains about ``Invalid or incomplete multibyte or wide character``.
+    If rsync returns with code 23 and says this::
+
+        rsync: recv_generator: failed to stat "...\#351es-BCS 27-09-11.csv":
+          Invalid or incomplete multibyte or wide character (84)
+
+    Then you might be backing up old hosts with legacy Latin-1 encoding
+    on the filesystem. Adding ``--iconv=utf8,latin1`` to the hostconfig
+    flags should fix it.
+
+    You may need rsync version 3 or higher for that.
+
+
+Rsync complains about ``failed to stat`` or ``mkdir failed``.
+    If rsync returns these messages::
+
+        rsync: recv_generator: failed to stat "...": Permission denied (13)
+        rsync: recv_generator: mkdir "..." failed: Permission denied (13)
+
+    Then you may be looking at parent directories with crooked
+    permissions, like 077. Fix the permissions on the remote end.
+
+
+Backup success mail are sent, but failure mails are not.
+    Check the ``DEBUG`` setting. At the moment, error-mails are sent
+    through the logging subsystem and that is disabled when running in
+    debug-mode.

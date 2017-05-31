@@ -152,6 +152,23 @@ class HostConfig(models.Model):
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
 
+    def clone(self, **override):
+        # See: https://github.com/django/django/commit/a97ecfdea8
+        copy = self.__class__.objects.get(pk=self.pk)
+        copy.pk = None
+        copy.date_complete = datetime(1970, 1, 2)
+        copy.failure_datetime = None
+        copy.queued = copy.running = False
+        copy.complete_duration = 0
+        copy.backup_size_mb = 0
+
+        # Use the overrides.
+        for key, value in override.items():
+            setattr(copy, key, value)
+
+        copy.save()
+        return copy
+
     def can_backup(self):
         if not self.enabled:
             return False

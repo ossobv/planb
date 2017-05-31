@@ -105,11 +105,18 @@ class HostConfig(models.Model):
     rsync_path = models.CharField(max_length=31, default='/usr/bin/rsync')
     ionice_path = models.CharField(
         max_length=31, default='/usr/bin/ionice', blank=True)
+    # When files have legacy/Latin-1 encoding, you'll get rsync exit
+    # code 23 and this message:
+    #   rsync: recv_generator: failed to stat "...":
+    #   Invalid or incomplete multibyte or wide character (84)
+    # Solution, add: --iconv=utf8,latin1
     flags = models.CharField(
         max_length=511, default='-az --numeric-ids --stats --delete',
         help_text=_(
             'Default "-az --delete", add "--no-perms --chmod=D0700,F600" '
-            'for (windows) hosts without permission bits.'))
+            'for (windows) hosts without permission bits, add '
+            '"--iconv=utf8,latin1" for hosts with files with legacy (Latin-1) '
+            'encoding.'))
     includes = FilelistField(max_length=1023, default=DEFAULT_INCLUDES)
     excludes = FilelistField(max_length=1023, blank=True)
     running = models.BooleanField(default=False)

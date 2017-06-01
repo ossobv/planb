@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 SINGLE_JOB_OPTS = {
     'hook': 'planb.tasks.single_job_done',
-    'group': 'whatever',
+    'group': 'Single backup job',
 }
 
 

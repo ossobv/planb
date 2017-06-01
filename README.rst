@@ -31,6 +31,7 @@ TODO:
 * Use hostgroup+hostname in more places. Right now the friendly_name is
   too short.
 * Don't allow enqueue-ing of enabled=False hosts!
+* Add other cron jobs like clearsessions to planb_jobs.
 
 
 -----------------
@@ -159,6 +160,10 @@ Setting up qcluster::
       systemctl enable planb-queue &&
       systemctl start planb-queue &&
       systemctl status planb-queue
+
+Installing automatic jobs::
+
+    ./manage loaddata planb_jobs
 
 
 

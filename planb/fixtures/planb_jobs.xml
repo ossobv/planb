@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<django-objects version="1.0">
+  <object pk="1" model="django_q.schedule">
+    <field type="CharField" name="name">Spawn backup jobs</field>
+    <field type="CharField" name="func">planb.tasks.spawn_backup_jobs</field>
+    <field type="CharField" name="hook"></field>
+    <field type="TextField" name="args"></field>
+    <field type="TextField" name="kwargs"></field>
+    <field type="CharField" name="schedule_type">H</field>
+    <field type="PositiveSmallIntegerField" name="minutes"><None></None></field>
+    <field type="SmallIntegerField" name="repeats">-1</field>
+    <field type="DateTimeField" name="next_run">2017-06-01T00:00:00+00:00</field>
+    <field type="CharField" name="task">00000000000000000000000000000001</field>
+  </object>
+</django-objects>

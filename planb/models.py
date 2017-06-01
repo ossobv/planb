@@ -93,8 +93,13 @@ class HostConfig(models.Model):
         (TRANSPORT_RSYNC, _('rsync (port 873)')),
     )
 
-    friendly_name = models.CharField(max_length=63, unique=True)
+    friendly_name = models.CharField(
+        # FIXME: should be unique with hostgroup?
+        verbose_name=_('Name'), max_length=63, unique=True,
+        help_text=_('Short name, should be unique per host group.'))
     host = models.CharField(max_length=254)
+    description = models.TextField(help_text=_(
+        'Quick description/tips. Use the first line for labels/tags.'))
     transport = models.PositiveSmallIntegerField(
         choices=TRANSPORT_CHOICES, default=TRANSPORT_CHOICES[0][0])
     user = models.CharField(max_length=254, default='root')
@@ -148,7 +153,9 @@ class HostConfig(models.Model):
     yearly_retention = models.IntegerField(
         default=1, blank=True, null=True,
         help_text=_('How many yearly\'s do we need to keep?'))
-    backup_size_mb = models.PositiveIntegerField(default=0, db_index=True)
+    backup_size_mb = models.PositiveIntegerField(
+        verbose_name=_('Size'), default=0, db_index=True,
+        help_text=_('Estimated total backup size in MiB.'))
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)

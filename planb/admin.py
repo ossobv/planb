@@ -28,6 +28,7 @@ class HostConfigAdmin(admin.ModelAdmin):
                 'hostgroup',
                 'dest_pool',
                 'host',
+                'description',
                 'includes',
                 'excludes',
                 'enabled'
@@ -77,10 +78,11 @@ class HostConfigAdmin(admin.ModelAdmin):
         'friendly_name', 'hostgroup', 'dest_pool')
 
     list_display = (
-        'friendly_name', 'hostgroup', 'host', 'backup_size_mb',
-        'complete_duration', 'retentions', 'options',
+        'friendly_name', 'hostgroup', 'notes', 'host',
+        'backup_size_mb', 'complete_duration',
+        'retentions', 'options',
         'date_complete', 'failure_datetime',
-        'dest_pool', 'enabled', 'queued', 'running',
+        'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
     list_filter = (
         'enabled', 'dest_pool', 'hostgroup',
@@ -88,12 +90,33 @@ class HostConfigAdmin(admin.ModelAdmin):
     )
     actions = [enqueue_multiple]
     form = HostConfigAdminForm
-    search_fields = ('friendly_name', 'host', 'hostgroup__name')
+    search_fields = ('friendly_name', 'host', 'hostgroup__name', 'description')
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
             return self.readonly_change_fields + self.readonly_fields
         return self.readonly_fields
+
+    def notes(self, object):
+        ret = object.description.split('\n', 1)[0].strip()
+        if len(ret) > 32:
+            return ret[0:32] + '...'
+        return ret
+
+    def enabled_x(self, object):
+        return object.enabled
+    enabled_x.boolean = True
+    enabled_x.short_description = 'X'
+
+    def queued_q(self, object):
+        return object.queued
+    queued_q.boolean = True
+    queued_q.short_description = 'Q'
+
+    def running_r(self, object):
+        return object.running
+    running_r.boolean = True
+    running_r.short_description = 'R'
 
     def options(self, object):
         def crc(data):

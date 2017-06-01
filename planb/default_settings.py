@@ -10,6 +10,8 @@ class AddPidFilter(logging.Filter):
 
 TIME_ZONE = 'Europe/Amsterdam'
 LANGUAGE_CODE = 'en_US'
+DATETIME_FORMAT = SHORT_DATETIME_FORMAT = 'Y-m-d H:i'  # for admin-forms
+
 
 USE_I18N = True
 USE_L10N = True
@@ -39,8 +41,8 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': (
                 'django.contrib.auth.context_processors.auth',
-                 'django.contrib.messages.context_processors.messages',
-                 'django.template.context_processors.static',
+                'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.static',
             ),
         },
     },

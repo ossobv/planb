@@ -82,7 +82,10 @@ class HostConfigAdmin(admin.ModelAdmin):
         'date_complete', 'failure_datetime',
         'dest_pool', 'enabled', 'queued', 'running',
     )
-    list_filter = ('enabled', 'dest_pool', 'hostgroup', 'failure_datetime')
+    list_filter = (
+        'enabled', 'dest_pool', 'hostgroup',
+        'running', 'failure_datetime',
+    )
     actions = [enqueue_multiple]
     form = HostConfigAdminForm
     search_fields = ('friendly_name', 'host', 'hostgroup__name')

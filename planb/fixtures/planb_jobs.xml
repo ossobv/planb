@@ -12,4 +12,16 @@
     <field type="DateTimeField" name="next_run">2017-06-01T00:00:00+00:00</field>
     <field type="CharField" name="task">00000000000000000000000000000001</field>
   </object>
+  <object model="django_q.schedule" pk="2">
+    <field name="name" type="CharField">Clear admin sessions</field>
+    <field name="func" type="CharField">django.core.management.call_command</field>
+    <field name="hook" type="CharField"><None></None></field>
+    <field name="args" type="TextField">'clearsessions'</field>
+    <field name="kwargs" type="TextField"></field>
+    <field name="schedule_type" type="CharField">D</field>
+    <field name="minutes" type="PositiveSmallIntegerField"><None></None></field>
+    <field name="repeats" type="SmallIntegerField">-1</field>
+    <field name="next_run" type="DateTimeField">2017-06-01T00:00:00+00:00</field>
+    <field name="task" type="CharField">00000000000000000000000000000002</field>
+  </object>
 </django-objects>

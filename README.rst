@@ -31,9 +31,21 @@ TODO:
 * Use hostgroup+hostname in more places. Right now the friendly_name is
   too short. Also, use unique_together, so the friendlyname can be reused.
 * Don't allow enqueue-ing of enabled=False hosts!
-* Add other cron jobs like clearsessions to planb_jobs.
 * Add mysql-backup to backup this SQL.
 * Document how to use the remotebackup user with ionice and sudo.
+
+
+-------
+WARNING
+-------
+
+The Django-Q task scheduler is highly configurable from the
+/admin/-view. With a little effort it will run user-supplied python code
+directly. Any user with access to the schedulers will have tremendous
+powers
+
+**Recommendation**: don't give your users powers to edit the schedulers.
+Perhaps we should disable web-access to it altogether.
 
 
 -----------------

@@ -32,6 +32,8 @@ TODO:
   too short.
 * Don't allow enqueue-ing of enabled=False hosts!
 * Add other cron jobs like clearsessions to planb_jobs.
+* Add mysql-backup to backup this SQL.
+* Document how to use the remotebackup user with ionice and sudo.
 
 
 -----------------

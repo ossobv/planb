@@ -12,7 +12,7 @@ class EnqueueJob(View):
         if not request.user.is_superuser:
             raise PermissionDenied()
         try:
-            hostconfig = HostConfig.objects.get(id=hostconfig_id)
+            hostconfig = HostConfig.objects.get(id=hostconfig_id, enabled=True)
         except HostConfig.DoesNotExist:
             raise PermissionDenied()
 

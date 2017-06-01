@@ -9,7 +9,7 @@ from .tasks import async_backup_job
 
 
 def enqueue_multiple(modeladmin, request, queryset):
-    for obj in queryset.filter(queued=False):
+    for obj in queryset.filter(queued=False, enabled=True):
         HostConfig.objects.filter(pk=obj.pk).update(queued=True)
         async_backup_job(obj)
 enqueue_multiple.short_description = _(  # noqa

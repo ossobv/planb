@@ -28,7 +28,6 @@ TODO:
   - host-status (use this as main enqueue-view?)
 * Use hostgroup+hostname in more places. Right now the friendly_name is
   too short. Also, use unique_together, so the friendlyname can be reused.
-* Don't allow enqueue-ing of enabled=False hosts!
 
 
 -------

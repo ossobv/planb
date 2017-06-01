@@ -9,6 +9,7 @@ from django.core.mail import mail_admins
 from django.db.models.signals import post_save
 from django.db import models
 from django.dispatch import receiver
+from django.utils import timezone
 from django.utils.translation import ugettext as _
 
 from .fields import FilelistField, MultiEmailField
@@ -128,7 +129,7 @@ class HostConfig(models.Model):
     running = models.BooleanField(default=False)
     priority = models.IntegerField(default=0)
     date_complete = models.DateTimeField(
-        'Complete date', default=datetime(1970, 1, 2))
+        'Complete date', default=datetime(1970, 1, 2, tzinfo=timezone.utc))
     complete_duration = models.PositiveIntegerField(
         'Time', default=0,  # this value may vary..
         help_text=_('Duration in seconds of last successful job.'))
@@ -164,7 +165,7 @@ class HostConfig(models.Model):
         # See: https://github.com/django/django/commit/a97ecfdea8
         copy = self.__class__.objects.get(pk=self.pk)
         copy.pk = None
-        copy.date_complete = datetime(1970, 1, 2)
+        copy.date_complete = datetime(1970, 1, 2, tzinfo=timezone.utc)
         copy.failure_datetime = None
         copy.queued = copy.running = False
         copy.complete_duration = 0

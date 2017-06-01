@@ -130,7 +130,7 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
-            'filters': ['addpid'],
+            'filters': ['addpid', 'require_debug_true'],
         },
         # 'gelf': {
         #     'class': 'graypy.GELFHandler',
@@ -172,10 +172,6 @@ LOGGING = {
         },
         'django-q': {
             'handlers': ['djangoqlogfile'],
-            'level': 'DEBUG',
-        },
-        'libs': {
-            'handlers': ['console', 'logfile'],
             'level': 'DEBUG',
         },
         'django': {

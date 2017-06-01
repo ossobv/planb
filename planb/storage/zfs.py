@@ -29,16 +29,35 @@ SNAPSHOT_SPECIAL_MAPPING = {
 
 
 class CalledProcessErrorWithOutput(subprocess.CalledProcessError):
-    def __init__(self, error):
+    def __init__(self, returncode, cmd, stdout, stderr):
         super(CalledProcessErrorWithOutput, self).__init__(
-            returncode=error.returncode, cmd=error.cmd, output=error.output)
+            returncode=returncode, cmd=cmd, output=stdout)
+        self.errput = stderr
+
+    def _quote(self, bintext):
+        text = bintext.decode('ascii', 'replace')
+        text = text.replace('\r', '')
+        if not text:
+            return ''
+
+        if text.endswith('\n'):
+            text = text[0:-1]
+        else:
+            text += '[noeol]'
+
+        return '> ' + '\n> '.join(text.split('\n'))
 
     def __str__(self):
-        return (
-            super(CalledProcessErrorWithOutput, self).__str__() + '\n\n> ' +
-            '\n> '.join(str(self.output.decode('ascii', 'replace')).split(
-                '\n')) +
-            '\n')
+        stdout = self._quote(self.output)
+        stderr = self._quote(self.errput)
+
+        ret = [super().__str__()]
+        if stderr:
+            ret.append('STDERR:\n{}'.format(stderr))
+        if stdout:
+            ret.append('STDOUT:\n{}'.format(stdout))
+
+        return '\n\n'.join(ret)
 
 
 class BaseFileSystem2(object):
@@ -47,11 +66,22 @@ class BaseFileSystem2(object):
         self.sudobin = sudobin
 
     def _perform_system_command(self, cmd):
+        fp = None
+        ret = -1
+        stdout = stderr = ''
         try:
-            # FIXME: also fetch stderr for "WithOutput"-error.
-            return subprocess.check_output(cmd).decode('utf-8')
-        except subprocess.CalledProcessError as e:
-            raise CalledProcessErrorWithOutput(e)
+            fp = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = fp.communicate()
+            ret = fp.wait()
+            fp = None
+            if ret != 0:
+                raise CalledProcessErrorWithOutput(ret, cmd, stdout, stderr)
+        finally:
+            if fp:
+                fp.kill()
+
+        return stdout.decode('utf-8')  # expect valid ascii/utf-8
 
     def _perform_sudo_command(self, cmd):
         return self._perform_system_command(

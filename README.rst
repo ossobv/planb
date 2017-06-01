@@ -19,7 +19,6 @@ TODO:
   - use asciifield for fs-name?
 * Check whether the mount-point != zpool-name works properly.
 * Fix System calls to always save stderr for exception output.
-* Check the 'bclone' call: it reports 2 warnings which should be fixed.
 * Fix admin "Planb" name as "PlanB".
 * Split off the subparts of the HostConfig to separate configs:
   - include-config

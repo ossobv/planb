@@ -21,8 +21,6 @@ TODO:
 * Fix System calls to always save stderr for exception output.
 * Check the 'bclone' call: it reports 2 warnings which should be fixed.
 * Fix admin "Planb" name as "PlanB".
-* Fix "iconv=utf8,latin1" on ancient hosts? Doesn't exist there..
-  Fallback to without --iconv and accept code 23 as non-failed?
 * Split off the subparts of the HostConfig to separate configs:
   - include-config
   - transport-config
@@ -31,8 +29,6 @@ TODO:
 * Use hostgroup+hostname in more places. Right now the friendly_name is
   too short. Also, use unique_together, so the friendlyname can be reused.
 * Don't allow enqueue-ing of enabled=False hosts!
-* Add mysql-backup to backup this SQL.
-* Document how to use the remotebackup user with ionice and sudo.
 
 
 -------
@@ -233,6 +229,14 @@ Rsync complains about ``Invalid or incomplete multibyte or wide character``.
     flags should fix it.
 
     You may need rsync version 3 or higher for that.
+
+    Right now we opt to *not* implement any of these workarounds:
+
+    * Patch rsync to cope with ``EILSEQ`` (84) "Illegal byte sequence".
+    * Cope with error code 23 and pretend that everything went fine.
+
+    Instead, you should install a recent rsync and/or fix the filenames
+    on your remote filesystem.
 
 
 Rsync complains about ``failed to stat`` or ``mkdir failed``.

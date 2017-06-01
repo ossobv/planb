@@ -180,6 +180,37 @@ Installing automatic jobs::
     ./manage loaddata planb_jobs
 
 
+-------------------------
+Configuring a remote host
+-------------------------
+
+Create a ``remotebackup`` user on the remote host (or ``encbackup`` for
+encrypted backups, which is beyond the scope of this document)::
+
+    adduser --disabled-password remotebackup
+
+Configure sudo access using ``visudo -f /etc/sudoers.d/remotebackup``::
+
+    # Backup user needs to be able to get the files
+    remotebackup ALL=NOPASSWD: /usr/bin/rsync --server --sender *
+    remotebackup ALL=NOPASSWD: /usr/bin/ionice -c2 -n7 /usr/bin/rsync --server --sender *
+    remotebackup ALL=NOPASSWD: /usr/bin/ionice -c3 /usr/bin/rsync --server --sender *
+
+Observe how the ``--server --sender`` makes the rsync read-only.
+
+Set up the ssh key like you'd normally do::
+
+    mkdir -p ~remotebackup/.ssh
+    cat >>~remotebackup/.ssh/authorized_keys <<EOF
+    ... ssh public key from /var/spool/planb/.ssh/id_rsa.pub goes here ...
+    EOF
+
+    chmod 640 ~remotebackup/.ssh/authorized_keys
+    chown remotebackup -R ~remotebackup/.ssh
+
+When you use this pattern, you can tick ``use_sudo`` and set the remote
+user to ``remotebackup``.
+
 
 ------
 F.A.Q.

@@ -1,9 +1,10 @@
 import logging
 import os.path
 import re
-import subprocess
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+
+from planb.common.subprocess2 import CalledProcessError, check_output
 
 # Check if we can backup (daily)
 # backup
@@ -28,60 +29,14 @@ SNAPSHOT_SPECIAL_MAPPING = {
 }
 
 
-class CalledProcessErrorWithOutput(subprocess.CalledProcessError):
-    def __init__(self, returncode, cmd, stdout, stderr):
-        super(CalledProcessErrorWithOutput, self).__init__(
-            returncode=returncode, cmd=cmd, output=stdout)
-        self.errput = stderr
-
-    def _quote(self, bintext):
-        text = bintext.decode('ascii', 'replace')
-        text = text.replace('\r', '')
-        if not text:
-            return ''
-
-        if text.endswith('\n'):
-            text = text[0:-1]
-        else:
-            text += '[noeol]'
-
-        return '> ' + '\n> '.join(text.split('\n'))
-
-    def __str__(self):
-        stdout = self._quote(self.output)
-        stderr = self._quote(self.errput)
-
-        ret = [super().__str__()]
-        if stderr:
-            ret.append('STDERR:\n{}'.format(stderr))
-        if stdout:
-            ret.append('STDOUT:\n{}'.format(stdout))
-
-        return '\n\n'.join(ret)
-
-
 class BaseFileSystem2(object):
     def __init__(self, binary, sudobin):
         self.binary = binary
         self.sudobin = sudobin
 
     def _perform_system_command(self, cmd):
-        fp = None
-        ret = -1
-        stdout = stderr = ''
-        try:
-            fp = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            stdout, stderr = fp.communicate()
-            ret = fp.wait()
-            fp = None
-            if ret != 0:
-                raise CalledProcessErrorWithOutput(ret, cmd, stdout, stderr)
-        finally:
-            if fp:
-                fp.kill()
-
-        return stdout.decode('utf-8')  # expect valid ascii/utf-8
+        output = check_output(cmd)
+        return output.decode('utf-8')  # expect valid ascii/utf-8
 
     def _perform_sudo_command(self, cmd):
         return self._perform_system_command(
@@ -175,7 +130,7 @@ class Zfs(BaseFileSystem2):
             'get', '-Ho', 'value', 'mountpoint', dataset_name)
         try:
             out = self._perform_binary_command(cmd).rstrip('\r\n')
-        except subprocess.CalledProcessError:
+        except CalledProcessError:
             out = None
         return out
 
@@ -305,7 +260,7 @@ class Zfs(BaseFileSystem2):
             self.get_dataset_name(rootdir, customer, friendly_name))
         try:
             out = self._perform_binary_command(cmd)
-        except subprocess.CalledProcessError as e:
+        except CalledProcessError as e:
             msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
             logger.warning(msg)
             size = '0'

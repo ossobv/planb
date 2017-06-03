@@ -118,7 +118,8 @@ def conditional_job_run(job_id):
         # time-check.
         # #self.retry(eta=now.replace(hour=17))  # @task(bind=True)
         # Instead, we do this:
-        HostConfig.objects.filter(pk=job_id).update(queued=False, running=False)
+        HostConfig.objects.filter(pk=job_id).update(
+            queued=False, running=False)
         return
 
     return unconditional_job_run(job_id)
@@ -155,7 +156,7 @@ def unconditional_job_run(job_id):
         # Django-Q but it logs errors instead of exceptions and then we
         # don't have any useful tracebacks.
         logger.exception(
-            '[%s] Failure running job', job)
+            '[%s] Failed backup of host: %s', job, job.host)
         # First after logging the exception we want to update the DB. If
         # the DB is the cause of the exception, we'd mask the original
         # one.

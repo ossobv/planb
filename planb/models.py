@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
@@ -12,8 +11,11 @@ from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import ugettext as _
 
+from planb.common.subprocess2 import (
+    CalledProcessError, check_call, check_output)
+from planb.storage.zfs import Zfs
+
 from .fields import FilelistField, MultiEmailField
-from .storage.zfs import Zfs
 
 try:
     from setproctitle import getproctitle, setproctitle
@@ -33,10 +35,10 @@ def get_pools():
     pools = []
     for name, pool, bfs in settings.STORAGE_POOLS:
         assert bfs == 'zfs', bfs
-        val1 = float(subprocess.check_output(
+        val1 = float(check_output(
             [settings.SUDO_BIN, settings.ZFS_BIN, 'get', '-Hpo', 'value',
              'used', pool]).strip())
-        val2 = float(subprocess.check_output(
+        val2 = float(check_output(
             [settings.SUDO_BIN, settings.ZFS_BIN, 'get', '-Hpo', 'value',
              'available', pool]).strip())
         pct = '{pct:.0f}%'.format(pct=(100 * (val1 / (val1 + val2))))
@@ -53,19 +55,6 @@ bfs = Zfs(binary=settings.ZFS_BIN, sudobin=settings.SUDO_BIN)
 valid_rsync_codes = (
     24,  # vanished source files
 )
-
-
-class CalledProcessErrorWithOutput(subprocess.CalledProcessError):
-    def __init__(self, error):
-        super(CalledProcessErrorWithOutput, self).__init__(
-            returncode=error.returncode, cmd=error.cmd, output=error.output)
-
-    def __str__(self):
-        return (
-            super(CalledProcessErrorWithOutput, self).__str__() + '\n\n> ' +
-            '\n> '.join(str(self.output.decode('ascii', 'replace')).split(
-                '\n')) +
-            '\n')
 
 
 class HostGroup(models.Model):
@@ -476,17 +465,17 @@ class HostConfig(models.Model):
         cmd = self.generate_rsync_command()
         logger.info('Running %s: %s' % (self.friendly_name, ' '.join(cmd)))
         try:
-            subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+            output = check_output(cmd).decode('utf-8')
             returncode = 0
-        except subprocess.CalledProcessError as e:
+        except CalledProcessError as e:
             self.rsync_exit_codes(e)
             returncode = e.returncode
             if returncode not in valid_rsync_codes:
-                raise CalledProcessErrorWithOutput(e)
+                raise
 
         logger.info(
-            'Rsync exited with code %s for %s' % (
-                returncode, self.friendly_name))
+            'Rsync exited with code %s for %s. Output: %s' % (
+                returncode, self.friendly_name, output))
 
     def run(self):
         if setproctitle:
@@ -520,8 +509,8 @@ class HostConfig(models.Model):
         cmd = ('zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf', '-s',
                settings.ZABBIX_NAME, '-k', key, '-o', val)
         try:
-            subprocess.check_call(cmd)
-        except subprocess.CalledProcessError:
+            check_call(cmd)
+        except CalledProcessError:
             logger.exception('[%s] Error updating zabbix trapper item', self)
 
     def save(self, *args, **kwargs):
@@ -565,8 +554,7 @@ def create_dataset(sender, instance, created, *args, **kwargs):
         # mount: only root can use "--options" option
         # cannot mount 'rpool/BACKUP/example-example': Invalid argument
         # Might as well use sudo everywhere then.
-        subprocess.check_call([
-            settings.SUDO_BIN, bfs.binary, 'mount',
-            bfs.get_dataset_name(
-                instance.dest_pool, instance.hostgroup,
-                instance.friendly_name)])
+        dataset_name = bfs.get_dataset_name(
+            instance.dest_pool, instance.hostgroup,
+            instance.friendly_name)
+        check_call((settings.SUDO_BIN, bfs.binary, 'mount', dataset_name))

@@ -18,6 +18,10 @@ TODO:
   - use fs-name and optionally human-name
   - use asciifield for fs-name?
 * Check whether the mount-point != zpool-name works properly.
+* Replace the exception mails for common errors (like failing rsync) to
+  use mail_admins style mail.
+* After using mail_admins style mail, we can start introducing mail digests
+  instead: daily summary of backup successes and failures.
 * Fix System calls to always save stderr for exception output.
 * Fix admin "Planb" name as "PlanB".
 * Split off the subparts of the HostConfig to separate configs:
@@ -27,6 +31,8 @@ TODO:
   - host-status (use this as main enqueue-view?)
 * Use hostgroup+hostname in more places. Right now the friendly_name is
   too short. Also, use unique_together, so the friendlyname can be reused.
+* BUG: Items added to /exclude list are not deleted from destination if
+  they have already been backed up once.
 
 
 -------

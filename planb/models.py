@@ -469,6 +469,7 @@ class HostConfig(models.Model):
             returncode = 0
         except CalledProcessError as e:
             self.rsync_exit_codes(e)
+            output = e.output
             returncode = e.returncode
             if returncode not in valid_rsync_codes:
                 raise

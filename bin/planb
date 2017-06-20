@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+
+if __name__ == '__main__':
+    import os
+    import sys
+
+    # Check env.
+    if 'DJANGO_SETTINGS_MODULE' not in os.environ:
+        # No env? Load /etc/planb/envvars.
+        # We expect:
+        # - DJANGO_SETTINGS_MODULE=settings
+        # - PYTHONHOME=/etc/planb
+        # - USER=planb
+        with open('/etc/planb/envvars') as fp:
+            for line in fp:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key, value = line.split('=', 1)
+                    if key == 'PYTHONPATH':
+                        for idx, val in enumerate(value.split(':')):
+                            sys.path.insert(idx, val)
+                    else:
+                        os.environ[key] = value
+
+    # Become PlanB user.
+    if os.getuid() == 0:
+        import pwd
+        import sys
+        uid, gid = pwd.getpwnam(os.environ['USER'])[2:4]
+        os.setgroups([])
+        os.setuid(uid)
+
+    # Test reading the setting file.
+    from importlib import import_module
+    import_module('settings')
+
+    # Move to the django-admin wrapper.
+    from django.core.management import execute_from_command_line
+    sys.exit(execute_from_command_line())

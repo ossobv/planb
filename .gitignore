@@ -1,4 +1,8 @@
 __pycache__
 *.swp
 
+/build/
+/dist/
+
+/MANIFEST
 /settings.py

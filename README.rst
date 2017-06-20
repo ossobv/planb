@@ -1,16 +1,83 @@
 PlanB
 =====
 
-TODO:
+PlanB backs up your remote SSH-accessible files using rsync to a local ZFS
+storage. Manage many hosts and host groups. Automate daily, weekly, monthly and
+yearly backups with snapshots.
 
-* Add description/title after h1 heading in docs.
-* Explain what this is (will be).
-* Add authors/copyright/dates from original project.
+
+------------
+How it looks
+------------
+
+At the moment, the interface is just a Django admin interface:
+
+.. image:: example_hosts.png
+    :alt: A list of hosts configured in PlanB with most recent backup status
+
+The files are stored on ZFS storage, using snapshots to keep earlier versions
+of tiles. See this example shell transscript::
+
+    # zfs list | grep mongo2
+    rpool/BACKUP/experience-mongo2         9,34G  1,60T   855M  /srv/backups/experience-mongo2
+
+    # ls -l /srv/backups/experience-mongo2/data/srv/mongodb
+    total 646610
+    -rw------- 1 planb nogroup   67108864 jun 17 17:03 experience.0
+    -rw------- 1 planb nogroup  134217728 jun  9 16:01 experience.1
+    ...
+
+Those are the "current" files in the workspace. But you can go back in time::
+
+    # zfs list -r -t all rpool/BACKUP/experience-mongo2 | head -n4
+    NAME                                                  USED  AVAIL  REFER  MOUNTPOINT
+    rpool/BACKUP/experience-mongo2                       9,34G  1,60T   855M  /srv/backups/experience-mongo2
+    rpool/BACKUP/experience-mongo2@daily-201706031147        0      -   809M  -
+    rpool/BACKUP/experience-mongo2@monthly-201706031147      0      -   809M  -
+
+    # cd /srv/backups/experience-mongo2/.zfs/
+    # ls -1
+    daily-201706031147
+    daily-201706031211
+    daily-201706040001
+    daily-201706050002
+    ...
+
+    # ls daily-201706031147/data/srv/mongodb -l
+    total 581434
+    -rw------- 1 planb nogroup   67108864 jun  2 18:21 experience.0
+    -rw------- 1 planb nogroup  134217728 mei 29 14:38 experience.1
+    ...
+
+
+--------------------
+Requirements / setup
+--------------------
+
+PlanB can be installed as a standalone Django_ application, or it can be
+integrated in another Django project.
+
+See `requirements.txt`_ or `setup.py`_ for up-to-date dependencies/requirements.
+
+Basically, you'll need: ZFS storage, ssh and rsync, a webserver (nginx), python
+hosting (uwsgi), a database (mysql), a communication/cache bus (redis) and a
+few python packages.
+
+For more detailed steps, see `Setting it all up`_ below.
+
+.. _Django: https://www.djangoproject.com/
+.. _`requirements.txt`: ./requirements.txt
+.. _`setup.py`: ./setup.py
+
+
+----
+TODO
+----
+
+* Fix qflush into planb main.
 * Add pepcleaning pre-commit hook.
 * Add flake-checking pre-commit hook.
 * Add BCH checks.
-* Use proper setup.py-setup and easier settings.py,
-  possibly with uwsgi.ini-only environment?
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
@@ -22,7 +89,7 @@ TODO:
   use mail_admins style mail.
 * After using mail_admins style mail, we can start introducing mail digests
   instead: daily summary of backup successes and failures.
-* Fix System calls to always save stderr for exception output.
+* Fix subprocess calls to always save stderr for exception output.
 * Fix admin "Planb" name as "PlanB".
 * Split off the subparts of the HostConfig to separate configs:
   - include-config
@@ -33,6 +100,8 @@ TODO:
   too short. Also, use unique_together, so the friendlyname can be reused.
 * BUG: Items added to /exclude list are not deleted from destination if
   they have already been backed up once.
+* The 'data_files' in setup.py all get chucked into the virtualenv root.
+  We should place most of them in share/planb/ instead.
 
 
 -------
@@ -40,23 +109,27 @@ WARNING
 -------
 
 The Django-Q task scheduler is highly configurable from the
-/admin/-view. With a little effort it will run user-supplied python code
-directly. Any user with access to the schedulers will have tremendous
-powers
+``/admin/``-view. With a little effort it will run user-supplied python
+code directly. Any user with access to the schedulers will have
+tremendous powers
 
 **Recommendation**: don't give your users powers to edit the schedulers.
-Perhaps we should disable web-access to it altogether.
+Use the fine-grained permissions of the Django-admin systems to limit
+them to Hosts and HostGroups only.
+
+*Perhaps we should disable web-access to it altogether.*
 
 
 -----------------
 Setting it all up
 -----------------
 
-TODO:
+If you follow the HOWTO below, you'll set up PlanB as a standalone
+project. Those familiar with Django_ will know how to integrate it into
+their own project.
 
-* Explain how you can skip some or all parts here.
-* Move the optional details, like how to set up a database or ZFS, to a
-  separate heading at the bottom.
+The setup below assumes you'll be using the ``planb`` user. You're free
+to change that consistently of course.
 
 
 Setting up a ZFS pool
@@ -65,54 +138,62 @@ Setting up a ZFS pool
 TODO: Document this briefly.
 
 
-Setting up a database
-~~~~~~~~~~~~~~~~~~~~~
-
-Something like this::
-
-    apt-get install mariadb-server  # or mysql-server, or postgres, or ...
-
-TODO: Explain that we need a user, a database, a sane collation.
-
-
 Setting up the project
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Cloning project::
+Setting up a virtualenv (optional)::
 
-    git clone https://github.com/ossobv/planb.git /srv/planb
-
-Setting up environment/virtualenv::
-
-    mkdir -p /srv/venv
-    echo 'WORKON_HOME=/srv/venv' >>~/.bashrc
+    mkdir -p /srv/virtualenvs
+    echo 'WORKON_HOME=/srv/virtualenvs' >>~/.bashrc
     apt-get install python3-virtualenv python3-pip virtualenvwrapper
     # you may need to log in/out once after this
 
-    mkvirtualenv planb --python=$(which python3)
+    mkvirtualenv planb --python=$(which python3) --system-site-packages
 
-    cd /srv/planb
+    mkdir /etc/planb
+    cd /etc/planb
     pwd >$VIRTUAL_ENV/.project
 
-Installing requirements::
-
     workon planb
-    pip3 install -r requirements.txt
-    # (this should be superseded by setup.py-style config)
 
-Setting up the database and a PlanB user::
+Installing PlanB::
 
-    ./manage migrate
-    ./manage createsuperuser
+    apt-get install python3-mysqldb python3-redis python3-setproctitle
+    pip install git+https://github.com/ossobv/planb.git@master
 
-Setting up a local user::
+Setting up a local ``planb`` user::
 
     adduser planb --disabled-password --home=/var/spool/planb \
       --shell=/bin/bash --system
 
     sudo -H -u planb ssh-keygen -b 8192
 
-You may want to back that ssh key up somewhere.
+.. note:: *You may want to back that ssh key up somewhere.*
+
+Setting up the local environment::
+
+    cat >/etc/planb <<EOF
+    USER=planb
+    DJANGO_SETTINGS_MODULE=settings
+    PYTHONPATH=/etc/planb
+    EOF
+
+Setting up the local configuration::
+
+    cp /srv/virtualenvs/planb/example_settings.py /etc/planb/settings.py
+    ${EDITOR:-vi} /etc/planb/settings.py
+
+**Replace all *FIXME* entries in the ``settings.py``**
+
+Make sure the SQL database exists. How to do that is beyond the scope of
+this readme.
+
+At this point, you should be able to run the ``planb`` script.
+
+Set up the database and a web-user::
+
+    planb migrate
+    planb createsuperuser
 
 Setting up uwsgi ``planb.ini``::
 
@@ -120,33 +201,34 @@ Setting up uwsgi ``planb.ini``::
     plugin = python3
     workers = 4
 
-    chdir = /srv/planb
-    wsgi-file = /srv/planb/wsgi.py
-    virtualenv = /srv/venv/planb
-
-    env = DJANGO_SETTINGS_MODULE=settings
+    chdir = /
+    virtualenv = /srv/virtualenvs/planb
+    wsgi-file = /srv/virtualenvs/planb/wsgi.py
 
     uid = planb
     gid = www-data
     chmod-socket = 660
 
-Set up static path::
+    for-readline = /etc/planb/envvars
+       env = %(_)
+    endfor =
 
-    mkdir -p /srv/http/planb.example.com/static
-    ./manage collectstatic
+Set up static path, static files and log path::
 
-Set up log file path::
+    # see the STATIC_ROOT entry in your settings.py
+    install -o planb -d /srv/http/YOURHOSTNAME/static
 
-    mkdir /var/log/planb
-    chown planb /var/log/planb
+    planb collectstatic
+
+    install -o planb -d /var/log/planb
 
 Setting up nginx config::
 
     server {
         listen 80;
-        server_name planb.example.com;
+        server_name YOURHOSTNAME;
 
-        root /srv/http/planb.example.com;
+        root /srv/http/YOURHOSTNAME;
 
         location / {
             uwsgi_pass unix:/run/uwsgi/app/planb/socket;
@@ -157,7 +239,7 @@ Setting up nginx config::
         }
     }
 
-Setting up ZFS::
+Giving *PlanB* access to ZFS tools and paths::
 
     cat >/etc/sudoers.d/planb <<EOF
     planb ALL=NOPASSWD: /sbin/zfs, /bin/chown
@@ -167,17 +249,22 @@ Setting up ZFS::
     chown planb /srv/backups
     chmod 700 /srv/backups
 
-Setting up qcluster::
+Setting up ``qcluster`` for scheduled tasks::
 
     apt-get install redis-server
-    cp rc.d/planb-queue.service /etc/systemd/system/ &&
+
+    # (in the source, this file is in rc.d)
+    cp /srv/virtualenvs/planb/planb-queue.service /etc/systemd/system/
+    ${EDITOR:-vi} /etc/systemd/system/planb-queue.service
+
+    systemctl daemon-reload &&
       systemctl enable planb-queue &&
       systemctl start planb-queue &&
       systemctl status planb-queue
 
 Installing automatic jobs::
 
-    ./manage loaddata planb_jobs
+    planb loaddata planb_jobs
 
 
 -------------------------
@@ -215,6 +302,23 @@ user to ``remotebackup``.
 ------
 F.A.Q.
 ------
+
+Can I use the software and customize it to my own needs?
+    It is licensed under the GNU GPL version 3.0 or higher. See the LICENSE
+    file for the full text. That means: probably yes, but you may be required to
+    share any changes you make. But you were going to do that anyway, right?
+
+
+The ``uwsgi`` log complains about *"No module named site"*.
+    If your uwsgi fails to start, and the log looks like this::
+
+        Python version: 2.7.12 (default, Nov 19 2016, 06:48:10)
+        Set PythonHome to /srv/virtualenvs/planb
+        ImportError: No module named site
+
+    Then your uWSGI is missing the Python 3 module. Go install
+    ``uwsgi-plugin-python3``.
+
 
 The ``mkvirtualenv`` said ``locale.Error: unsupported locale setting``.
     You need to install the right locales until ``perl -e setlocale`` is
@@ -257,3 +361,13 @@ Backup success mail are sent, but failure mails are not.
     Check the ``DEBUG`` setting. At the moment, error-mails are sent
     through the logging subsystem and that is disabled when running in
     debug-mode.
+
+
+-------
+Authors
+-------
+
+PlanB was started in 2013 as "OSSO backup" by Alex Boonstra at OSSO B.V. Since
+then, it has been evolved into *PlanB*. When it was Open Sourced by Walter
+Doekes in 2017, the old commits were dropped to ensure that any private compnay
+information was not disclosed.

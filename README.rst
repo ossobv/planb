@@ -74,6 +74,18 @@ For more detailed steps, see `Setting it all up`_ below.
 TODO
 ----
 
+* Re-add some form of "list-stale-mounts" (!).
+  # contrib/list-stale-mounts | mail -E -s "[$HOSTNAME] Stale ZFS mounts?"
+* Re-add non-INFO output from planb_custom.daily...
+  # run_backupinfo | grep -vFB1 INFO/ /var/log/osso-backup/billing.log |
+  # mail -E -s "[$HOSTNAME] Backup billing push"
+* Re-add some kind of monthly report about what has been backupped.
+  # parse_and_mail_backupdirs
+* Re-add the Zabbix json exporter.
+  # UserParameter=backuped.machines.discovery,(
+  # list_backupjobs_in_json 3>&2 2>&1 1>&3 |
+  # mail -E -s 'ERROR backuped.machines.discovery' root ) 2>&1
+* Add makefile for quick uninstall/install/uwsgi-reload?
 * Sort HostGroups in HostConfig sidebar.
 * Fix qflush into planb main.
 * Add pepcleaning pre-commit hook.

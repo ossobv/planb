@@ -101,6 +101,7 @@ TODO
   they have already been backed up once.
 * The 'data_files' in setup.py all get chucked into the virtualenv root.
   We should place most of them in share/planb/ instead.
+* Replace the "daily report" hack with a signal-receiver.
 
 
 -------
@@ -321,6 +322,23 @@ You can add something like this to your settings::
                 'zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf',
                 '-k', key, '-o', val)
             check_call(cmd)
+
+
+----------------
+Doing daily jobs
+----------------
+
+A quick hack to get daily reports up and running is by placing something
+like this in ``/etc/planb/planb_custom.py``::
+
+    from planb.contrib.billing import BossoBillingPoster, daily_hostgroup_report
+
+    def daily_billing_report():
+        """
+        This function is added into: Home >> Task Queue >> Scheduled task
+        As: "Report to Billing" <planb_custom.daily_bosso_report>
+        """
+        daily_hostgroup_report(BossoBillingPoster('http://my.url.here/'))
 
 
 ------

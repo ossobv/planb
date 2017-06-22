@@ -170,64 +170,6 @@ def unconditional_job_run(job_id):
         logger.info('[%s] Completed successfully', job)
 
 
-def run_backupinfo():
-    return
-
-#     # This function runs daily to report to REMOTE how many data the
-#     # hostgroup has backed up.
-#     logger.info('Sending backupinfo to "%s"', settings.BILLING_HOST)
-#     headers = {
-#         'Content-type': 'application/x-www-form-urlencoded',
-#         'User-Agent': 'REMOTE',
-#         'Auth-Token': 'SETME',
-#     }
-#     for hostgroup in HostGroup.objects.all():
-#         info = hostgroup.get_backup_info()  # list of dicts with backupdata
-#         for key, val in info.items():
-#             date_ = val['date'].replace(tzinfo=None)  # remove +00:00
-#
-#             # Special tricks here. REMOVE will accept duplicate values,
-#             # but only for the 0th second of the month. If we're pushing
-#             # old records -- for stale/disabled backups -- we'll update
-#             # the time to the 0th second of this month. That way we'll
-#             # get 1 backupinfo record for every month and the hostgroup
-#             # can get billed for it.
-#             first_day_of_this_month = date.today().replace(day=1)
-#             if date_.date() < first_day_of_this_month:
-#                 date_ = datetime(
-#                     first_day_of_this_month.year,
-#                     first_day_of_this_month.month,
-#                     1)
-#             elif not val['enabled']:
-#                 continue  # write it once a month, should be enough
-#
-#             # Set values to post.
-#             data = {
-#                 'name': '%s-%s' % (hostgroup.name, key),
-#                 'date': date_,
-#                 'size': val['size'],
-#             }
-#
-#             req = Request(
-#                 url=settings.BILLING_HOST, data=urllib.urlencode(data),
-#                 headers=headers, method='POST')
-#             try:
-#                 logger.info('Pushing "%s"', data)
-#
-#                 resp = urllib2.urlopen(req)
-#                 resp = resp.read()
-#
-#                 if resp == 'OK':
-#                     pass
-#                 elif (('Backup history with this '
-#                        'Name and Date already exists') in resp):
-#                     logger.warning(resp)
-#                 else:
-#                     logger.error(resp)
-#             except urllib2.HTTPError as e:
-#                 logger.error(e.read())
-
-
 def check_for_not_backed_up_jobs():
     yesterday = timezone.now() - timedelta(days=2)
     jobs = HostConfig.objects.filter(date_complete__lt=yesterday)

@@ -25,8 +25,15 @@ if __name__ == '__main__':
         data_files=[('', [
             'LICENSE', 'README.rst', 'CHANGES.rst', 'wsgi.py',
             'rc.d/planb-queue.service'])],
-        packages=['planb', 'planb.fixtures'],
-        package_data={'planb.fixtures': ['*.xml']},
+        packages=[
+            'planb',
+            'planb.fixtures',
+            'planb.static',
+            'planb.templates'],
+        package_data={
+            'planb.fixtures': ['*.xml'],
+            'planb.static': ['planb/js/jquery-postlink.js'],
+            'planb.templates': ['admin/planb/hostconfig/change_form.html']},
         description='PlanB automates remote SSH+rsync backups',
         long_description=('\n\n\n'.join(long_descriptions)),
         author='Alex Boonstra, Walter Doekes, OSSO B.V.',

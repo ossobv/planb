@@ -13,6 +13,7 @@ from django.utils.translation import ugettext as _
 
 from planb.common.subprocess2 import (
     CalledProcessError, check_call, check_output)
+from planb.signals import backup_done
 from planb.storage.zfs import Zfs
 
 from .fields import FilelistField, MultiEmailField
@@ -496,23 +497,25 @@ class HostConfig(models.Model):
             HostConfig.objects.filter(pk=self.pk).update(
                 backup_size_mb=size_mb)
 
-            self.notify_zabbix()
+            # Send signal that we're done.
+            self.signal_done(True)
+
+        except:
+            # Send signal that we've failed.
+            self.signal_done(False)
+            # Propagate.
+            raise
+
         finally:
             if setproctitle:
                 setproctitle(oldproctitle)
 
-    def notify_zabbix(self):
-        return  # FIXME: disabled
-
-        key = 'backuped.get_latest[%s-%s]' % (
-            str(self.hostgroup), self.friendly_name)
-        val = datetime.now().strftime('%s')
-        cmd = ('zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf', '-s',
-               settings.ZABBIX_NAME, '-k', key, '-o', val)
-        try:
-            check_call(cmd)
-        except CalledProcessError:
-            logger.exception('[%s] Error updating zabbix trapper item', self)
+    def signal_done(self, success):
+        instance = HostConfig.objects.get(pk=self.pk)
+        # Using send_robust, because we do not want user-code to mess up
+        # the rest of our state.
+        backup_done.send_robust(
+            sender=self.__class__, hostconfig=instance, success=success)
 
     def save(self, *args, **kwargs):
         # Notify the same users who get ERROR / Success for backups that

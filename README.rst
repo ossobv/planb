@@ -74,6 +74,7 @@ For more detailed steps, see `Setting it all up`_ below.
 TODO
 ----
 
+* Sort HostGroups in HostConfig sidebar.
 * Fix qflush into planb main.
 * Add pepcleaning pre-commit hook.
 * Add flake-checking pre-commit hook.
@@ -84,12 +85,10 @@ TODO
 * Alter HostConfig:
   - use fs-name and optionally human-name
   - use asciifield for fs-name?
-* Check whether the mount-point != zpool-name works properly.
 * Replace the exception mails for common errors (like failing rsync) to
   use mail_admins style mail.
 * After using mail_admins style mail, we can start introducing mail digests
   instead: daily summary of backup successes and failures.
-* Fix subprocess calls to always save stderr for exception output.
 * Fix admin "Planb" name as "PlanB".
 * Split off the subparts of the HostConfig to separate configs:
   - include-config
@@ -297,6 +296,31 @@ Set up the ssh key like you'd normally do::
 
 When you use this pattern, you can tick ``use_sudo`` and set the remote
 user to ``remotebackup``.
+
+
+-------------------------------
+Adding post-backup notification
+-------------------------------
+
+Do you want a notification when a backup succeeds? Or when it fails?
+
+You can add something like this to your settings::
+
+    from datetime import datetime
+    from subprocess import check_call
+    from django.dispatch import receiver
+    from planb.signals import backup_done
+
+    @receiver(backup_done)
+    def notify_zabbix(sender, hostconfig, success, **kwargs):
+        if success:
+            key = 'backuped.get_latest[{}-{}]'.format(
+                hostconfig.hostgroup.name, hostconfig.friendly_name)
+            val = datetime.now().strftime('%s')
+            cmd = (
+                'zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf',
+                '-k', key, '-o', val)
+            check_call(cmd)
 
 
 ------

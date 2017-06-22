@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-from distutils.core import setup
 import sys
+from distutils.core import setup
+from setuptools import find_packages
 
 if sys.version_info < (3,):
     raise RuntimeError('PlanB is not built for Python older than 3')
@@ -25,11 +26,7 @@ if __name__ == '__main__':
         data_files=[('', [
             'LICENSE', 'README.rst', 'CHANGES.rst', 'wsgi.py',
             'rc.d/planb-queue.service'])],
-        packages=[
-            'planb',
-            'planb.fixtures',
-            'planb.static',
-            'planb.templates'],
+        packages=find_packages(),
         package_data={
             'planb.fixtures': ['*.xml'],
             'planb.static': ['planb/js/jquery-postlink.js'],

@@ -26,7 +26,8 @@ if __name__ == '__main__':
         data_files=[('', [
             'LICENSE', 'README.rst', 'CHANGES.rst', 'wsgi.py',
             'rc.d/planb-queue.service'])],
-        packages=find_packages(),
+        packages=find_packages() + [
+            'planb.fixtures', 'planb.static', 'planb.templates'],
         package_data={
             'planb.fixtures': ['*.xml'],
             'planb.static': ['planb/js/jquery-postlink.js'],

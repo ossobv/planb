@@ -89,7 +89,9 @@ def daily_hostgroup_report(data_poster):
     for hostgroup in HostGroup.objects.all():
         info = hostgroup.get_backup_info()  # list of dicts with backupdata
         for key, val in info.items():
-            date_ = val['date'].replace(tzinfo=None)  # remove +00:00
+            date_ = val['date'].replace(
+                microsecond=0,
+                tzinfo=None)  # remove +00:00
 
             # Special hacks here. REMOTE will accept duplicate values,
             # but only for the 0th second of the month. If we're pushing

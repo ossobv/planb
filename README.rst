@@ -74,6 +74,8 @@ For more detailed steps, see `Setting it all up`_ below.
 TODO
 ----
 
+* Fix logrotate sample.
+* Add uwsgi-uid==djangoq-uid check?
 * Re-add some form of "list-stale-mounts" (!).
   # contrib/list-stale-mounts | mail -E -s "[$HOSTNAME] Stale ZFS mounts?"
 * Re-add non-INFO output from planb_custom.daily...

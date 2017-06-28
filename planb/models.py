@@ -151,6 +151,10 @@ class HostConfig(models.Model):
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
 
+    @property
+    def identifier(self):
+        return '{}-{}'.format(self.hostgroup.name, self.friendly_name)
+
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8
         copy = self.__class__.objects.get(pk=self.pk)

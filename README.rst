@@ -83,10 +83,6 @@ TODO
   # mail -E -s "[$HOSTNAME] Backup billing push"
 * Re-add some kind of monthly report about what has been backupped.
   # parse_and_mail_backupdirs
-* Re-add the Zabbix json exporter.
-  # UserParameter=backuped.machines.discovery,(
-  # list_backupjobs_in_json 3>&2 2>&1 1>&3 |
-  # mail -E -s 'ERROR backuped.machines.discovery' root ) 2>&1
 * Add makefile for quick uninstall/install/uwsgi-reload?
 * Sort HostGroups in HostConfig sidebar.
 * Fix qflush into planb main.
@@ -329,13 +325,19 @@ You can add something like this to your settings::
     @receiver(backup_done)
     def notify_zabbix(sender, hostconfig, success, **kwargs):
         if success:
-            key = 'backuped.get_latest[{}-{}]'.format(
-                hostconfig.hostgroup.name, hostconfig.friendly_name)
+            key = 'planb.get_latest[{}]'.format(hostconfig.identifier)
             val = datetime.now().strftime('%s')
             cmd = (
                 'zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf',
                 '-k', key, '-o', val)
             check_call(cmd)
+
+That combines nicely with a backup host discovery rule using ``blist``::
+
+    # Machine discovery (redirects stderr to mail).
+    UserParameter=planb.discovery, \
+      ( planb blist --zabbix 3>&2 2>&1 1>&3 \
+      | mail -E -s 'ERROR: planb.discovery (zabbix)' root ) 2>&1
 
 
 ----------------

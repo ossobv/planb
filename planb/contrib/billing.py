@@ -110,7 +110,7 @@ def daily_hostgroup_report(data_poster):
 
             # Set values and post.
             data = {
-                'name': '%s-%s' % (hostgroup.name, key),
+                'name': '{}-{}'.format(hostgroup.name, key),
                 'date': date_,
                 'size': val['size'],
             }

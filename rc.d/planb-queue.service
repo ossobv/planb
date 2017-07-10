@@ -1,6 +1,6 @@
 [Unit]
 Description=PlanB Queue server
-After=network.target redis-server.service
+After=network.target mysql.service redis-server.service
 
 [Service]
 Type=simple

@@ -85,7 +85,6 @@ TODO
   # parse_and_mail_backupdirs
 * Add makefile for quick uninstall/install/uwsgi-reload?
 * Sort HostGroups in HostConfig sidebar.
-* Fix qflush into planb main.
 * Add pepcleaning pre-commit hook.
 * Add flake-checking pre-commit hook.
 * Add BCH checks.

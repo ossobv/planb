@@ -2,13 +2,4 @@
 here=$(cd "$(dirname "$0")"; pwd)
 admin=$(which django-admin django-admin.py | head -n1)
 test -z "$admin" && echo "No django-admin found. Missing env?" >&2 && exit 1
-
-case $1 in
-qflush)
-    echo 'update planb_hostconfig set running=0,queued=0;' | "$0" dbshell
-    ;;
-
-*)
-    PLANB_ENVFILE="$here/envvars" exec "$here/bin/planb" "$@"
-    ;;
-esac
+PLANB_ENVFILE="$here/envvars" exec "$here/bin/planb" "$@"

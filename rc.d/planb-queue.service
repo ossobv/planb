@@ -5,7 +5,7 @@ After=network.target mysql.service redis-server.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/planb/envvars
-#ExecStartPre=/srv/virtualenvs/planb/bin/planb qflush
+ExecStartPre=/srv/virtualenvs/planb/bin/planb bqueueflush
 ExecStart=/srv/virtualenvs/planb/bin/planb qcluster
 User=planb
 Group=nogroup

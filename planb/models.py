@@ -89,7 +89,7 @@ class HostConfig(models.Model):
         verbose_name=_('Name'), max_length=63, unique=True,
         help_text=_('Short name, should be unique per host group.'))
     host = models.CharField(max_length=254)
-    description = models.TextField(help_text=_(
+    description = models.TextField(blank=True, help_text=_(
         'Quick description/tips. Use the first line for labels/tags.'))
     transport = models.PositiveSmallIntegerField(
         choices=TRANSPORT_CHOICES, default=TRANSPORT_CHOICES[0][0])

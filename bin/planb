@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+
 def try_load_envvars(filenames):
     """
     Load the first available envvars file.
@@ -53,10 +54,10 @@ def load_envvars(fp):
             if current_uid == 0:
                 os.setgroups([])
                 os.setuid(planb_uid)
-            else:
-                import warnings
-                warnings.warn(
-                    'cannot become planb user {!r}'.format(planb_user))
+            # else:
+            #     import warnings
+            #     warnings.warn(
+            #         'cannot become planb user {!r}'.format(planb_user))
 
 
 if __name__ == '__main__':

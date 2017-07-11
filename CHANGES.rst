@@ -1,6 +1,6 @@
 Changes
 -------
 
-* v1.0_dev:
+* v1.0:
 
   - Initial release.

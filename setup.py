@@ -13,11 +13,21 @@ if __name__ == '__main__':
 
     with open('CHANGES.rst') as file:
         long_descriptions.append(file.read())
-        version = long_descriptions[-1].split(':', 1)[0].split('* ', 1)[1]
-        assert version.startswith('v'), version
-        version = version[1:]
-        if not all(i.isdigit() for i in version.split('.')):
-            version = '0_UNDEF'  # undefined version
+        versions = long_descriptions[-1].split('\n* ')[1:]
+
+        # TODO: use `git describe --tags --dirty` if avail?
+        incomplete = False
+        for line in versions:
+            assert line.startswith('v'), line
+            line = line.split(':', 1)[0][1:]
+            if all(i.isdigit() for i in line.split('.')):
+                version = line  # last "complete version"
+                break
+            incomplete = True
+        else:
+            version = '0+1.or.more'  # undefined version
+        if incomplete:
+            version += '+1.or.more'
 
     setup(
         name='planb',

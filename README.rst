@@ -182,11 +182,17 @@ Setting up a local ``planb`` user::
 
 Setting up the local environment::
 
-    cat >/etc/planb <<EOF
+    cat >/etc/planb/envvars <<EOF
     USER=planb
-    DJANGO_SETTINGS_MODULE=settings
     PYTHONPATH=/etc/planb
+    DJANGO_SETTINGS_MODULE=settings
     EOF
+
+.. note:: *During development, you can use a local* ``./envvars`` *in your
+           development directory or set* ``PLANB_ENVFILE`` *to a
+           specific path. You can set* ``PYTHONPATH`` *to*
+           ``/etc/planb:/home/yourname/src/planb`` *to develop on the
+           production machine.*
 
 Setting up the local configuration::
 

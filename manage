@@ -9,13 +9,6 @@ qflush)
     ;;
 
 *)
-    if [ $(id -u) -eq 0 ]; then
-        # Install daemontools(1); for further reading, see:
-        # http://jdebp.eu./FGA/dont-abuse-su-for-dropping-privileges.html
-        PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec setuidgid planb \
-            "$admin" "$@"
-    else
-        PYTHONPATH=$here DJANGO_SETTINGS_MODULE=settings exec "$admin" "$@"
-    fi
+    PLANB_ENVFILE="$here/envvars" exec "$here/bin/planb" "$@"
     ;;
 esac

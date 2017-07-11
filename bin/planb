@@ -1,34 +1,76 @@
 #!/usr/bin/env python3
 
+def try_load_envvars(filenames):
+    """
+    Load the first available envvars file.
+    """
+    for envfile in filenames:
+        if envfile is not None:
+            try:
+                fp = open(envfile)
+            except:
+                pass
+            else:
+                try:
+                    load_envvars(fp)
+                finally:
+                    fp.close()
+                break
+    else:
+        raise ValueError('no envvars file to load: please set PLANB_ENVFILE')
+
+
+def load_envvars(fp):
+    """
+    Load USER, PYTHONPATH and DJANGO_SETTINGS_MODULE from envvars file.
+
+    We expect something like:
+    - USER=planb
+    - PYTHONPATH=/etc/planb
+    - DJANGO_SETTINGS_MODULE=settings
+    """
+    import pwd
+    import os
+
+    for line in fp:
+        line = line.strip()
+        if line and not line.startswith('#'):
+            key, value = line.split('=', 1)
+            if key == 'PYTHONPATH':
+                for idx, val in enumerate(value.split(':')):
+                    sys.path.insert(idx, val)
+            else:
+                os.environ[key] = value
+
+    # Become PlanB user if running as root. This way we won't create
+    # logs or other artifacts as root which won't be writable by the
+    # proper user later on.
+    current_uid = os.getuid()
+    planb_user = os.environ.get('USER', None)
+    if planb_user is not None:
+        planb_uid = pwd.getpwnam(planb_user)[2]
+        if current_uid != planb_uid:
+            if current_uid == 0:
+                os.setgroups([])
+                os.setuid(planb_uid)
+            else:
+                import warnings
+                warnings.warn(
+                    'cannot become planb user {!r}'.format(planb_user))
+
+
 if __name__ == '__main__':
     import os
     import sys
 
-    # Check env.
+    # Check env. If DJANGO_SETTINGS_MODULE is not set, we'll try to load
+    # ${PLANB_ENVFILE}, /etc/planb/envvars or ./envvars to get USER,
+    # PYTHONPATH and DJANGO_SETTINGS_MODULE.
     if 'DJANGO_SETTINGS_MODULE' not in os.environ:
-        # No env? Load /etc/planb/envvars.
-        # We expect:
-        # - DJANGO_SETTINGS_MODULE=settings
-        # - PYTHONHOME=/etc/planb
-        # - USER=planb
-        with open('/etc/planb/envvars') as fp:
-            for line in fp:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    key, value = line.split('=', 1)
-                    if key == 'PYTHONPATH':
-                        for idx, val in enumerate(value.split(':')):
-                            sys.path.insert(idx, val)
-                    else:
-                        os.environ[key] = value
-
-    # Become PlanB user.
-    if os.getuid() == 0:
-        import pwd
-        import sys
-        uid, gid = pwd.getpwnam(os.environ['USER'])[2:4]
-        os.setgroups([])
-        os.setuid(uid)
+        try_load_envvars((
+            os.environ.get('PLANB_ENVFILE', ''),
+            '/etc/planb/envvars',
+            './envvars'))
 
     # Test reading the setting file.
     from importlib import import_module

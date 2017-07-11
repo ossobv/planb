@@ -75,6 +75,7 @@ TODO
 ----
 
 * Fix logrotate sample.
+* Move broker from Redis to DjangoORM? We don't need redis for anything else..
 * Add uwsgi-uid==djangoq-uid check?
 * Re-add some form of "list-stale-mounts" (!).
   # contrib/list-stale-mounts | mail -E -s "[$HOSTNAME] Stale ZFS mounts?"

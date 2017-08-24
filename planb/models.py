@@ -6,7 +6,7 @@ from dateutil.relativedelta import relativedelta
 from django.conf import settings
 from django.core.mail import mail_admins
 from django.db.models.signals import post_save
-from django.db import models
+from django.db import connections, models
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import ugettext as _
@@ -469,6 +469,12 @@ class HostConfig(models.Model):
     def run_rsync(self):
         cmd = self.generate_rsync_command()
         logger.info('Running %s: %s' % (self.friendly_name, ' '.join(cmd)))
+
+        # Close all DB connections before continuing with the rsync
+        # command. Since it may take a while, the connection could get
+        # dropped and we'd have issues later on.
+        connections.close_all()
+
         try:
             output = check_output(cmd).decode('utf-8')
             returncode = 0

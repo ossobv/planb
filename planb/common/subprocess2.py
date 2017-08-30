@@ -10,8 +10,7 @@ class CalledProcessError(OrigCalledProcessError):
     and stderr data if available.
     """
     def __init__(self, returncode, cmd, stdout, stderr):
-        super(CalledProcessError, self).__init__(
-            returncode=returncode, cmd=cmd, output=stdout)
+        super().__init__(returncode=returncode, cmd=cmd, output=stdout)
         self.errput = stderr
 
     def _quote(self, bintext):

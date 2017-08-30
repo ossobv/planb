@@ -539,7 +539,7 @@ class HostConfig(models.Model):
                         'Enabled' if self.enabled else 'Disabled', self),
                     'Toggled enabled-flag on {}.\n'.format(self))
 
-        return super(HostConfig, self).save(*args, **kwargs)
+        return super().save(*args, **kwargs)
 
 
 @receiver(post_save, sender=HostConfig)

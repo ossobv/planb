@@ -8,13 +8,13 @@ class FilelistFormField(forms.CharField):
     widget = forms.widgets.Textarea
 
     def prepare_value(self, value):
-        value = super(FilelistFormField, self).prepare_value(value)
+        value = super().prepare_value(value)
         if not value:
             return None
         return '\n'.join(value.split(' ')) + '\n'
 
     def clean(self, value):
-        value = super(FilelistFormField, self).clean(value)
+        value = super().clean(value)
         if not value:
             return value
         return ' '.join(sorted(value.split()))
@@ -22,8 +22,7 @@ class FilelistFormField(forms.CharField):
 
 class FilelistField(models.CharField):
     def formfield(self, **kwargs):
-        return super(FilelistField, self).formfield(
-            form_class=FilelistFormField)
+        return super().formfield(form_class=FilelistFormField)
 
 
 class MultiEmailField(models.Field):
@@ -34,7 +33,7 @@ class MultiEmailField(models.Field):
         # while letting the caller override them.
         defaults = {'form_class': MultiEmailFormField}
         defaults.update(kwargs)
-        return super(MultiEmailField, self).formfield(**defaults)
+        return super().formfield(**defaults)
 
     def get_db_prep_value(self, value, connection, prepared=False):
         if isinstance(value, str):

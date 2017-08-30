@@ -5,7 +5,7 @@ from .models import HostConfig, get_pools
 
 class HostConfigAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
-        super(HostConfigAdminForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         if 'dest_pool' in self.fields:
             self.fields['dest_pool'] = forms.ChoiceField(

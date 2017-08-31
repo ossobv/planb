@@ -1,0 +1,16 @@
+# https://bettercodehub.com
+
+# Search for project directories in the subdirs too (level 2).
+component_depth: 2
+
+languages:
+  - name: python
+
+    production:
+      include:
+        - /scripts/planb
+      exclude:
+        - /example_settings.py
+        - /setup.py
+        - /planb/default_settings.py
+        - /planb/migrations/.*

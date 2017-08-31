@@ -32,7 +32,7 @@ if __name__ == '__main__':
     setup(
         name='planb',
         version=version,
-        scripts=['bin/planb'],
+        scripts=['scripts/planb'],
         data_files=[('', [
             'LICENSE', 'README.rst', 'CHANGES.rst', 'wsgi.py',
             'rc.d/planb-queue.service'])],

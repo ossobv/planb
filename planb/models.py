@@ -100,7 +100,7 @@ class HostConfig(models.Model):
     retention = models.IntegerField(
         verbose_name=_('Daily retention'), default=15,
         help_text=_('How many days do we keep?'))
-    rsync_path = models.CharField(max_length=31, default='/usr/bin/rsync')
+    rsync_path = models.CharField(max_length=31, default=settings.RSYNC_BIN)
     ionice_path = models.CharField(
         max_length=31, default='/usr/bin/ionice', blank=True)
     # When files have legacy/Latin-1 encoding, you'll get rsync exit

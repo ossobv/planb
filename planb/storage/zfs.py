@@ -4,7 +4,11 @@ import re
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-from planb.common.subprocess2 import CalledProcessError, check_output
+from django.conf import settings
+
+from planb.common.subprocess2 import CalledProcessError
+
+from .base import OldStyleStorage, Datasets, Dataset
 
 # Check if we can backup (daily)
 # backup
@@ -29,84 +33,24 @@ SNAPSHOT_SPECIAL_MAPPING = {
 }
 
 
-class BaseFileSystem2(object):
-    def __init__(self, binary, sudobin):
-        self.binary = binary
-        self.sudobin = sudobin
+class Zfs(OldStyleStorage):
+    name = 'zfs'
 
-    def _perform_system_command(self, cmd):
-        output = check_output(cmd)
-        return output.decode('utf-8')  # expect valid ascii/utf-8
+    def get_datasets(self):
+        output = self._perform_binary_command(('list', '-Hpo', 'name,used'))
 
-    def _perform_sudo_command(self, cmd):
-        return self._perform_system_command(
-            (self.sudobin,) + tuple(cmd))
+        datasets = Datasets()
+        for line in output.rstrip().split('\n'):
+            name, used = line.split('\t')
 
-    def _perform_binary_command(self, cmd):
-        return self._perform_sudo_command(
-            (self.binary,) + tuple(cmd))
+            if any(name.startswith(i[1] + '/')
+                   for i in settings.STORAGE_POOLS):
+                dataset = Dataset(backend=self, identifier=name)
+                dataset.set_disk_usage(int(used))
+                datasets.append(dataset)
 
-    def get_dataset_name(self, rootdir, customer, friendly_name):
-        '''
-        Should return a relative path leading to the backupdir, e.g.:
-            testbackup/backupnameA
-        '''
-        raise NotImplementedError()
+        return datasets
 
-    def data_dir_create(self, rootdir, customer, friendly_name):
-        '''
-        Should create the datadir returned by data_dir_get()
-        '''
-        raise NotImplementedError()
-
-    def data_dir_get(self, rootdir, customer, friendly_name):
-        '''
-        Should return an absolute path where to backup to e.g.:
-            /backups/testbackup-backupnameA/data
-        '''
-        raise NotImplementedError()
-
-    def can_backup(self, rootdir, customer, friendly_name):
-        '''
-        Helper function that should be used in the daily backup routine
-        to check if a backup can be made.
-        '''
-        raise NotImplementedError()
-
-    def snapshot_create(self, rootdir, customer, friendly_name):
-        raise NotImplementedError()
-
-    def snapshot_delete(self, rootdir, snapshot):
-        raise NotImplementedError()
-
-    def snapshot_retain_weekly(self, datetimestamp, retention):
-        raise NotImplementedError()
-
-    def snapshot_retain_monthly(self, datetimestamp, retention):
-        raise NotImplementedError()
-
-    def snapshot_retain_yearly(self, datetimestamp, retention):
-        raise NotImplementedError()
-
-    def snapshots_get(self, rootdir, customer, friendly_name):
-        raise NotImplementedError()
-
-    def snapshots_rotate(self, rootdir, customer, friendly_name, retention):
-        raise NotImplementedError()
-
-    def parse_backup_sizes(self, rootdir, customer, friendly_name,
-                           date_complete):
-        '''
-        Should return a dict of dicts containing size in bytes and dates.
-        {
-            'used': '123456789',
-            'date': date_complete,
-        }
-        '''
-        raise NotImplementedError()
-
-
-class Zfs(BaseFileSystem2):
     def data_dir_create(self, rootdir, customer, friendly_name):
         cmd = (
             'create',

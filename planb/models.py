@@ -14,6 +14,7 @@ from django.utils.translation import ugettext as _
 from planb.common.subprocess2 import (
     CalledProcessError, check_call, check_output)
 from planb.signals import backup_done
+from planb.storage.base import Storage
 from planb.storage.zfs import Zfs
 
 from .fields import FilelistField, MultiEmailField
@@ -154,6 +155,9 @@ class HostConfig(models.Model):
     @property
     def identifier(self):
         return '{}-{}'.format(self.hostgroup.name, self.friendly_name)
+
+    def get_storage(self):
+        return Storage(bfs, self.dest_pool)
 
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8

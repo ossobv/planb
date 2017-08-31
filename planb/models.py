@@ -24,25 +24,21 @@ try:
 except ImportError:
     getproctitle = setproctitle = None
 
-DEFAULT_DIRS = tuple(
-    'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
-    .split(' '))
-DEFAULT_FILES = tuple(
-    (i + '*') for i in  # files need a '*' in them
-    'var/lib/dpkg/status var/lib/psdiff.db'.split(' '))
-DEFAULT_INCLUDES = ' '.join(sorted(DEFAULT_DIRS + DEFAULT_FILES))
+logger = logging.getLogger(__name__)
+
+bfs = Zfs(binary=settings.PLANB_ZFS_BIN, sudobin=settings.PLANB_SUDO_BIN)
 
 
 def get_pools():
     pools = []
-    for name, pool, bfs in settings.STORAGE_POOLS:
+    for name, pool, bfs in settings.PLANB_STORAGE_POOLS:
         assert bfs == 'zfs', bfs
         val1 = float(check_output(
-            [settings.SUDO_BIN, settings.ZFS_BIN, 'get', '-Hpo', 'value',
-             'used', pool]).strip())
+            [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
+             'get', '-Hpo', 'value', 'used', pool]).strip())
         val2 = float(check_output(
-            [settings.SUDO_BIN, settings.ZFS_BIN, 'get', '-Hpo', 'value',
-             'available', pool]).strip())
+            [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
+             'get', '-Hpo', 'value', 'available', pool]).strip())
         pct = '{pct:.0f}%'.format(pct=(100 * (val1 / (val1 + val2))))
         available = int(val2 / 1024 / 1024 / 1024)
         pools.append((pool, '{}, {}G free ({} used)'.format(
@@ -50,19 +46,11 @@ def get_pools():
     return tuple(pools)
 
 
-logger = logging.getLogger(__name__)
-
-bfs = Zfs(binary=settings.ZFS_BIN, sudobin=settings.SUDO_BIN)
-
-valid_rsync_codes = (
-    24,  # vanished source files
-)
-
-
 class HostGroup(models.Model):
     name = models.CharField(max_length=63, unique=True)
-    notify_email = MultiEmailField(help_text=_('Use a newline per '
-                                   'emailaddress'), blank=True, null=True)
+    notify_email = MultiEmailField(
+        blank=True, null=True,
+        help_text=_('Use a newline per emailaddress'))
 
     def get_backup_info(self):
         results = {}
@@ -100,7 +88,8 @@ class HostConfig(models.Model):
     retention = models.IntegerField(
         verbose_name=_('Daily retention'), default=15,
         help_text=_('How many days do we keep?'))
-    rsync_path = models.CharField(max_length=31, default=settings.RSYNC_BIN)
+    rsync_path = models.CharField(
+        max_length=31, default=settings.PLANB_RSYNC_BIN)
     ionice_path = models.CharField(
         max_length=31, default='/usr/bin/ionice', blank=True)
     # When files have legacy/Latin-1 encoding, you'll get rsync exit
@@ -115,8 +104,10 @@ class HostConfig(models.Model):
             'for (windows) hosts without permission bits, add '
             '"--iconv=utf8,latin1" for hosts with files with legacy (Latin-1) '
             'encoding.'))
-    includes = FilelistField(max_length=1023, default=DEFAULT_INCLUDES)
-    excludes = FilelistField(max_length=1023, blank=True)
+    includes = FilelistField(
+        max_length=1023, default=settings.PLANB_DEFAULT_INCLUDES)
+    excludes = FilelistField(
+        max_length=1023, blank=True)
     running = models.BooleanField(default=False)
     priority = models.IntegerField(default=0)
     date_complete = models.DateTimeField(
@@ -398,7 +389,7 @@ class HostConfig(models.Model):
                 self.dest_pool, str(self.hostgroup), self.friendly_name),)
 
         args = (
-            (settings.RSYNC_BIN,) +
+            (settings.PLANB_RSYNC_BIN,) +
             # Work around rsync bug in 3.1.0:
             # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
             ('--block-size=65536',) +
@@ -486,7 +477,8 @@ class HostConfig(models.Model):
             self.rsync_exit_codes(e)
             output = e.output
             returncode = e.returncode
-            if returncode not in valid_rsync_codes:
+            if returncode not in (
+                    24,):  # rsync code: "vanished source files"
                 raise
 
         logger.info(
@@ -575,4 +567,5 @@ def create_dataset(sender, instance, created, *args, **kwargs):
         dataset_name = bfs.get_dataset_name(
             instance.dest_pool, instance.hostgroup,
             instance.friendly_name)
-        check_call((settings.SUDO_BIN, bfs.binary, 'mount', dataset_name))
+        check_call(
+            (settings.PLANB_SUDO_BIN, bfs.binary, 'mount', dataset_name))

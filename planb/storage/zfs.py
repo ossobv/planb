@@ -44,7 +44,7 @@ class Zfs(OldStyleStorage):
             name, used = line.split('\t')
 
             if any(name.startswith(i[1] + '/')
-                   for i in settings.STORAGE_POOLS):
+                   for i in settings.PLANB_STORAGE_POOLS):
                 dataset = Dataset(backend=self, identifier=name)
                 dataset.set_disk_usage(int(used))
                 datasets.append(dataset)

@@ -4,6 +4,17 @@ from planb.default_settings import *  # noqa
 # successmails still get sent. This should probably be fixed. (FIXME)
 # DEBUG = True
 
+# Set the default paths
+PLANB_SUDO_BIN = '/usr/bin/sudo'
+PLANB_ZFS_BIN = '/sbin/zfs'
+PLANB_RSYNC_BIN = '/usr/bin/rsync'
+
+# Provide filesystem name + internal name. For ZFS that is "name", and "zfs
+# path". The first one will be the default.
+PLANB_STORAGE_POOLS = (
+    ('Pool I', 'rpool/BACKUP', 'zfs'),
+)
+
 MANAGERS = ADMINS = (
     # ('My Name', 'myname@example.com'),
 )
@@ -32,17 +43,6 @@ DATABASES = {
 }
 
 ALLOWED_HOSTS = ('planb', 'planb.example.com')
-
-# Set the default paths
-SUDO_BIN = '/usr/bin/sudo'
-ZFS_BIN = '/sbin/zfs'
-RSYNC_BIN = '/usr/bin/rsync'
-
-# Provide filesystem name + internal name. For ZFS that is "name", and "zfs
-# path". The first one will be the default.
-STORAGE_POOLS = (
-    ('Pool I', 'rpool/BACKUP', 'zfs'),
-)
 
 # Please replace this with the output of: pwgen -ys 58
 SECRET_KEY = r'''pwgen -ys 58'''

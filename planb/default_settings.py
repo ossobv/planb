@@ -8,6 +8,15 @@ class AddPidFilter(logging.Filter):
         return True
 
 
+_DEFAULT_DIRS = tuple(
+    'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
+    .split(' '))
+_DEFAULT_FILES = tuple(
+    (i + '*') for i in  # files need a '*' in them
+    'var/lib/dpkg/status var/lib/psdiff.db'.split(' '))
+PLANB_DEFAULT_INCLUDES = ' '.join(sorted(_DEFAULT_DIRS + _DEFAULT_FILES))
+
+
 TIME_ZONE = 'Europe/Amsterdam'
 LANGUAGE_CODE = 'en_US'
 DATETIME_FORMAT = SHORT_DATETIME_FORMAT = 'Y-m-d H:i'  # for admin-forms

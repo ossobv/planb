@@ -19,7 +19,13 @@ enqueue_multiple.short_description = _(  # noqa
 
 
 class HostGroupAdmin(admin.ModelAdmin):
-    list_display = ('name', 'notify_email')
+    list_display = ('name', 'notify_email', 'hosts')
+
+    def hosts(self, object):
+        return ' '.join(
+            # BLACK CIRCLE (not BLACK LARGE CIRCLE U+2b24)
+            '\u25cf {}'.format(i) for i in object.hostconfigs.values_list(
+                'friendly_name', flat=True))
 
 
 class HostConfigAdmin(admin.ModelAdmin):

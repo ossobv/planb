@@ -2,4 +2,4 @@
 here=$(cd "$(dirname "$0")"; pwd)
 admin=$(which django-admin django-admin.py | head -n1)
 test -z "$admin" && echo "No django-admin found. Missing env?" >&2 && exit 1
-PLANB_ENVFILE="$here/envvars" exec "$here/bin/planb" "$@"
+PLANB_ENVFILE="$here/envvars" exec "$here/scripts/planb" "$@"

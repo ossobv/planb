@@ -64,6 +64,9 @@ class HostGroup(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        ordering = ('name',)
+
 
 class HostConfig(models.Model):
     TRANSPORT_SSH = 0

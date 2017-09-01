@@ -137,7 +137,7 @@ class HostConfig(models.Model):
         default=1, blank=True, null=True,
         help_text=_('How many yearly\'s do we need to keep?'))
     backup_size_mb = models.PositiveIntegerField(
-        verbose_name=_('Size'), default=0, db_index=True,
+        default=0, db_index=True,
         help_text=_('Estimated total backup size in MiB.'))
 
     def __str__(self):

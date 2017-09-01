@@ -3,6 +3,8 @@ from zlib import adler32
 from django.contrib import admin
 from django.utils.translation import ugettext as _
 
+from planb.utils import human
+
 from .forms import HostConfigAdminForm
 from .models import HostGroup, HostConfig
 from .tasks import async_backup_job
@@ -79,8 +81,7 @@ class HostConfigAdmin(admin.ModelAdmin):
 
     list_display = (
         'friendly_name', 'hostgroup', 'notes', 'host',
-        'backup_size_mb', 'complete_duration',
-        'retentions', 'options',
+        'disk_usage', 'run_time', 'retentions', 'options',
         'date_complete', 'failure_datetime',
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
@@ -103,18 +104,31 @@ class HostConfigAdmin(admin.ModelAdmin):
             return ret[0:32] + '...'
         return ret
 
+    def disk_usage(self, object):
+        return human.bytes(object.backup_size_mb << 20)
+    disk_usage.admin_order_field = 'backup_size_mb'
+    disk_usage.short_description = _('disk usage')
+
+    def run_time(self, object):
+        return human.seconds(object.complete_duration)
+    run_time.admin_order_field = 'complete_duration'
+    run_time.short_description = _('run time')  # "last run time"
+
     def enabled_x(self, object):
         return object.enabled
+    enabled_x.admin_order_field = 'enabled'
     enabled_x.boolean = True
     enabled_x.short_description = 'X'
 
     def queued_q(self, object):
         return object.queued
+    queued_q.admin_order_field = 'queued'
     queued_q.boolean = True
     queued_q.short_description = 'Q'
 
     def running_r(self, object):
         return object.running
+    running_r.admin_order_field = 'running'
     running_r.boolean = True
     running_r.short_description = 'R'
 

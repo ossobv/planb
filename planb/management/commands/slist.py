@@ -1,26 +1,7 @@
 from planb.management.base import BaseCommand
 from planb.models import bfs
+from planb.utils import human
 from planb.storage.base import Datasets
-
-
-def human_bytes(bytes_):
-    KB = 1 << 10
-    MB = 1 << 20
-    GB = 1 << 30
-    TB = 1 << 40
-    PB = 1 << 50
-
-    if bytes_ < KB:
-        return '{} B'.format(bytes_)
-    if bytes_ < MB:
-        return '{:.1f} KB'.format(bytes_ / KB)
-    if bytes_ < GB:
-        return '{:.1f} MB'.format(bytes_ / MB)
-    if bytes_ < TB:
-        return '{:.1f} GB'.format(bytes_ / GB)
-    if bytes_ < PB:
-        return '{:.1f} TB'.format(bytes_ / TB)
-    return '{:.1f} PB'.format(bytes_ / PB)
 
 
 class Command(BaseCommand):
@@ -59,14 +40,14 @@ class Command(BaseCommand):
                     '{dataset.identifier:54s}  {disk_usage:>8s}  '
                     'id={host.id}'.format(
                         dataset=dataset,
-                        disk_usage=human_bytes(dataset.disk_usage),
+                        disk_usage=human.bytes(dataset.disk_usage),
                         host=host))
             else:
                 ret.append(
                     '{dataset.identifier:54s}  {disk_usage:>8s}  '
                     'id=NONE'.format(
                         dataset=dataset,
-                        disk_usage=human_bytes(dataset.disk_usage)))
+                        disk_usage=human.bytes(dataset.disk_usage)))
 
         if ret:
             ret.append('')

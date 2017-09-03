@@ -30,51 +30,26 @@ class HostGroupAdmin(admin.ModelAdmin):
 
 class HostConfigAdmin(admin.ModelAdmin):
     fieldsets = (
-        (None, {
-            'fields': (
-                'friendly_name',
-                'hostgroup',
-                'dest_pool',
-                'host',
-                'description',
-                'includes',
-                'excludes',
-                'enabled'
-            )
-        }),
-        ('Status', {
-            'fields': (
-                'date_complete', 'complete_duration', 'backup_size_mb',
-                'failure_datetime', 'queued', 'running',
-            )
-        }),
-        ('Transport options', {
-            'fields': (
-                'transport',
-                'src_dir',
-                'flags',
-            )
-        }),
-        ('Additional options for SSH transport', {
-            'fields': (
-                'rsync_path',
-                'user',
-                'ionice_path',
-                'use_sudo',
-                'use_ionice',
-            )
-        }),
-        ('Retention', {
-            'fields': (
-                'retention',
-                'keep_weekly',
-                'weekly_retention',
-                'keep_monthly',
-                'monthly_retention',
-                'keep_yearly',
-                'yearly_retention',
-            )
-        }),
+        (None, {'fields': (
+            'friendly_name', 'hostgroup', 'dest_pool', 'host',
+            'description', 'includes', 'excludes', 'enabled',
+        )}),
+        ('Status', {'fields': (
+            'date_complete', 'complete_duration', 'backup_size_mb',
+            'failure_datetime', 'queued', 'running',
+        )}),
+        ('Transport options', {'fields': (
+            'transport', 'src_dir', 'flags',
+        )}),
+        ('Additional options for SSH transport', {'fields': (
+            'rsync_path', 'user', 'ionice_path', 'use_sudo',
+            'use_ionice',
+        )}),
+        ('Retention', {'fields': (
+            'retention', 'keep_weekly', 'weekly_retention',
+            'keep_monthly', 'monthly_retention', 'keep_yearly',
+            'yearly_retention',
+        )}),
     )
 
     readonly_fields = tuple(
@@ -82,7 +57,8 @@ class HostConfigAdmin(admin.ModelAdmin):
         [dict_ for title, dict_ in fieldsets
          if title == 'Status'][0]['fields'])
     readonly_change_fields = (
-        # friendly_name and hostgroup make up the directory name. Don't touch.
+        # friendly_name and hostgroup make up the directory name. Don't
+        # touch.
         'friendly_name', 'hostgroup', 'dest_pool')
 
     list_display = (
@@ -92,8 +68,8 @@ class HostConfigAdmin(admin.ModelAdmin):
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
     list_filter = (
-        'enabled', 'dest_pool', 'hostgroup',
-        'running', 'failure_datetime',
+        'enabled', 'dest_pool', 'hostgroup', 'running',
+        'failure_datetime',
     )
     actions = [enqueue_multiple]
     form = HostConfigAdminForm

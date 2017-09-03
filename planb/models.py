@@ -18,6 +18,7 @@ from planb.storage.base import Storage
 from planb.storage.zfs import Zfs
 
 from .fields import FilelistField, MultiEmailField
+from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
 
 try:
     from setproctitle import getproctitle, setproctitle
@@ -46,6 +47,18 @@ def get_pools():
     return tuple(pools)
 
 
+class TransportChoices(models.PositiveSmallIntegerField):
+    SSH = 0
+    RSYNC = 1
+
+    def __init__(self, *args, **kwargs):
+        choices = (
+            (self.SSH, _('ssh (default)')),
+            (self.RSYNC, _('rsync (port 873)')),
+        )
+        super().__init__(default=self.SSH, choices=choices)
+
+
 class HostGroup(models.Model):
     name = models.CharField(max_length=63, unique=True)
     notify_email = MultiEmailField(
@@ -69,13 +82,6 @@ class HostGroup(models.Model):
 
 
 class HostConfig(models.Model):
-    TRANSPORT_SSH = 0
-    TRANSPORT_RSYNC = 1
-    TRANSPORT_CHOICES = (
-        (TRANSPORT_SSH, _('ssh (default)')),
-        (TRANSPORT_RSYNC, _('rsync (port 873)')),
-    )
-
     friendly_name = models.CharField(
         # FIXME: should be unique with hostgroup?
         verbose_name=_('Name'), max_length=63, unique=True,
@@ -83,8 +89,7 @@ class HostConfig(models.Model):
     host = models.CharField(max_length=254)
     description = models.TextField(blank=True, help_text=_(
         'Quick description/tips. Use the first line for labels/tags.'))
-    transport = models.PositiveSmallIntegerField(
-        choices=TRANSPORT_CHOICES, default=TRANSPORT_CHOICES[0][0])
+    transport = TransportChoices()
     user = models.CharField(max_length=254, default='root')
     src_dir = models.CharField(max_length=254, default='/')
     dest_pool = models.CharField(max_length=254, choices=())  # set in forms.py
@@ -374,12 +379,12 @@ class HostConfig(models.Model):
         return ('%s::%s' % (self.host, self.src_dir),)
 
     def get_transport_uri(self):
-        if self.transport == self.TRANSPORT_SSH:
+        if self.transport == TransportChoices.SSH:
             return (
                 self.get_transport_ssh_rsync_path() +
                 self.get_transport_ssh_options() +
                 self.get_transport_ssh_uri())
-        elif self.transport == self.TRANSPORT_RSYNC:
+        elif self.transport == TransportChoices.RSYNC:
             return self.get_transport_rsync_uri()
         else:
             raise NotImplementedError(
@@ -405,65 +410,6 @@ class HostConfig(models.Model):
 
         return args
 
-    def log_error_message(self, msg, exception):
-        msg = 'code: {0}\nmsg: {1}\nexception: {2}'.format(
-              exception.returncode, msg, str(exception))
-        # Don't use ERROR, all errors get mailed. Use WARNING instead.
-        logging.warning(msg)
-
-    def rsync_exit_codes(self, e):
-        code = e.returncode
-        if code == 1:
-            self.log_error_message('Syntax or usage error', e)
-        elif code == 2:
-            self.log_error_message('Protocol incompatibility', e)
-        elif code == 3:
-            self.log_error_message('Errors selecting input/output files, '
-                                   'dirs', e)
-        elif code == 4:
-            self.log_error_message('Requested action not supported: an '
-                                   'attempt was made to manipulate '
-                                   '64-bit files on a platform that cannot '
-                                   'support them; or an option was specified '
-                                   'that is supported by the client and not '
-                                   'by the server.', e)
-        elif code == 5:
-            self.log_error_message('Error starting client-server protocol', e)
-        elif code == 6:
-            self.log_error_message('Daemon unable to append to log-file', e)
-        elif code == 10:
-            self.log_error_message('Error in socket I/O', e)
-        elif code == 11:
-            self.log_error_message('Error in file I/O', e)
-        elif code == 12:
-            self.log_error_message('Error in rsync protocol data stream', e)
-        elif code == 13:
-            self.log_error_message('Errors with program diagnostics', e)
-        elif code == 14:
-            self.log_error_message('Error in IPC code', e)
-        elif code == 20:
-            self.log_error_message('Received SIGUSR1 or SIGINT', e)
-        elif code == 21:
-            self.log_error_message('Some error returned by waitpid()', e)
-        elif code == 22:
-            self.log_error_message('Error allocating core memory buffers', e)
-        elif code == 23:
-            self.log_error_message('Partial transfer due to error', e)
-        elif code == 24:
-            self.log_error_message('Partial transfer due to vanished source '
-                                   'files', e)
-        elif code == 25:
-            self.log_error_message('The --max-delete limit stopped '
-                                   'deletions', e)
-        elif code == 30:
-            self.log_error_message('Timeout in data send/receive', e)
-        elif code == 35:
-            self.log_error_message('Timeout waiting for daemon connection', e)
-        elif code == 255:
-            self.log_error_message('Unspecified error', e)
-        else:
-            self.log_error_message('Returncode not matched', e)
-
     def run_rsync(self):
         cmd = self.generate_rsync_command()
         logger.info('Running %s: %s' % (self.friendly_name, ' '.join(cmd)))
@@ -477,11 +423,13 @@ class HostConfig(models.Model):
             output = check_output(cmd).decode('utf-8')
             returncode = 0
         except CalledProcessError as e:
-            self.rsync_exit_codes(e)
+            text = RSYNC_EXITCODES.get(e.returncode, 'Return code not matched')
+            msg = 'code: {0}\nmsg: {1}\nexception: {2}'.format(
+                e.returncode, text, str(e))
+            logging.warning(msg)  # warning only, errors get mailed
             output = e.output
             returncode = e.returncode
-            if returncode not in (
-                    24,):  # rsync code: "vanished source files"
+            if returncode not in RSYNC_HARMLESS_EXITCODES:
                 raise
 
         logger.info(

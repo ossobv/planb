@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
     # Test reading the setting file.
     from importlib import import_module
-    import_module('settings')
+    import_module(os.environ['DJANGO_SETTINGS_MODULE'])
 
     # Move to the django-admin wrapper.
     from django.core.management import execute_from_command_line

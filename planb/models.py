@@ -350,13 +350,26 @@ class HostConfig(models.Model):
         """
         option = '-e'
         binary = 'ssh'
+        args = self.get_transport_ssh_known_hosts_args()
+        return (
+            '%(option)s%(binary)s %(args)s' % {
+                'option': option, 'binary': binary, 'args': ' '.join(args)},)
+
+    def get_transport_ssh_known_hosts_d(self):
+        # FIXME: assert that there is no nastiness in $HOME? This value
+        # is placed in the rsync ssh options call later on.
         known_hosts_d = (
             os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
         try:
             os.makedirs(known_hosts_d, 0o755)
         except FileExistsError:
             pass
+        return known_hosts_d
+
+    def get_transport_ssh_known_hosts_args(self):
+        known_hosts_d = self.get_transport_ssh_known_hosts_d()
         known_hosts_file = os.path.join(known_hosts_d, self.host)
+
         args = [
             '-o HashKnownHosts=no',
             '-o UserKnownHostsFile=%s' % (known_hosts_file,),
@@ -368,9 +381,8 @@ class HostConfig(models.Model):
             # If the file does not exist, create it and don't care
             # about the fingerprint.
             args.append('-o StrictHostKeyChecking=no')
-        return (
-            '%(option)s%(binary)s %(args)s' % {
-                'option': option, 'binary': binary, 'args': ' '.join(args)},)
+
+        return args
 
     def get_transport_ssh_uri(self):
         return ('%s@%s:%s' % (self.user, self.host, self.src_dir),)
@@ -412,7 +424,7 @@ class HostConfig(models.Model):
 
     def run_rsync(self):
         cmd = self.generate_rsync_command()
-        logger.info('Running %s: %s' % (self.friendly_name, ' '.join(cmd)))
+        logger.info('Running %s: %s', self.friendly_name, ' '.join(cmd))
 
         # Close all DB connections before continuing with the rsync
         # command. Since it may take a while, the connection could get
@@ -423,18 +435,16 @@ class HostConfig(models.Model):
             output = check_output(cmd).decode('utf-8')
             returncode = 0
         except CalledProcessError as e:
-            text = RSYNC_EXITCODES.get(e.returncode, 'Return code not matched')
-            msg = 'code: {0}\nmsg: {1}\nexception: {2}'.format(
-                e.returncode, text, str(e))
-            logging.warning(msg)  # warning only, errors get mailed
-            output = e.output
-            returncode = e.returncode
+            returncode, output = e.returncode, e.output
+            errstr = RSYNC_EXITCODES.get(returncode, 'Return code not matched')
+            logging.warning(
+                'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e))
             if returncode not in RSYNC_HARMLESS_EXITCODES:
                 raise
 
         logger.info(
-            'Rsync exited with code %s for %s. Output: %s' % (
-                returncode, self.friendly_name, output))
+            'Rsync exited with code %s for %s. Output: %s',
+            returncode, self.friendly_name, output)
 
     def run(self):
         if setproctitle:

@@ -30,10 +30,8 @@ class CalledProcessError(OrigCalledProcessError):
         stdout = self._quote(self.output)
         stderr = self._quote(self.errput)
 
-        if isinstance(self.cmd, str):
-            short_cmd = self.cmd
-        else:
-            short_cmd = self.cmd[0]
+        # Take entire command if string, or first item if tuple.
+        short_cmd = self.cmd if isinstance(self.cmd, str) else self.cmd[0]
 
         ret = []
         ret.append('Command {!r} returned non-zero exit status {}'.format(
@@ -71,9 +69,7 @@ def check_output(cmd, *, shell=False, timeout=None):
     """
     assert timeout is None, 'Timeout is not supported for now'
 
-    fp = None
-    ret = -1
-    stdout = stderr = ''
+    fp, ret, stdout, stderr = None, -1, '', ''
     try:
         fp = Popen(cmd, stdin=None, stdout=PIPE, stderr=PIPE, shell=shell)
         stdout, stderr = fp.communicate()

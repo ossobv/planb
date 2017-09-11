@@ -1,3 +1,5 @@
+from fnmatch import fnmatch
+
 from planb.management.base import BaseCommand
 from planb.models import bfs
 from planb.utils import human
@@ -8,16 +10,25 @@ class Command(BaseCommand):
     help = 'Lists storage entries/datasets'
 
     def add_arguments(self, parser):
-        parser.add_argument('--stale', action='store_true', help=(
-            'List stale (unused) storage entries/datasets only'))
+        parser.add_argument(
+            '--stale', action='store_true',
+            help='List stale (unused) storage entries/datasets only')
+        parser.add_argument(
+            '-x', '--exclude', action='append', default=[],
+            help='Glob patterns to exclude')
 
         return super().add_arguments(parser)
 
     def handle(self, *args, **options):
         datasets = bfs.get_datasets()
+        for exclude in set(options['exclude']):
+            datasets = Datasets([
+                i for i in datasets if not fnmatch(i.identifier, exclude)])
+
         datasets.load_hostconfigs()
         if options['stale']:
-            datasets = Datasets([i for i in datasets if not i.hostconfig])
+            datasets = Datasets([
+                i for i in datasets if not i.hostconfig])
 
         datasets.sort()
         self.dump_list(datasets)
@@ -50,6 +61,5 @@ class Command(BaseCommand):
                         disk_usage=human.bytes(dataset.disk_usage)))
 
         if ret:
-            ret.append('')
-
-        self.stdout.write('\n'.join(ret) + '\n')
+            ret.extend(['', ''])
+            self.stdout.write('\n'.join(ret))

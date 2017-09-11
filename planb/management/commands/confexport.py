@@ -108,9 +108,31 @@ class CustomYaml(object):
             .replace('"', '\\"'))
 
 
+class HostAsConfigListingConfig(object):
+    with_retention = True
+    with_schedule = True
+
+
 class HostAsConfig(object):
-    def __init__(self, hostconfig):
+    def __init__(self, hostconfig, config=HostAsConfigListingConfig()):
         self._host = hostconfig
+        self._config = config
+
+    def get_all(self):
+        ret = OrderedDict()
+        # Skipping unneeded version: ret.update([self.get_version()])
+
+        if self._config.with_retention:
+            ret.update([self.get_retention()])
+        if self._config.with_schedule:
+            ret.update([self.get_schedule()])
+
+        ret.update([
+            self.get_paths(),
+            self.get_notes(),
+        ])
+
+        return ret
 
     def get_version(self):
         # Optionally version info? Should we call this options instead? Right
@@ -168,13 +190,7 @@ class HostAsConfig(object):
         return ('notes', self._host.description)
 
     def to_dict(self):
-        return OrderedDict((
-            # self.get_version(),
-            self.get_retention(),
-            self.get_schedule(),
-            self.get_paths(),
-            self.get_notes(),
-        ))
+        return self.get_all()
 
     def to_json(self):
         return json.dumps(self.to_dict(), indent='  ')
@@ -188,6 +204,8 @@ class Command(BaseCommand):
     help = 'Export host configuration to JSON or YAML'
 
     def add_arguments(self, parser):
+        parser.add_argument('--minimal', action='store_true', help=(
+            'Do not show retention/schedule'))
         parser.add_argument('--yaml', action='store_true', help=(
             'Output configuration as YAML instead of JSON'))
         parser.add_argument('groups', nargs='?', default='*', help=(
@@ -199,21 +217,26 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         hostconfigs = self.get_hostconfigs(options['groups'], options['hosts'])
+        listingconfig = HostAsConfigListingConfig()
+
+        if options['minimal']:
+            listingconfig.with_retention = False
+            listingconfig.with_schedule = False
 
         if options['yaml']:
-            self.hosts2yaml(hostconfigs)
+            self.hosts2yaml(hostconfigs, listingconfig)
         else:
-            self.hosts2json(hostconfigs)
+            self.hosts2json(hostconfigs, listingconfig)
 
-    def hosts2json(self, hostconfigs):
+    def hosts2json(self, hostconfigs, listingconfig):
         for hostconfig in hostconfigs:
-            jsonblob = HostAsConfig(hostconfig).to_json()
+            jsonblob = HostAsConfig(hostconfig, listingconfig).to_json()
             self.stdout.write('/* {} */\n\n{}\n\n'.format(
                 hostconfig.identifier,jsonblob))
 
-    def hosts2yaml(self, hostconfigs):
+    def hosts2yaml(self, hostconfigs, listingconfig):
         for hostconfig in hostconfigs:
-            yamlblob = HostAsConfig(hostconfig).to_yaml()
+            yamlblob = HostAsConfig(hostconfig, listingconfig).to_yaml()
             self.stdout.write('---\n# {}\n\n{}\n\n'.format(
                 hostconfig.identifier,yamlblob))
 

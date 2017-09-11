@@ -20,7 +20,7 @@ class CustomYaml(object):
     previous line. 
     """
     # No need for double quotes around these:
-    _yaml_safe_re = re.compile(r'^[a-z/_][a-z0-9/_-]*$')
+    _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9/_.-]*$')
 
     def __init__(self, obj):
         self._parsed = self._to_string(obj)

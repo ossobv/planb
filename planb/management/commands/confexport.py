@@ -5,19 +5,17 @@ import re
 
 from planb.management.base import BaseCommand
 from planb.models import HostConfig, HostGroup
-from planb.utils import human
-from planb.storage.base import Datasets
 
 
 class CustomYaml(object):
     """
     Custom YAML dumper that fits the PlanB config export needs exactly.
 
-    The regular YAML dumper would add lots of tags that we don't need. This one
-    is just right for this particular output.
+    The regular YAML dumper would add lots of tags that we don't need.
+    This one is just right for this particular output.
 
-    The ugly backslash (\\b) hack signifies that we prefer the data to be on the
-    previous line. 
+    The ugly backslash (\\b) hack signifies that we prefer the data to
+    be on the previous line.
     """
     # No need for double quotes around these:
     _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9/_.-]*$')
@@ -64,7 +62,7 @@ class CustomYaml(object):
                 ret.extend(subret)
 
         return ['  {}'.format(i) for i in ret]
-        
+
     def _from_dict(self, dict_, root=False):
         ret = []
         for key, value in dict_.items():
@@ -232,13 +230,13 @@ class Command(BaseCommand):
         for hostconfig in hostconfigs:
             jsonblob = HostAsConfig(hostconfig, listingconfig).to_json()
             self.stdout.write('/* {} */\n\n{}\n\n'.format(
-                hostconfig.identifier,jsonblob))
+                hostconfig.identifier, jsonblob))
 
     def hosts2yaml(self, hostconfigs, listingconfig):
         for hostconfig in hostconfigs:
             yamlblob = HostAsConfig(hostconfig, listingconfig).to_yaml()
             self.stdout.write('---\n# {}\n\n{}\n\n'.format(
-                hostconfig.identifier,yamlblob))
+                hostconfig.identifier, yamlblob))
 
     def get_hostconfigs(self, groups_glob, hosts_glob):
         groups = [

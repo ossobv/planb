@@ -1,6 +1,13 @@
 Changes
 -------
 
+v1.2 - *2017-09-18*
+~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fix release, this time without pyc files and with wheel package.
+  Run this for upload: python setup.py sdist bdist_wheel upload
+
+
 v1.1 - *2017-09-18*
 ~~~~~~~~~~~~~~~~~~~
 

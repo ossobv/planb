@@ -13,13 +13,13 @@ if __name__ == '__main__':
 
     with open('CHANGES.rst') as file:
         long_descriptions.append(file.read())
-        versions = long_descriptions[-1].split('\n* ')[1:]
+        versions = long_descriptions[-1].split('\nv')[1:]
 
         # TODO: use `git describe --tags --dirty` if avail?
         incomplete = False
         for line in versions:
-            assert line.startswith('v'), line
-            line = line.split(':', 1)[0][1:]
+            assert line and line[0].isdigit(), line
+            line = line.split(' ', 1)[0]
             if all(i.isdigit() for i in line.split('.')):
                 version = line  # last "complete version"
                 break

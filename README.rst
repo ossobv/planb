@@ -1,5 +1,5 @@
-PlanB
-=====
+|PlanB|
+=======
 
 PlanB backs up your remote SSH-accessible files using rsync to a local ZFS
 storage. Manage many hosts and host groups. Automate daily, weekly, monthly and
@@ -435,3 +435,7 @@ PlanB was started in 2013 as "OSSO backup" by Alex Boonstra at OSSO B.V. Since
 then, it has been evolved into *PlanB*. When it was Open Sourced by Walter
 Doekes in 2017, the old commits were dropped to ensure that any private compnay
 information was not disclosed.
+
+
+.. |PlanB| image:: https://raw.githubusercontent.com/ossobv/planb/master/planb_head.png
+    :alt: GoCollect

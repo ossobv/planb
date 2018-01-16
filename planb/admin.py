@@ -6,7 +6,7 @@ from django.utils.translation import ugettext as _
 from planb.utils import human
 
 from .forms import HostConfigAdminForm
-from .models import HostGroup, HostConfig
+from .models import BackupRun, HostGroup, HostConfig
 from .tasks import async_backup_job
 
 
@@ -16,6 +16,12 @@ def enqueue_multiple(modeladmin, request, queryset):
         async_backup_job(obj)
 enqueue_multiple.short_description = _(  # noqa
     'Enqueue selected hosts for immediate backup')
+
+
+class BackupRunAdmin(admin.ModelAdmin):
+    list_display = (
+        'started', 'hostconfig', 'success', 'total_size_mb',
+        'snapshot_size_mb')
 
 
 class HostGroupAdmin(admin.ModelAdmin):
@@ -147,5 +153,6 @@ class HostConfigAdmin(admin.ModelAdmin):
         return '/'.join(retention)
 
 
+admin.site.register(BackupRun, BackupRunAdmin)
 admin.site.register(HostGroup, HostGroupAdmin)
 admin.site.register(HostConfig, HostConfigAdmin)

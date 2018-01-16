@@ -1,15 +1,21 @@
 import logging
+import re
 import time
 from datetime import timedelta
 
+from dutree import Scanner
+
 from django.core.mail import mail_admins
+from django.db import connection
 from django.utils import timezone
 
 from django_q.tasks import async
 
-from .models import HostConfig
+from .models import BackupRun, HostConfig, bfs
 
 logger = logging.getLogger(__name__)
+
+_yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9*/_.-]*$')
 
 
 SINGLE_JOB_OPTS = {
@@ -27,6 +33,24 @@ SINGLE_JOB_OPTS = {
 #         if self._method is not None:
 #             return self._method
 #         return urllib2.Request.get_method(self)
+
+
+def yaml_safe_str(value):
+    if _yaml_safe_re.match(value):
+        return value
+    return '"{}"'.format(
+        value.replace('\\', '\\\\').replace('"', '\\"'))
+
+
+def yaml_digits(value):
+    # Not really yaml, but we'll make them both readable and precise.
+    # 1234567 => 1,234,567
+    value = str(value)
+    assert '.' not in value
+    off = len(value) % 3
+    return ','.join(
+        value[max(0, i + off - 3):(i + off)]
+        for i in range(0, len(value) + 1, 3)).lstrip(',')
 
 
 def async_backup_job(job):
@@ -133,17 +157,45 @@ def unconditional_job_run(job_id):
     t0 = time.time()
     logger.info('[%s] Starting backup', job)
 
+    # Create log.
+    run = BackupRun.objects.create(hostconfig_id=job_id)
     try:
+        # Rsync job.
         job.run()
+        # Dutree job.
+        path = bfs.data_dir_get(
+            job.dest_pool, str(job.hostgroup), job.friendly_name)
+        dutree = Scanner(path).scan()
+
+        # Done.
+        td = time.time() - t0
+
+        # Close the DB connection because it may be stale.
+        connection.close()
 
         # Yay, we're done.
         job.refresh_from_db()
+
+        # Store success on the run job.
+        total_size_mb = job.backup_size_mb  # bleh.. get it from here..
+        snapshot_size_mb = (dutree.size() + 524288) // 1048576
+        snapshot_size_yaml = '\n'.join(
+            '{}: {}'.format(
+                yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
+            for i in dutree.get_leaves())
+        BackupRun.objects.filter(pk=run.pk).update(
+            duration=td, success=True,
+            total_size_mb=total_size_mb,
+            snapshot_size_mb=snapshot_size_mb,
+            snapshot_size_listing=snapshot_size_yaml)
+
+        # Store more on the hostconfig.
         last_failure = job.failure_datetime
         HostConfig.objects.filter(pk=job_id).update(
-            date_complete=timezone.now(),
-            complete_duration=(time.time() - t0),
+            date_complete=timezone.now(), complete_duration=td,
             failure_datetime=None)
 
+        # Mail if failed recently.
         if last_failure:
             mail_admins(
                 'Success for backup: {}'.format(job),
@@ -151,7 +203,14 @@ def unconditional_job_run(job_id):
                 'Now all is well again.\n'.format(
                     job, last_failure))
 
-    except Exception:
+    except Exception as e:
+        # Close the DB connection because it may be stale.
+        connection.close()
+
+        # Store failure on the run job.
+        BackupRun.objects.filter(pk=run.pk).update(
+            duration=td, success=False, error_text=str(e))
+
         # Raise log exception with traceback. We could pass it along for
         # Django-Q but it logs errors instead of exceptions and then we
         # don't have any useful tracebacks.

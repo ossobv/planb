@@ -460,7 +460,7 @@ class HostConfig(models.Model):
             size = bfs.parse_backup_sizes(
                 self.dest_pool, self.hostgroup.name, self.friendly_name,
                 self.date_complete)['size']
-            size_mb = size[0:-6] or '0'  # :P
+            size_mb = size[0:-6] or '0'  # :P  FIXME: this is not MiB!?
             HostConfig.objects.filter(pk=self.pk).update(
                 backup_size_mb=size_mb)
 
@@ -497,6 +497,44 @@ class HostConfig(models.Model):
                     'Toggled enabled-flag on {}.\n'.format(self))
 
         return super().save(*args, **kwargs)
+
+
+class BackupRun(models.Model):
+    """
+    Info about a single backup run. Some of these fields are duplicated
+    in the HostConfig model. We like those there too, so we use it to
+    quickly sort those records.
+
+    Runs with success==True show sensible info. For others you may need
+    to take (some of) the values with a grain of salt.
+    """
+    hostconfig = models.ForeignKey(HostConfig)
+
+    started = models.DateTimeField(
+        auto_now_add=True, db_index=True,
+        help_text=_('When the backup run started.'))
+    duration = models.PositiveIntegerField(
+        blank=True, null=True,
+        help_text=_('How long this backup run took in seconds.'))
+
+    success = models.BooleanField(
+        default=False, blank=True,
+        help_text=_('If the backup succeeded, the other values can be '
+                    'trusted.'))
+    error_text = models.TextField(
+        blank=True,
+        help_text=_('Error messages; non-empty only if success is False.'))
+
+    total_size_mb = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Estimated total backup size in MiB.'))
+    snapshot_size_mb = models.PositiveIntegerField(
+        default=0,
+        help_text=_('Estimated single backup size in MiB.'))
+    snapshot_size_listing = models.TextField(
+        blank=True,
+        # This will be populated by dutree-output.
+        help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'))
 
 
 @receiver(post_save, sender=HostConfig)

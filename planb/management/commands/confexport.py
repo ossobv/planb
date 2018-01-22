@@ -206,6 +206,8 @@ class Command(BaseCommand):
             'Do not show retention/schedule'))
         parser.add_argument('--yaml', action='store_true', help=(
             'Output configuration as YAML instead of JSON'))
+        parser.add_argument('--with-disabled', action='store_true', help=(
+            'Also list disabled (inactive) hosts'))
         parser.add_argument('groups', nargs='?', default='*', help=(
             'Which hostgroups to operate on, allows globbing'))
         parser.add_argument('hosts', nargs='?', default='*', help=(
@@ -214,7 +216,9 @@ class Command(BaseCommand):
         return super().add_arguments(parser)
 
     def handle(self, *args, **options):
-        hostconfigs = self.get_hostconfigs(options['groups'], options['hosts'])
+        hostconfigs = self.get_hostconfigs(
+            options['groups'], options['hosts'],
+            with_disabled=options['with_disabled'])
         listingconfig = HostAsConfigListingConfig()
 
         if options['minimal']:
@@ -238,13 +242,17 @@ class Command(BaseCommand):
             self.stdout.write('---\n# {}\n\n{}\n\n'.format(
                 hostconfig.identifier, yamlblob))
 
-    def get_hostconfigs(self, groups_glob, hosts_glob):
+    def get_hostconfigs(self, groups_glob, hosts_glob, with_disabled=False):
+        groups = HostGroup.objects.all()
+        hosts = HostConfig.objects.all()
+        if not with_disabled:
+            hosts = hosts.exclude(enabled=False)
+
         groups = [
-            group for group in HostGroup.objects.all()
-            if fnmatch(group.name, groups_glob)]
+            group for group in groups if fnmatch(group.name, groups_glob)]
         hosts = [
             host for host in (
-                HostConfig.objects.filter(hostgroup__in=groups)
+                hosts.filter(hostgroup__in=groups)
                 .prefetch_related('hostgroup'))
             if fnmatch(host.friendly_name, hosts_glob)]
         return hosts

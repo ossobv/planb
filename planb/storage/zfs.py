@@ -81,7 +81,7 @@ class Zfs(OldStyleStorage):
     def data_dir_get(self, rootdir, customer, friendly_name):
         root_dir = self._root_dir_get(rootdir, customer, friendly_name)
         if not root_dir:
-            return root_dir
+            return root_dir  # =None
         return os.path.join(root_dir, 'data')
 
     def snapshot_create(self, rootdir, customer, friendly_name, snapname=None):

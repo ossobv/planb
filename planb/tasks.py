@@ -151,6 +151,7 @@ def conditional_job_run(job_id):
 
 def unconditional_job_run(job_id):
     job = HostConfig.objects.get(pk=job_id)
+    failed_most_recently_at = job.failure_datetime
 
     # Mark it as running.
     HostConfig.objects.filter(pk=job_id).update(running=True)
@@ -167,9 +168,6 @@ def unconditional_job_run(job_id):
             job.dest_pool, str(job.hostgroup), job.friendly_name)
         dutree = Scanner(path).scan()
 
-        # Done.
-        td = time.time() - t0
-
         # Close the DB connection because it may be stale.
         connection.close()
 
@@ -183,44 +181,46 @@ def unconditional_job_run(job_id):
             '{}: {}'.format(
                 yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
             for i in dutree.get_leaves())
-        BackupRun.objects.filter(pk=run.pk).update(
-            duration=td, success=True,
+        lastrun = BackupRun.objects.filter(pk=run.pk).update(
+            duration=(time.time() - t0),
+            success=True,
             total_size_mb=total_size_mb,
             snapshot_size_mb=snapshot_size_mb,
             snapshot_size_listing=snapshot_size_yaml)
 
-        # Store more on the hostconfig.
-        last_failure = job.failure_datetime
+        # Cache values on the hostconfig.
         HostConfig.objects.filter(pk=job_id).update(
-            date_complete=timezone.now(), complete_duration=td,
-            failure_datetime=None)
+            date_complete=timezone.now(),           # "complete date"
+            complete_duration=lastrun.duration,     # "runtime"
+            backup_size_mb=lastrun.total_size_mb,   # "disk usage"
+            failure_datetime=None)                  # "failure date"
 
         # Mail if failed recently.
-        if last_failure:
+        if failed_most_recently_at:
             mail_admins(
                 'Success for backup: {}'.format(job),
                 'Backing up {} failed most recently at {}.\n\n'
                 'Now all is well again.\n'.format(
-                    job, last_failure))
+                    job, failed_most_recently_at))
 
     except Exception as e:
-        # Close the DB connection because it may be stale.
-        connection.close()
-
-        # Store failure on the run job.
-        BackupRun.objects.filter(pk=run.pk).update(
-            duration=td, success=False, error_text=str(e))
-
         # Raise log exception with traceback. We could pass it along for
         # Django-Q but it logs errors instead of exceptions and then we
         # don't have any useful tracebacks.
         logger.exception(
             '[%s] Failed backup of host: %s', job, job.host)
-        # First after logging the exception we want to update the DB. If
-        # the DB is the cause of the exception, we'd mask the original
-        # one.
+
+        # Close the DB connection because it may be stale.
+        connection.close()
+
+        # Store failure on the run job.
+        BackupRun.objects.filter(pk=run.pk).update(
+            duration=(time.time() - t0), success=False, error_text=str(e))
+
+        # Cache values on the hostconfig.
         HostConfig.objects.filter(pk=job_id).update(
-            failure_datetime=timezone.now())
+            failure_datetime=timezone.now())        # only "failure date"
+
         # Don't re-raise exception. We'll handle it.
         # As far as the workers are concerned, this job is done.
         # #raise

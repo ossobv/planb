@@ -126,7 +126,8 @@ class HostConfig(models.Model):
     enabled = models.BooleanField(default=True)
     queued = models.BooleanField(default=False)
     failure_datetime = models.DateTimeField(blank=True, null=True)
-    hostgroup = models.ForeignKey(HostGroup, related_name='hostconfigs')
+    hostgroup = models.ForeignKey(
+        HostGroup, related_name='hostconfigs', on_delete=models.PROTECT)
     use_sudo = models.BooleanField(default=False)
     use_ionice = models.BooleanField(default=False)
     file_to_check = models.CharField(
@@ -508,7 +509,7 @@ class BackupRun(models.Model):
     Runs with success==True show sensible info. For others you may need
     to take (some of) the values with a grain of salt.
     """
-    hostconfig = models.ForeignKey(HostConfig)
+    hostconfig = models.ForeignKey(HostConfig, on_delete=models.CASCADE)
 
     started = models.DateTimeField(
         auto_now_add=True, db_index=True,

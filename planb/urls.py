@@ -17,5 +17,5 @@ urlpatterns = [
     url(r'^admin(/.*)$', RedirectView.as_view(url='/', permanent=False)),
     url(r'^planb/hostconfig/(?P<hostconfig_id>\d+)/enqueue/$',
         EnqueueJob.as_view(), name='enqueue'),
-    url(r'', include(admin.site.urls)),
+    url(r'', admin.site.urls),
 ]

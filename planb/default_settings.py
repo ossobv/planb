@@ -2,12 +2,6 @@ import logging
 import os
 
 
-class AddPidFilter(logging.Filter):
-    def filter(self, record):
-        record.pid = os.getpid()
-        return True
-
-
 _DEFAULT_DIRS = tuple(
     'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
     .split(' '))
@@ -104,9 +98,6 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': True,
     'filters': {
-        'addpid': {
-            '()': AddPidFilter,
-        },
         'require_debug_false': {
             '()': 'django.utils.log.RequireDebugFalse',
         },
@@ -117,18 +108,17 @@ LOGGING = {
     'formatters': {
         'simple': {
             'format': (
-                '%(asctime)s - %(name)s - %(levelname)s/%(pid)s - '
+                '%(asctime)s - %(name)s - %(levelname)s/%(process)s - '
                 '%(message)s'),
         },
         'notime': {
-            'format': '%(name)s - %(levelname)s/%(pid)s - %(message)s',
+            'format': '%(name)s - %(levelname)s/%(process)s - %(message)s',
         },
     },
     'handlers': {
         'null': {
             'level': 'DEBUG',
             'class': 'logging.NullHandler',
-            'filters': ['addpid'],
         },
         'mail_admins': {
             'level': 'ERROR',
@@ -139,20 +129,18 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
-            'filters': ['addpid', 'require_debug_true'],
+            'filters': ['require_debug_true'],
         },
         # 'gelf': {
         #     'class': 'graypy.GELFHandler',
         #     'host': '10.x.x.x',
         #     'port': 12221,
-        #     'filters': ['addpid'],
         # },
         'logfile': {
             'level': 'DEBUG',
             'class': 'logging.handlers.WatchedFileHandler',
             'formatter': 'simple',
             'filename': '/var/log/planb/core.log',
-            'filters': ['addpid'],
             # Delay, so management commands don't try to open these
             # unless they have to.
             'delay': True,
@@ -162,7 +150,6 @@ LOGGING = {
             'class': 'logging.handlers.WatchedFileHandler',
             'formatter': 'simple',
             'filename': '/var/log/planb/queue.log',
-            'filters': ['addpid'],
             # Delay, so management commands don't try to open these
             # unless they have to.
             'delay': True,

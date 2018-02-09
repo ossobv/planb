@@ -12,7 +12,7 @@ How it looks
 
 At the moment, the interface is just a Django admin interface:
 
-.. image:: example_hosts.png
+.. image:: assets/example_hosts.png
     :alt: A list of hosts configured in PlanB with most recent backup status
 
 The files are stored on ZFS storage, using snapshots to keep earlier versions
@@ -437,5 +437,5 @@ Doekes in 2017, the old commits were dropped to ensure that any private compnay
 information was not disclosed.
 
 
-.. |PlanB| image:: https://raw.githubusercontent.com/ossobv/planb/master/planb_head.png
+.. |PlanB| image:: assets/planb_head.png
     :alt: GoCollect

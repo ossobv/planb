@@ -18,8 +18,12 @@ PLANB_STORAGE_POOLS = (
 MANAGERS = ADMINS = (
     # ('My Name', 'myname@example.com'),
 )
+DEFAULT_FROM_EMAIL = 'support@example.com'
 SERVER_EMAIL = 'planb@example.com'
 EMAIL_SUBJECT_PREFIX = '[PlanB] '
+
+COMPANY_NAME = 'Example Company'
+COMPANY_EMAIL = 'support@example.com'
 
 # MySQL config example:
 #

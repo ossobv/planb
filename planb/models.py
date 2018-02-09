@@ -9,7 +9,8 @@ from django.db.models.signals import post_save
 from django.db import connections, models
 from django.dispatch import receiver
 from django.utils import timezone
-from django.utils.translation import ugettext as _
+from django.utils.functional import cached_property
+from django.utils.translation import ugettext_lazy as _, ngettext
 
 from planb.common.subprocess2 import (
     CalledProcessError, check_call, check_output)
@@ -156,6 +157,36 @@ class HostConfig(models.Model):
     def identifier(self):
         return '{}-{}'.format(self.hostgroup.name, self.friendly_name)
 
+    @property
+    def retention_display(self):
+        retention = [
+            ngettext(
+                '%(days)dday', '%(days)ddays', self.retention) % {
+                'days': self.retention}]
+        if self.keep_weekly:
+            retention.append(
+                ngettext(
+                    '%(weeks)dweek', '%(weeks)dweeks',
+                    self.weekly_retention) % {
+                    'weeks': self.weekly_retention})
+        if self.keep_monthly:
+            retention.append(
+                ngettext(
+                    '%(months)dmonth', '%(months)dmonths',
+                    self.monthly_retention) % {
+                    'months': self.monthly_retention})
+        if self.keep_yearly:
+            retention.append(
+                ngettext(
+                    '%(years)dyear', '%(years)dyears',
+                    self.yearly_retention) % {
+                    'years': self.yearly_retention})
+        return ', '.join(retention)
+
+    @cached_property
+    def last_backuprun(self):
+        return self.backuprun_set.latest('started')
+
     def get_storage(self):
         return Storage(bfs, self.dest_pool)
 
@@ -199,6 +230,13 @@ class HostConfig(models.Model):
             weekly_retention=self.weekly_retention,
             monthly_retention=self.monthly_retention,
             yearly_retention=self.yearly_retention)
+
+    def snapshot_list(self):
+        return bfs.snapshots_get(
+            self.dest_pool, self.hostgroup, self.friendly_name)
+
+    def snapshot_list_display(self):
+        return sorted([s.split('@')[-1] for s in self.snapshot_list()])
 
     def snapshot_create(self):
         # Add logica what kind of snapshot
@@ -536,6 +574,14 @@ class BackupRun(models.Model):
         blank=True,
         # This will be populated by dutree-output.
         help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'))
+
+    @property
+    def total_size(self):
+        return self.total_size_mb * 1024 * 1024
+
+    @property
+    def snapshot_size(self):
+        return self.snapshot_size_mb * 1024 * 1024
 
 
 @receiver(post_save, sender=HostConfig)

@@ -1,0 +1,33 @@
+Plan B backup report for {{ hostgroup.name }}
+========================={% for c in hostgroup.name %}={% endfor %}
+
+The following hosts are backed up using the {{ company_name }} Plan B backup service.
+
++================================+==============+==============+
+| {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last run')|ljust:12 }} |
++================================+==============+==============+
+{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} | {{ host.last_backuprun.total_size|filesizeformat|ljust:12 }} | {{ host.last_backuprun.started|date:'Y-m-d'|ljust:12 }} |
++--------------------------------+--------------+--------------+
+{% endfor %}
+
+{% for host in hosts %}----------------------
+host "{{ host.friendly_name }}"
+----------------------
+
+Configured retention: {{ host.retention_display }}
+
+Included paths:
+{% for path in host.includes.split %}- /{{ path }}
+{% endfor %}
+{% if host.excludes %}
+Excluded paths:
+{% for path in host.excludes.split %}- /{{ path }}
+{% endfor %}
+{% endif %}
+Available snapshots:
+{% for snapshot in host.snapshot_list_display %}- {{ snapshot }}
+{% endfor %}
+{% endfor %}
+--
+Plan B, the {{ company_name }} backup service
+Please contact {{ company_email }} if anything is amiss

@@ -3,11 +3,11 @@ Plan B backup report for {{ hostgroup.name }}
 
 The following hosts are backed up using the {{ company_name }} Plan B backup service.
 
-+================================+==============+==============+
-| {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last run')|ljust:12 }} |
-+================================+==============+==============+
-{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} | {{ host.last_backuprun.total_size|filesizeformat|ljust:12 }} | {{ host.last_backuprun.started|date:'Y-m-d'|ljust:12 }} |
-+--------------------------------+--------------+--------------+
++================================+==============+========================+
+| {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last backup')|ljust:22 }} |
++================================+==============+========================+
+{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} | {{ host.last_backuprun.total_size|filesizeformat|ljust:12 }} | {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:10 }} {{ host.last_backup_failure_string|ljust:11 }} |
++--------------------------------+--------------+------------------------+
 {% endfor %}
 
 {% for host in hosts %}----------------------
@@ -15,7 +15,9 @@ host "{{ host.friendly_name }}"
 ----------------------
 
 Configured retention: {{ host.retention_display }}
-
+{% if not host.last_backuprun.success %}Last error log:
+{{ host.last_backuprun.error_text }}
+{% endif %}
 Included paths:
 {% for path in host.includes.split %}- /{{ path }}
 {% endfor %}
@@ -24,8 +26,13 @@ Excluded paths:
 {% for path in host.excludes.split %}- /{{ path }}
 {% endfor %}
 {% endif %}
+{% if host.last_successful_backuprun %}Last snapshot disk size {{ host.last_successful_backuprun.snapshot_size|filesizeformat }}:
+{% for path, size in host.last_successful_backuprun.snapshot_size_listing_as_list %}- {{ size|filesizeformat|rjust:10 }} {{ path }}
+{% endfor %}{% endif %}
 Available snapshots:
 {% for snapshot in host.snapshot_list_display %}- {{ snapshot }}
+{% empty %}
+{{ _('Warning: there are no snapshots available for this host.') }}
 {% endfor %}
 {% endfor %}
 --

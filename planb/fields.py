@@ -35,16 +35,19 @@ class MultiEmailField(models.Field):
         defaults.update(kwargs)
         return super().formfield(**defaults)
 
-    def get_db_prep_value(self, value, connection, prepared=False):
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, list):
-            return "\n".join(value)
-        assert False, (type(value), value)
+    def get_prep_value(self, value):
+        """Perform preliminary non-db specific value checks and conversions."""
+        value = super().get_prep_value(value)
+        if isinstance(value, list):
+            value = "\n".join(value)
+        return value
+
+    def from_db_value(self, value, expression, connection):
+        return self.to_python(value)
 
     def to_python(self, value):
-        if not value:
-            return []
+        if value is None:
+            return value
         if isinstance(value, list):
             return value
         return value.splitlines()

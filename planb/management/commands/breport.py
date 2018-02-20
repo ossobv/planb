@@ -44,13 +44,23 @@ class Command(BaseCommand):
             self.email_hostgroup(lastgroup, hosts)
 
     def email_hostgroup(self, hostgroup, hosts):
+        hosts_disabled = sum(
+            1 for i in hosts if not i.enabled)
+        hosts_failed = sum(
+            1 for i in hosts if i.enabled and not i.last_backuprun.success)
+
         context = {
             'hostgroup': hostgroup,
             'hosts': hosts,
             'company_name': settings.COMPANY_NAME,
             'company_email': settings.COMPANY_EMAIL,
         }
-        subject = _('Plan B backup report for %s') % (hostgroup.name,)
+        subject = _('%s backup report "%s"') % (
+            settings.COMPANY_NAME, hostgroup.name)
+        if hosts_disabled or hosts_failed:
+            subject += _(' (%d failed, %d disabled)') % (
+                hosts_failed, hosts_disabled)
+
         message = render_to_string('planb/report_email_body.txt', context)
         try:
             html_message = check_output(['rst2html'], input=(
@@ -60,7 +70,7 @@ class Command(BaseCommand):
         else:
             html_message = html_message.decode('utf-8')
 
-        for recipient in hostgroup.notify_email:
+        for recipient in (hostgroup.notify_email or [settings.COMPANY_EMAIL]):
             recipient = recipient.strip()
             if not recipient:
                 continue
@@ -70,6 +80,7 @@ class Command(BaseCommand):
                 subject=subject, message=message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[recipient],
+                bcc=[settings.COMPANY_EMAIL],
                 fail_silently=False,
                 html_message=html_message)
         hostgroup.last_monthly_report = timezone.now()

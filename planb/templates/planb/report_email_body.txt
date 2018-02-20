@@ -1,7 +1,25 @@
-{% autoescape off %}Plan B backup report for {{ hostgroup.name }}
-========================={% for c in hostgroup.name %}={% endfor %}
+{% autoescape off %}Plan B backup report for "{{ hostgroup.name }}"
+=========================={% for c in hostgroup.name %}={% endfor %}=
 
-The following hosts are backed up using the {{ company_name }} Plan B backup service.
+The following report contains a listing of all Plan B based backups made
+by {{ company_name }}. Please take a moment to examine its correctness:
+
+- Are all hosts you want backed up listed?
+- Are the paths you want included all mentioned?
+- Do you wish to change the retention (snapshot count) for a host?
+
+For your convenience, the paths which take up the most disk space are
+listed as well. At your request, we can add paths to exclude from the
+backups.
+
+*NOTE: The data sizes mentioned in this report are a snapshot. Sizes on
+your final invoice may differ. Also note that in Februari 2018 we've
+chosen to invoice based on binary prefixed gibibytes (GiB, 2^30) instead
+of SI-unit gigabytes (10^9), so the totals align better with this
+report. All numbers in this report use binary prefixes.*
+
+The following hosts are backed up using the {{ company_name }} Plan B
+backup service.
 
 +--------------------------------+--------------+--------------------------+
 | {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last backup')|ljust:24 }} |

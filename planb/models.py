@@ -592,11 +592,11 @@ class BackupRun(models.Model):
 
     @property
     def total_size(self):
-        return self.total_size_mb * 1024 * 1024
+        return self.total_size_mb << 20
 
     @property
     def snapshot_size(self):
-        return self.snapshot_size_mb * 1024 * 1024
+        return self.snapshot_size_mb << 20
 
     def error_text_as_pre(self):
         return '\n'.join(

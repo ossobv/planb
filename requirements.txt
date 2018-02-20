@@ -1,9 +1,12 @@
-Django>=1.11.1
-django-q>=0.8.0
-django-multi-email-field>=0.4
+Django>=2.0,<2.1
+django-q>=0.9,<0.10
+django-multi-email-field>=0.4,<0.5
 
 mysqlclient>=1.3.7,<2   # APT: python3-mysqldb
 redis>=2.10.5,<3        # APT: python3-redis
 setproctitle>=1.1.8,<2  # APT: python3-setproctitle
 
 dutree==1.3
+
+# For rst2html for planb-report as HTML
+# apt-get install python3-docutils --no-install-recommends

@@ -41,7 +41,9 @@ if __name__ == '__main__':
         package_data={
             'planb.fixtures': ['*.xml'],
             'planb.static': ['planb/js/jquery-postlink.js'],
-            'planb.templates': ['admin/planb/hostconfig/change_form.html']},
+            'planb.templates': [
+                'admin/planb/hostconfig/change_form.html',
+                'planb/report_email_body.txt']},
         description='PlanB automates remote SSH+rsync backups',
         long_description=('\n\n\n'.join(long_descriptions)),
         author='Alex Boonstra, Walter Doekes, OSSO B.V.',
@@ -64,8 +66,8 @@ if __name__ == '__main__':
             'Topic :: System :: Archiving :: Backup',
         ],
         install_requires=[
-            'Django>=1.11.1,<1.12',
-            'django-q>=0.8.0,<0.9',
+            'Django>=2.0,<2.1',
+            'django-q>=0.9,<0.10',
             'django-multi-email-field>=0.4,<0.5',
             'mysqlclient>=1.3.7,<2',   # APT: python3-mysqldb
             'redis>=2.10.5,<3',        # APT: python3-redis

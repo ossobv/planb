@@ -1,40 +1,59 @@
-Plan B backup report for {{ hostgroup.name }}
+{% autoescape off %}Plan B backup report for {{ hostgroup.name }}
 ========================={% for c in hostgroup.name %}={% endfor %}
 
 The following hosts are backed up using the {{ company_name }} Plan B backup service.
 
-+================================+==============+========================+
-| {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last backup')|ljust:22 }} |
-+================================+==============+========================+
-{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} | {{ host.last_backuprun.total_size|filesizeformat|rjust:12 }} | {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:10 }} {{ host.last_backup_failure_string|ljust:11 }} |
-+--------------------------------+--------------+------------------------+
++--------------------------------+--------------+--------------------------+
+| {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last backup')|ljust:24 }} |
++================================+==============+==========================+
+{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} |{% comment %}
+{% endcomment %} {{ host.last_successful_backuprun.total_size|filesizeformat|rjust:12 }} |{% comment %}
+{% endcomment %} {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:10 }} {{ host.last_backup_failure_string|ljust:13 }} |
++--------------------------------+--------------+--------------------------+
 {% endfor %}
 
-{% for host in hosts %}----------------------
-host "{{ host.friendly_name }}"
 ----------------------
+Reports per host below
+----------------------
+{% for host in hosts %}
++--------------------------------------------------------------+
+| {{ host.friendly_name|ljust:60 }} |
++=======================+======================================+
+| Total size            | {{ host.last_successful_backuprun.total_size|filesizeformat|ljust:36 }} |
++-----------------------+--------------------------------------+
+| Last snapshot size    | {{ host.last_successful_backuprun.snapshot_size|filesizeformat|ljust:36 }} |
++-----------------------+--------------------------------------+
+| Last succesful backup | {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:36 }} |
++-----------------------+--------------------------------------+
+| Configured retention  | {{ host.retention_display|ljust:36 }} |
++-----------------------+--------------------------------------+
+{% if not host.last_backuprun.success %}
+Last backup FAILED with error::
 
-Configured retention: {{ host.retention_display }}
-{% if not host.last_backuprun.success %}Last error log:
-{{ host.last_backuprun.error_text }}
+{{ host.last_backuprun.error_text_as_pre|default:_('error message missing') }}
 {% endif %}
 Included paths:
+
 {% for path in host.includes.split %}- /{{ path }}
 {% endfor %}
 {% if host.excludes %}
 Excluded paths:
+
 {% for path in host.excludes.split %}- /{{ path }}
 {% endfor %}
 {% endif %}
-{% if host.last_successful_backuprun %}Last snapshot disk size {{ host.last_successful_backuprun.snapshot_size|filesizeformat }}:
+{% if host.last_successful_backuprun %}Last snapshot disk usage:
+
 {% for path, size in host.last_successful_backuprun.snapshot_size_listing_as_list %}- {{ size|filesizeformat|rjust:10 }} {{ path }}
 {% endfor %}{% endif %}
 Available snapshots:
+
 {% for snapshot in host.snapshot_list_display %}- {{ snapshot }}
 {% empty %}
 {{ _('Warning: there are no snapshots available for this host.') }}
 {% endfor %}
 {% endfor %}
---
-Plan B, the {{ company_name }} backup service
-Please contact {{ company_email }} if anything is amiss
+| --
+| Plan B, the {{ company_name }} backup service
+| Please contact {{ company_email }} if anything is amiss
+{% endautoescape %}

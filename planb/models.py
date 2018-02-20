@@ -197,9 +197,9 @@ class HostConfig(models.Model):
         Return the status description of the backup if not successful.
         '''
         if not self.enabled:
-            return _('(disabled)')
+            return _('**disabled**')
         if not self.last_backuprun.success:
-            return _('(failed)')
+            return _('**failed**')
         return ''  # _('(success)') omitted, empty status for success.
 
     def get_storage(self):
@@ -598,12 +598,17 @@ class BackupRun(models.Model):
     def snapshot_size(self):
         return self.snapshot_size_mb * 1024 * 1024
 
+    def error_text_as_pre(self):
+        return '\n'.join(
+            ('', '    ' + i.rstrip())[bool(i.rstrip())]
+            for i in self.error_text.strip().split('\n'))
+
     def snapshot_size_listing_as_list(self):
         l = []
         if not self.snapshot_size_listing:
             return l
         for line in self.snapshot_size_listing.splitlines():
-            path, size = line.split(':', 1)
+            path, size = line.rsplit(':', 1)
             if path[0] == path[-1] == '"':
                 path = path[1:-1]
             size = int(size.replace(',', ''))

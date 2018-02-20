@@ -1,10 +1,12 @@
 from dateutil.relativedelta import relativedelta
+from subprocess import check_output
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.template.loader import render_to_string
+
 from django.utils import timezone
 from django.utils.translation import ugettext as _
 
@@ -50,6 +52,14 @@ class Command(BaseCommand):
         }
         subject = _('Plan B backup report for %s') % (hostgroup.name,)
         message = render_to_string('planb/report_email_body.txt', context)
+        try:
+            html_message = check_output(['rst2html'], input=(
+                message.encode('utf-8')))
+        except OSError:
+            html_message = None
+        else:
+            html_message = html_message.decode('utf-8')
+
         for recipient in hostgroup.notify_email:
             recipient = recipient.strip()
             if not recipient:
@@ -61,7 +71,6 @@ class Command(BaseCommand):
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[recipient],
                 fail_silently=False,
-                html_message=None,
-            )
+                html_message=html_message)
         hostgroup.last_monthly_report = timezone.now()
         hostgroup.save(update_fields=['last_monthly_report'])

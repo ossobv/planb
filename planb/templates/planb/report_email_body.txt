@@ -6,7 +6,7 @@ The following hosts are backed up using the {{ company_name }} Plan B backup ser
 +================================+==============+========================+
 | {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last backup')|ljust:22 }} |
 +================================+==============+========================+
-{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} | {{ host.last_backuprun.total_size|filesizeformat|ljust:12 }} | {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:10 }} {{ host.last_backup_failure_string|ljust:11 }} |
+{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} | {{ host.last_backuprun.total_size|filesizeformat|rjust:12 }} | {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:10 }} {{ host.last_backup_failure_string|ljust:11 }} |
 +--------------------------------+--------------+------------------------+
 {% endfor %}
 

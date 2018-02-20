@@ -598,6 +598,18 @@ class BackupRun(models.Model):
     def snapshot_size(self):
         return self.snapshot_size_mb * 1024 * 1024
 
+    def snapshot_size_listing_as_list(self):
+        l = []
+        if not self.snapshot_size_listing:
+            return l
+        for line in self.snapshot_size_listing.splitlines():
+            path, size = line.split(':', 1)
+            if path[0] == path[-1] == '"':
+                path = path[1:-1]
+            size = int(size.replace(',', ''))
+            l.append((path, size))
+        return l
+
 
 @receiver(post_save, sender=HostConfig)
 def create_dataset(sender, instance, created, *args, **kwargs):

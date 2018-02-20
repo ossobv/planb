@@ -1,6 +1,8 @@
 from zlib import adler32
 
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html_join
 from django.utils.translation import ugettext as _
 
 from planb.utils import human
@@ -28,10 +30,13 @@ class HostGroupAdmin(admin.ModelAdmin):
     list_display = ('name', 'notify_email', 'hosts')
 
     def hosts(self, object):
-        return ' '.join(
-            # BLACK CIRCLE (not BLACK LARGE CIRCLE U+2b24)
-            '\u25cf {}'.format(i) for i in object.hostconfigs.values_list(
-                'friendly_name', flat=True))
+        return format_html_join(
+            ' ', '\u25cf <a href="{}">{}</a>',
+            self.hostconfig_iterator(object))
+
+    def hostconfig_iterator(self, object):
+        for pk, name in object.hostconfigs.values_list('id', 'friendly_name'):
+            yield (reverse("admin:planb_hostconfig_change", args=(pk,)), name)
 
 
 class HostConfigAdmin(admin.ModelAdmin):

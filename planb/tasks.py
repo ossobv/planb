@@ -181,18 +181,19 @@ def unconditional_job_run(job_id):
             '{}: {}'.format(
                 yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
             for i in dutree.get_leaves())
-        lastrun = BackupRun.objects.filter(pk=run.pk).update(
+        BackupRun.objects.filter(pk=run.pk).update(
             duration=(time.time() - t0),
             success=True,
             total_size_mb=total_size_mb,
             snapshot_size_mb=snapshot_size_mb,
             snapshot_size_listing=snapshot_size_yaml)
+        run.refresh_from_db()
 
         # Cache values on the hostconfig.
         HostConfig.objects.filter(pk=job_id).update(
             date_complete=timezone.now(),           # "complete date"
-            complete_duration=lastrun.duration,     # "runtime"
-            backup_size_mb=lastrun.total_size_mb,   # "disk usage"
+            complete_duration=run.duration,         # "runtime"
+            backup_size_mb=run.total_size_mb,       # "disk usage"
             failure_datetime=None)                  # "failure date"
 
         # Mail if failed recently.

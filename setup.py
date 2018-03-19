@@ -69,6 +69,7 @@ if __name__ == '__main__':
             'Django>=2.0,<2.1',
             'django-q>=0.9,<0.10',
             'django-multi-email-field>=0.4,<0.5',
+            'dutree>=1.4',
             'mysqlclient>=1.3.7,<2',   # APT: python3-mysqldb
             'redis>=2.10.5,<3',        # APT: python3-redis
             'setproctitle>=1.1.8,<2',  # APT: python3-setproctitle

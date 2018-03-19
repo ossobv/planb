@@ -1,10 +1,28 @@
 Changes
 -------
 
-v1.3_dev - *XXXX-XX-XX*
-~~~~~~~~~~~~~~~~~~~~~~~
+v1.3 - *2018-03-19*
+~~~~~~~~~~~~~~~~~~~
 
-- (Version after 1.2.)
+**Web interface**
+
+- Disallow deletion of non-empty host groups.
+
+**CLI**
+
+- Add ``breport`` command to send out backup reports. See the template
+  in templates/planb/report_email_body.txt. Note that the report is
+  still in alpha stage. NOTE: To get e-mail reports as well, you need
+  to have ``rst2html`` installed.
+- Add ``--with-disabled`` to ``confexport`` command to get complete
+  exports.
+- Fix that planb runserver can be used for development (through
+  PYTHONPATH propagation).
+
+**Other**
+
+- Dependency updates to Django 2.0+.
+- Add backup history record keeping, for better logging and averages.
 
 
 v1.2 - *2017-09-18*

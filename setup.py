@@ -1,33 +1,66 @@
 #!/usr/bin/env python
+import os.path
 import sys
 from distutils.core import setup
 from setuptools import find_packages
 
+try:
+    from subprocess import check_output
+except ImportError:
+    check_output = None
+
 if sys.version_info < (3,):
     raise RuntimeError('PlanB is not built for Python older than 3')
 
+
+def version_from_git():
+    try:
+        version = check_output(
+            "test -d .git && git fetch --tags && "
+            "git describe --tags --dirty | "
+            "sed -e 's/-/+/;s/[^A-Za-z0-9.+]/./g'",
+            shell=True)
+    except:  # (AttributeError, CalledProcessError)
+        return None
+
+    version = version.decode('ascii', 'replace')
+    if not version.startswith('v'):
+        return None
+
+    return version[1:].rstrip()
+
+
+def version_from_changelog(changelog):
+    versions = changelog.split('\nv')[1:]
+    incomplete = False
+
+    for line in versions:
+        assert line and line[0].isdigit(), line
+        line = line.split(' ', 1)[0]
+        if all(i.isdigit() for i in line.split('.')):
+            version = line  # last "complete version"
+            break
+        incomplete = True
+    else:
+        return '0+1.or.more'  # undefined version
+
+    if incomplete:
+        version += '+1.or.more'
+    return version
+
+
 if __name__ == '__main__':
-    long_descriptions = []
-    with open('README.rst') as file:
-        long_descriptions.append(file.read())
+    here = os.path.dirname(__file__)
+    os.chdir(here)
 
-    with open('CHANGES.rst') as file:
-        long_descriptions.append(file.read())
-        versions = long_descriptions[-1].split('\nv')[1:]
+    with open('README.rst') as fp:
+        readme = fp.read()
+    with open('CHANGES.rst') as fp:
+        changes = fp.read()
 
-        # TODO: use `git describe --tags --dirty` if avail?
-        incomplete = False
-        for line in versions:
-            assert line and line[0].isdigit(), line
-            line = line.split(' ', 1)[0]
-            if all(i.isdigit() for i in line.split('.')):
-                version = line  # last "complete version"
-                break
-            incomplete = True
-        else:
-            version = '0+1.or.more'  # undefined version
-        if incomplete:
-            version += '+1.or.more'
+    version = (
+        version_from_git() or
+        version_from_changelog(changes))
 
     setup(
         name='planb',
@@ -45,7 +78,7 @@ if __name__ == '__main__':
                 'admin/planb/hostconfig/change_form.html',
                 'planb/report_email_body.txt']},
         description='PlanB automates remote SSH+rsync backups',
-        long_description=('\n\n\n'.join(long_descriptions)),
+        long_description=('\n\n\n'.join([readme, changes])),
         author='Alex Boonstra, Walter Doekes, OSSO B.V.',
         author_email='wjdoekes+planb@osso.nl',
         url='https://github.com/ossobv/planb',

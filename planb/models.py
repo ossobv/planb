@@ -546,8 +546,8 @@ class HostConfig(models.Model):
                 'enabled', flat=True).get(pk=self.pk)
             if self.enabled != old_enabled:
                 mail_admins(
-                    '{} backup: {}'.format(
-                        'Enabled' if self.enabled else 'Disabled', self),
+                    'INFO: Backup {} of {}'.format(
+                        'ENABLED' if self.enabled else 'DISABLED', self),
                     'Toggled enabled-flag on {}.\n'.format(self))
 
         return super().save(*args, **kwargs)

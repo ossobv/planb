@@ -199,17 +199,22 @@ def unconditional_job_run(job_id):
         # Mail if failed recently.
         if failed_most_recently_at:
             mail_admins(
-                'Success for backup: {}'.format(job),
+                'OK: Backup success of {}'.format(job),
                 'Backing up {} failed most recently at {}.\n\n'
                 'Now all is well again.\n'.format(
                     job, failed_most_recently_at))
 
     except Exception as e:
-        # Raise log exception with traceback. We could pass it along for
-        # Django-Q but it logs errors instead of exceptions and then we
-        # don't have any useful tracebacks.
-        logger.exception(
-            '[%s] Failed backup of host: %s', job, job.host)
+        if True:  # isinstance(e, DigestableError)
+            # Raise log exception with traceback. We could pass it along
+            # for Django-Q but it logs errors instead of exceptions and
+            # then we don't have any useful tracebacks.
+            logger.exception(
+                'Backup failed of %s on %s', job, job.host)
+        else:
+            # If the error is digestable, log an error without mail and
+            # have someone run a daily mail about this instead.
+            pass
 
         # Close the DB connection because it may be stale.
         connection.close()

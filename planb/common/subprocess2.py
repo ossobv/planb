@@ -33,9 +33,13 @@ class CalledProcessError(OrigCalledProcessError):
         # Take entire command if string, or first item if tuple.
         short_cmd = self.cmd if isinstance(self.cmd, str) else self.cmd[0]
 
-        ret = []
-        ret.append('Command {!r} returned non-zero exit status {}'.format(
-            short_cmd, self.returncode))
+        # Take the non-blank line of stderr.
+        short_stderr = self.errput.lstrip().split(b'\n', 1)[0].rstrip()
+        short_stderr = short_stderr.decode('ascii', 'replace')
+
+        ret = ['{cmd}: "{stderr}" (exit {code})'.format(
+            cmd=short_cmd, stderr=short_stderr.replace('"', '""'),
+            code=self.returncode)]
 
         if stderr:
             ret.append('STDERR:\n{}'.format(stderr))

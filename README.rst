@@ -166,9 +166,15 @@ Setting up a virtualenv (optional)::
 
     workon planb
 
-Installing PlanB::
+Installing PlanB using pip::
 
-    apt-get install python3-mysqldb python3-redis python3-setproctitle
+    apt-get install mysql-server redis-server
+    pip3 install planb
+
+Installing PlanB without pip::
+
+    apt-get install mysql-server redis-server python3-mysqldb python3-redis \
+      python3-setproctitle
     pip install git+https://github.com/ossobv/planb.git@master
 
 Setting up a local ``planb`` user::
@@ -433,7 +439,7 @@ Authors
 
 PlanB was started in 2013 as "OSSO backup" by Alex Boonstra at OSSO B.V. Since
 then, it has been evolved into *PlanB*. When it was Open Sourced by Walter
-Doekes in 2017, the old commits were dropped to ensure that any private compnay
+Doekes in 2017, the old commits were dropped to ensure that any private company
 information was not disclosed.
 
 

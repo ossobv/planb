@@ -79,16 +79,14 @@ TODO
 * Add uwsgi-uid==djangoq-uid check?
 * Re-add some form of "list-stale-mounts" (!).
   # contrib/list-stale-mounts | mail -E -s "[$HOSTNAME] Stale ZFS mounts?"
+  ^-- document this in FAQ below..
 * Re-add non-INFO output from planb_custom.daily...
   # run_backupinfo | grep -vFB1 INFO/ /var/log/osso-backup/billing.log |
   # mail -E -s "[$HOSTNAME] Backup billing push"
-* Re-add some kind of monthly report about what has been backupped.
-  # parse_and_mail_backupdirs
 * Add makefile for quick uninstall/install/uwsgi-reload?
 * Sort HostGroups in HostConfig sidebar.
 * Add pepcleaning pre-commit hook.
 * Add flake-checking pre-commit hook.
-* Add BCH checks.
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
@@ -109,8 +107,6 @@ TODO
   too short. Also, use unique_together, so the friendlyname can be reused.
 * BUG: Items added to /exclude list are not deleted from destination if
   they have already been backed up once.
-* The 'data_files' in setup.py all get chucked into the virtualenv root.
-  We should place most of them in share/planb/ instead.
 * Replace the "daily report" hack with a signal-receiver.
 
 
@@ -202,7 +198,8 @@ Setting up the local environment::
 
 Setting up the local configuration::
 
-    cp /srv/virtualenvs/planb/example_settings.py /etc/planb/settings.py
+    cp ${VIRTUAL_ENV:-/usr/local}/share/planb/example_settings.py \
+      /etc/planb/settings.py
     ${EDITOR:-vi} /etc/planb/settings.py
 
 **Replace all *FIXME* entries in the ``settings.py``**
@@ -225,7 +222,7 @@ Setting up uwsgi ``planb.ini``::
 
     chdir = /
     virtualenv = /srv/virtualenvs/planb
-    wsgi-file = /srv/virtualenvs/planb/wsgi.py
+    wsgi-file = /srv/virtualenvs/planb/share/planb/wsgi.py
 
     uid = planb
     gid = www-data
@@ -273,10 +270,10 @@ Giving *PlanB* access to ZFS tools and paths::
 
 Setting up ``qcluster`` for scheduled tasks::
 
-    apt-get install redis-server
-
     # (in the source, this file is in rc.d)
-    cp /srv/virtualenvs/planb/planb-queue.service /etc/systemd/system/
+    cp ${VIRTUAL_ENV:-/usr/local}/share/planb/planb-queue.service \
+      /etc/systemd/system/
+
     ${EDITOR:-vi} /etc/systemd/system/planb-queue.service
 
     systemctl daemon-reload &&

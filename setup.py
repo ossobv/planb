@@ -51,7 +51,7 @@ def version_from_changelog(changelog):
 
 if __name__ == '__main__':
     here = os.path.dirname(__file__)
-    os.chdir(here)
+    os.chdir(here or '.')
 
     with open('README.rst') as fp:
         readme = fp.read()
@@ -66,9 +66,12 @@ if __name__ == '__main__':
         name='planb',
         version=version,
         scripts=['scripts/planb'],
-        data_files=[('', [
-            'LICENSE', 'README.rst', 'CHANGES.rst', 'wsgi.py',
-            'rc.d/planb-queue.service'])],
+        data_files=[
+            ('share/doc/planb', [
+                'LICENSE', 'README.rst', 'CHANGES.rst']),
+            ('share/planb', [
+                'example_settings.py', 'wsgi.py',
+                'rc.d/planb-queue.service'])],
         packages=find_packages() + [
             'planb.fixtures', 'planb.static', 'planb.templates'],
         package_data={

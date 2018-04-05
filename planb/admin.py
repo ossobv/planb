@@ -1,5 +1,6 @@
 from zlib import adler32
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html_join
@@ -78,10 +79,11 @@ class HostConfigAdmin(admin.ModelAdmin):
         'date_complete', 'failure_datetime',
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
-    list_filter = (
-        'enabled', 'dest_pool', 'hostgroup', 'running',
-        'failure_datetime',
-    )
+    list_filter = ('enabled',)
+    if len(settings.PLANB_STORAGE_POOLS) != 1:
+        list_filter += ('dest_pool',)
+    list_filter += ('hostgroup', 'running', 'failure_datetime')
+
     actions = [enqueue_multiple]
     form = HostConfigAdminForm
     search_fields = ('friendly_name', 'host', 'hostgroup__name', 'description')

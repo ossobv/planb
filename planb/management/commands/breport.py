@@ -2,7 +2,8 @@ from dateutil.relativedelta import relativedelta
 from subprocess import check_output
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import get_connection
+from django.core.mail.message import EmailMultiAlternatives
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.template.loader import render_to_string
@@ -76,12 +77,25 @@ class Command(BaseCommand):
                 continue
             self.stdout.write(
                 'Sending report for {} to {}'.format(hostgroup, recipient))
-            send_mail(
-                subject=subject, message=message,
+            self.send_mail(
+                subject=subject,
+                text_message=message,
+                html_message=html_message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[recipient],
-                bcc=[settings.COMPANY_EMAIL],
-                fail_silently=False,
-                html_message=html_message)
+                bcc_list=[settings.COMPANY_EMAIL])
         hostgroup.last_monthly_report = timezone.now()
         hostgroup.save(update_fields=['last_monthly_report'])
+
+    def send_mail(self, subject, text_message, html_message, from_email,
+                  recipient_list, bcc_list):
+        connection = get_connection(
+            username=None, password=None, fail_silently=False)
+
+        mail = EmailMultiAlternatives(
+            subject, text_message, from_email, recipient_list,
+            bcc=bcc_list, connection=connection)
+        if html_message:
+            mail.attach_alternative(html_message, 'text/html')
+
+        return mail.send()

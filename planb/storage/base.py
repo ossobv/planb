@@ -180,12 +180,12 @@ class OldStyleStorage(object):
         raise NotImplementedError()
 
     def parse_backup_sizes(self, rootdir, customer, friendly_name,
-                           date_complete):
+                           completion_datetime):
         '''
         Should return a dict of dicts containing size in bytes and dates.
         {
             'used': '123456789',
-            'date': date_complete,
+            'date': completion_datetime,
         }
         '''
         raise NotImplementedError()

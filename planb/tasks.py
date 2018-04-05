@@ -1,7 +1,6 @@
 import logging
 import re
 import time
-from datetime import timedelta
 
 from dutree import Scanner
 
@@ -11,7 +10,7 @@ from django.utils import timezone
 
 from django_q.tasks import async
 
-from .models import BackupRun, HostConfig, bfs
+from .models import BOGODATE, BackupRun, HostConfig, bfs
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +73,12 @@ def spawn_single_backup_job(job_id):
     job = HostConfig.objects.get(pk=job_id)
 
     # The task is delayed, but it has been scheduled/queued.
-    logger.info('[%s] Requested direct backup', job)
+    logger.info('[%s] Manually requested backup', job)
     if not job.running:
-        # Hack so we get success mail.
-        HostConfig.objects.filter(pk=job_id).update(
-            failure_datetime=timezone.now())
+        # Hack so we get success mail. (Only update first_fail if it was
+        # unset.)
+        HostConfig.objects.filter(pk=job_id, first_fail=None).update(
+            first_fail=BOGODATE)
 
         # Run job. May raise an error. Always restores queued/running.
         unconditional_job_run(job.pk)
@@ -99,7 +99,7 @@ def enum_eligible_jobs():
     job_qs = (
         HostConfig.objects
         .filter(enabled=True, running=False, queued=False)
-        .order_by('date_complete'))
+        .order_by('last_run'))  # order by last attempt
 
     for job in job_qs:
         # We have a job_id, lock it. If changed is 0, we did not do a change,
@@ -118,8 +118,8 @@ def enum_eligible_jobs():
             continue
 
         # Check if we failed recently.
-        if job.failure_datetime and (
-                job.failure_datetime + timedelta(hours=1) > timezone.now()):
+        if job.first_fail and (
+                (timezone.now() - job.last_run).total_seconds() < 3600):
             # Unlock.
             HostConfig.objects.filter(
                 pk=job.pk, queued=True).update(queued=False)
@@ -151,7 +151,7 @@ def conditional_job_run(job_id):
 
 def unconditional_job_run(job_id):
     job = HostConfig.objects.get(pk=job_id)
-    failed_most_recently_at = job.failure_datetime
+    first_fail = job.first_fail
 
     # Mark it as running.
     HostConfig.objects.filter(pk=job_id).update(running=True)
@@ -190,19 +190,23 @@ def unconditional_job_run(job_id):
         run.refresh_from_db()
 
         # Cache values on the hostconfig.
+        now = timezone.now()
         HostConfig.objects.filter(pk=job_id).update(
-            date_complete=timezone.now(),           # "complete date"
+            last_ok=now,                            # success
+            last_run=now,                           # now
+            first_fail=None,                        # no failure
             complete_duration=run.duration,         # "runtime"
-            backup_size_mb=run.total_size_mb,       # "disk usage"
-            failure_datetime=None)                  # "failure date"
+            backup_size_mb=run.total_size_mb)       # "disk usage"
 
         # Mail if failed recently.
-        if failed_most_recently_at:
-            mail_admins(
-                'OK: Backup success of {}'.format(job),
-                'Backing up {} failed most recently at {}.\n\n'
-                'Now all is well again.\n'.format(
-                    job, failed_most_recently_at))
+        if first_fail:  # last job was not okay
+            if first_fail == BOGODATE:
+                msg = 'Backing up {} was a success.\n'.format(job)
+            else:
+                msg = (
+                    'Backing up {} which was failing since {}.\n\n'
+                    'Now all is well again.\n'.format(job, first_fail))
+            mail_admins('OK: Backup success of {}'.format(job), msg)
 
     except Exception as e:
         if True:  # isinstance(e, DigestableError)
@@ -224,8 +228,11 @@ def unconditional_job_run(job_id):
             duration=(time.time() - t0), success=False, error_text=str(e))
 
         # Cache values on the hostconfig.
+        now = timezone.now()
         HostConfig.objects.filter(pk=job_id).update(
-            failure_datetime=timezone.now())        # only "failure date"
+            last_run=now)    # don't overwrite last_ok
+        HostConfig.objects.filter(pk=job_id, first_fail=None).update(
+            first_fail=now)  # overwrite first_fail only if unset
 
         # Don't re-raise exception. We'll handle it.
         # As far as the workers are concerned, this job is done.
@@ -233,11 +240,3 @@ def unconditional_job_run(job_id):
 
     else:
         logger.info('[%s] Completed successfully', job)
-
-
-def check_for_not_backed_up_jobs():
-    yesterday = timezone.now() - timedelta(days=2)
-    jobs = HostConfig.objects.filter(date_complete__lt=yesterday)
-    for job in jobs:
-        msg = 'job {} has not run since {}'.format(job, job.date_complete)
-        mail_admins('HostConfig {} needs attention'.format(job), msg)

@@ -18,8 +18,7 @@ class HostConfigAdminForm(forms.ModelForm):
     class Meta:
         model = HostConfig
         exclude = (
-            'priority',
-            'date_complete',
-            'failure_datetime',
-            'file_to_check',
+            'last_ok',
+            'last_run',
+            'first_fail',
         )

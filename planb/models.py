@@ -28,6 +28,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+BOGODATE = datetime(1970, 1, 2, tzinfo=timezone.utc)
+
 bfs = Zfs(binary=settings.PLANB_ZFS_BIN, sudobin=settings.PLANB_SUDO_BIN)
 
 
@@ -72,7 +74,7 @@ class HostGroup(models.Model):
         for hostconfig in self.hostconfigs.all():
             results[hostconfig.friendly_name] = bfs.parse_backup_sizes(
                 hostconfig.dest_pool, self.name, hostconfig.friendly_name,
-                hostconfig.date_complete)
+                hostconfig.last_ok)
             results[hostconfig.friendly_name]['enabled'] = hostconfig.enabled
         return results
 
@@ -118,23 +120,26 @@ class HostConfig(models.Model):
         max_length=1023, default=settings.PLANB_DEFAULT_INCLUDES)
     excludes = FilelistField(
         max_length=1023, blank=True)
-    running = models.BooleanField(default=False)
-    priority = models.IntegerField(default=0)
-    date_complete = models.DateTimeField(
-        'Complete date', default=datetime(1970, 1, 2, tzinfo=timezone.utc))
+
+    last_ok = models.DateTimeField(
+        _('Last backup success'), blank=True, null=True)
+    last_run = models.DateTimeField(
+        _('Last backup attempt'), default=BOGODATE)
+    first_fail = models.DateTimeField(
+        _('First backup failure'), blank=True, null=True)
+
     complete_duration = models.PositiveIntegerField(
         'Time', default=0,  # this value may vary..
         help_text=_('Duration in seconds of last successful job.'))
+
+    running = models.BooleanField(default=False)
     enabled = models.BooleanField(default=True)
     queued = models.BooleanField(default=False)
-    failure_datetime = models.DateTimeField(blank=True, null=True)
+
     hostgroup = models.ForeignKey(
         HostGroup, related_name='hostconfigs', on_delete=models.PROTECT)
     use_sudo = models.BooleanField(default=False)
     use_ionice = models.BooleanField(default=False)
-    file_to_check = models.CharField(
-        max_length=255, default='var/log/kern.log',
-        blank=True, null=True)
     keep_weekly = models.BooleanField(default=False)
     keep_monthly = models.BooleanField(default=False)
     keep_yearly = models.BooleanField(default=False)
@@ -209,8 +214,9 @@ class HostConfig(models.Model):
         # See: https://github.com/django/django/commit/a97ecfdea8
         copy = self.__class__.objects.get(pk=self.pk)
         copy.pk = None
-        copy.date_complete = datetime(1970, 1, 2, tzinfo=timezone.utc)
-        copy.failure_datetime = None
+        copy.last_ok = None
+        copy.last_run = BOGODATE
+        copy.first_fail = None
         copy.queued = copy.running = False
         copy.complete_duration = 0
         copy.backup_size_mb = 0
@@ -225,8 +231,8 @@ class HostConfig(models.Model):
     def can_backup(self):
         if not self.enabled:
             return False
-        if (self.date_complete.date() >= date.today() and
-                self.failure_datetime is None):
+        if (self.last_ok.date() >= date.today() and
+                self.first_fail is None):
             return False
         # this one is heavy, avoid it using the date check above..
         if not bfs.can_backup(
@@ -513,7 +519,7 @@ class HostConfig(models.Model):
             # Atomic update of size.
             size = bfs.parse_backup_sizes(
                 self.dest_pool, self.hostgroup.name, self.friendly_name,
-                self.date_complete)['size']
+                self.last_ok)['size']
             size_mb = size[0:-6] or '0'  # :P  FIXME: this is not MiB!?
             HostConfig.objects.filter(pk=self.pk).update(
                 backup_size_mb=size_mb)

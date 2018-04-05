@@ -3,6 +3,7 @@ from zlib import adler32
 from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html_join
 from django.utils.translation import ugettext as _
 
@@ -47,8 +48,8 @@ class HostConfigAdmin(admin.ModelAdmin):
             'description', 'includes', 'excludes', 'enabled',
         )}),
         ('Status', {'fields': (
-            'date_complete', 'complete_duration', 'backup_size_mb',
-            'failure_datetime', 'queued', 'running',
+            'last_ok', 'complete_duration', 'backup_size_mb',
+            'last_run', 'first_fail', 'queued', 'running',
         )}),
         ('Transport options', {'fields': (
             'transport', 'src_dir', 'flags',
@@ -75,14 +76,14 @@ class HostConfigAdmin(admin.ModelAdmin):
 
     list_display = (
         'friendly_name', 'hostgroup', 'notes', 'host',
-        'disk_usage', 'run_time', 'retentions', 'options',
-        'date_complete', 'failure_datetime',
+        'disk_usage', 'run_time', 'options',
+        'last_ok_', 'first_fail_',
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
     list_filter = ('enabled',)
     if len(settings.PLANB_STORAGE_POOLS) != 1:
         list_filter += ('dest_pool',)
-    list_filter += ('hostgroup', 'running', 'failure_datetime')
+    list_filter += ('hostgroup', 'running', 'first_fail')
 
     actions = [enqueue_multiple]
     form = HostConfigAdminForm
@@ -109,6 +110,24 @@ class HostConfigAdmin(admin.ModelAdmin):
     run_time.admin_order_field = 'complete_duration'
     run_time.short_description = _('run time')  # "last run time"
 
+    def last_ok_(self, object):
+        if not object.last_ok:
+            return '-'
+        days = (timezone.now() - object.last_ok).days
+        if days:
+            return '{}d'.format(days)
+        return 'OK'
+    last_ok_.admin_order_field = 'last_ok'
+    last_ok_.short_description = _('-ok')
+
+    def first_fail_(self, object):
+        if not object.first_fail:
+            return '-'
+        days = (timezone.now() - object.first_fail).days
+        return '{}d'.format(days)
+    first_fail_.admin_order_field = 'first_fail'
+    first_fail_.short_description = _('-fail')
+
     def enabled_x(self, object):
         return object.enabled
     enabled_x.admin_order_field = 'enabled'
@@ -134,7 +153,7 @@ class HostConfigAdmin(admin.ModelAdmin):
                 value += 0x100000000
             return value
 
-        ret = [object.user]
+        ret = [self.retentions(object), object.user]
         if object.use_sudo:
             ret.append('sudo')
         if object.use_ionice:

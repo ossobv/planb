@@ -48,7 +48,7 @@ class HostConfigAdmin(admin.ModelAdmin):
             'description', 'includes', 'excludes', 'enabled',
         )}),
         ('Status', {'fields': (
-            'last_ok', 'complete_duration', 'backup_size_mb',
+            'last_ok', 'average_duration', 'backup_size_mb',
             'last_run', 'first_fail', 'queued', 'running',
         )}),
         ('Transport options', {'fields': (
@@ -106,8 +106,8 @@ class HostConfigAdmin(admin.ModelAdmin):
     disk_usage.short_description = _('disk usage')
 
     def run_time(self, object):
-        return human.seconds(object.complete_duration)
-    run_time.admin_order_field = 'complete_duration'
+        return human.seconds(object.average_duration)
+    run_time.admin_order_field = 'average_duration'
     run_time.short_description = _('run time')  # "last run time"
 
     def last_ok_(self, object):

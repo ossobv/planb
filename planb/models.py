@@ -128,12 +128,12 @@ class HostConfig(models.Model):
     first_fail = models.DateTimeField(
         _('First backup failure'), blank=True, null=True)
 
-    complete_duration = models.PositiveIntegerField(
+    average_duration = models.PositiveIntegerField(
         'Time', default=0,  # this value may vary..
-        help_text=_('Duration in seconds of last successful job.'))
+        help_text=_('Average duration of succesful jobs in seconds.'))
 
-    running = models.BooleanField(default=False)
     enabled = models.BooleanField(default=True)
+    running = models.BooleanField(default=False)
     queued = models.BooleanField(default=False)
 
     hostgroup = models.ForeignKey(
@@ -218,7 +218,7 @@ class HostConfig(models.Model):
         copy.last_run = BOGODATE
         copy.first_fail = None
         copy.queued = copy.running = False
-        copy.complete_duration = 0
+        copy.average_duration = 0
         copy.backup_size_mb = 0
 
         # Use the overrides.

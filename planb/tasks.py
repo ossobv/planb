@@ -128,6 +128,16 @@ class JobRunner:
     def __init__(self, job_id):
         self._job_id = job_id
 
+    def get_average_duration(self):
+        # Take average of last 10 runs.
+        durations = (
+            BackupRun.objects
+            .filter(hostconfig_id=self._job_id, success=True)
+            .order_by('-id').values_list('duration', flat=True))[0:10]
+        if not durations:
+            return 0  # impossible.. we should have backupruns if we call this
+        return sum(durations) // len(durations)
+
     def conditional_job_run(self):
         now = timezone.now()
         if 9 <= now.hour < 17:
@@ -205,7 +215,7 @@ class JobRunner:
                 last_ok=now,                        # success
                 last_run=now,                       # now
                 first_fail=None,                    # no failure
-                complete_duration=run.duration,     # "runtime"
+                average_duration=self.get_average_duration(),
                 backup_size_mb=run.total_size_mb)   # "disk usage"
 
             # Mail if failed recently.

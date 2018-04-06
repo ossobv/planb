@@ -21,11 +21,6 @@ from planb.storage.zfs import Zfs
 from .fields import FilelistField, MultiEmailField
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
 
-try:
-    from setproctitle import getproctitle, setproctitle
-except ImportError:
-    getproctitle = setproctitle = None
-
 logger = logging.getLogger(__name__)
 
 BOGODATE = datetime(1970, 1, 2, tzinfo=timezone.utc)
@@ -496,29 +491,6 @@ class HostConfig(models.Model):
         logger.info(
             'Rsync exited with code %s for %s. Output: %s',
             returncode, self.friendly_name, output)
-
-    def run(self):
-        if setproctitle:
-            oldproctitle = getproctitle()
-            setproctitle('[backing up %d: %s]' % (self.pk, self.friendly_name))
-
-        try:
-            self.run_rsync()
-            self.snapshot_rotate()
-            self.snapshot_create()
-
-            # Send signal that we're done.
-            self.signal_done(True)
-
-        except:
-            # Send signal that we've failed.
-            self.signal_done(False)
-            # Propagate.
-            raise
-
-        finally:
-            if setproctitle:
-                setproctitle(oldproctitle)
 
     def signal_done(self, success):
         instance = HostConfig.objects.get(pk=self.pk)

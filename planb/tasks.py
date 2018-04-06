@@ -6,11 +6,18 @@ from dutree import Scanner
 
 from django.core.mail import mail_admins
 from django.db import connection
+from django.db.models import Q
 from django.utils import timezone
 
 from django_q.tasks import async
 
 from .models import BOGODATE, BackupRun, HostConfig, bfs
+
+try:
+    from setproctitle import getproctitle, setproctitle
+except ImportError:
+    getproctitle = None
+    setproctitle = (lambda x: None)
 
 logger = logging.getLogger(__name__)
 
@@ -177,16 +184,30 @@ class JobRunner:
         t0 = time.time()
         logger.info('[%s] Starting backup', job)
 
+        # State that we're running.
+        if getproctitle:
+            oldproctitle = getproctitle()
+
         # Create log.
         run = BackupRun.objects.create(hostconfig_id=job.pk)
         try:
             # Rsync job.
-            job.run()
+            setproctitle('[backing up %d: %s]: rsync' % (
+                job.pk, job.friendly_name))
+            job.run_rsync()
 
             # Dutree job.
+            setproctitle('[backing up %d: %s]: dutree' % (
+                job.pk, job.friendly_name))
             path = bfs.data_dir_get(
                 job.dest_pool, job.hostgroup.name, job.friendly_name)
             dutree = Scanner(path).scan()
+
+            # Update snapshots.
+            setproctitle('[backing up %d: %s]: snapshots' % (
+                job.pk, job.friendly_name))
+            job.snapshot_rotate()
+            job.snapshot_create()
 
             # Close the DB connection because it may be stale.
             connection.close()
@@ -195,10 +216,9 @@ class JobRunner:
             job.refresh_from_db()
 
             # Get total size.
-            size = bfs.parse_backup_sizes(
-                job.dest_pool, job.hostgroup.name, job.friendly_name,
-                job.last_ok)['size']
-            total_size_mb = size >> 10  # bytes to MiB
+            total_size = bfs.parse_backup_sizes(
+                job.dest_pool, job.hostgroup.name, job.friendly_name)
+            total_size_mb = total_size >> 10  # bytes to MiB
 
             # Get snapshot size and tree.
             snapshot_size_mb = (dutree.size() + 524288) // 1048576
@@ -257,8 +277,9 @@ class JobRunner:
             now = timezone.now()
             HostConfig.objects.filter(pk=job.pk).update(
                 last_run=now)    # don't overwrite last_ok
-            HostConfig.objects.filter(pk=job.pk, first_fail=None).update(
-                first_fail=now)  # overwrite first_fail only if unset
+            (HostConfig.objects.filter(pk=job.pk)
+             .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
+             .update(first_fail=now))  # overwrite first_fail only if unset
 
             # Don't re-raise exception. We'll handle it.
             # As far as the workers are concerned, this job is done.
@@ -266,6 +287,10 @@ class JobRunner:
 
         else:
             logger.info('[%s] Completed successfully', job)
+
+        finally:
+            if getproctitle:
+                setproctitle(oldproctitle)
 
     def finalize_job_run(self, success, resultset):
         # Set the queued/running to False when we're done.
@@ -278,6 +303,8 @@ class JobRunner:
         if not success:
             # This should mail someone.
             logger.error('[%s] Job run failure: %r', job, resultset)
+            job.signal_done(success=False)
             return
 
         logger.info('[%s] Done', job)
+        job.signal_done(success=True)

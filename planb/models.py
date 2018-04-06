@@ -69,15 +69,6 @@ class HostGroup(models.Model):
         help_text=_('Use a newline per emailaddress'))
     last_monthly_report = models.DateTimeField(blank=True, null=True)
 
-    def get_backup_info(self):
-        results = {}
-        for hostconfig in self.hostconfigs.all():
-            results[hostconfig.friendly_name] = bfs.parse_backup_sizes(
-                hostconfig.dest_pool, self.name, hostconfig.friendly_name,
-                hostconfig.last_ok)
-            results[hostconfig.friendly_name]['enabled'] = hostconfig.enabled
-        return results
-
     def __str__(self):
         return self.name
 
@@ -128,6 +119,9 @@ class HostConfig(models.Model):
     first_fail = models.DateTimeField(
         _('First backup failure'), blank=True, null=True)
 
+    total_size_mb = models.PositiveIntegerField(
+        default=0, db_index=True,
+        help_text=_('Estimated total backup size in MiB.'))
     average_duration = models.PositiveIntegerField(
         'Time', default=0,  # this value may vary..
         help_text=_('Average duration of succesful jobs in seconds.'))
@@ -152,9 +146,6 @@ class HostConfig(models.Model):
     yearly_retention = models.IntegerField(
         default=1, blank=True, null=True,
         help_text=_('How many yearly\'s do we need to keep?'))
-    backup_size_mb = models.PositiveIntegerField(
-        default=0, db_index=True,
-        help_text=_('Estimated total backup size in MiB.'))
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
@@ -219,7 +210,7 @@ class HostConfig(models.Model):
         copy.first_fail = None
         copy.queued = copy.running = False
         copy.average_duration = 0
-        copy.backup_size_mb = 0
+        copy.total_size_mb = 0
 
         # Use the overrides.
         for key, value in override.items():
@@ -515,14 +506,6 @@ class HostConfig(models.Model):
             self.run_rsync()
             self.snapshot_rotate()
             self.snapshot_create()
-
-            # Atomic update of size.
-            size = bfs.parse_backup_sizes(
-                self.dest_pool, self.hostgroup.name, self.friendly_name,
-                self.last_ok)['size']
-            size_mb = size[0:-6] or '0'  # :P  FIXME: this is not MiB!?
-            HostConfig.objects.filter(pk=self.pk).update(
-                backup_size_mb=size_mb)
 
             # Send signal that we're done.
             self.signal_done(True)

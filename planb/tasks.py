@@ -182,9 +182,10 @@ class JobRunner:
         try:
             # Rsync job.
             job.run()
+
             # Dutree job.
             path = bfs.data_dir_get(
-                job.dest_pool, str(job.hostgroup), job.friendly_name)
+                job.dest_pool, job.hostgroup.name, job.friendly_name)
             dutree = Scanner(path).scan()
 
             # Close the DB connection because it may be stale.
@@ -193,30 +194,35 @@ class JobRunner:
             # Yay, we're done.
             job.refresh_from_db()
 
-            # Store success on the run job.
-            total_size_mb = job.backup_size_mb  # bleh.. get it from here..
+            # Get total size.
+            size = bfs.parse_backup_sizes(
+                job.dest_pool, job.hostgroup.name, job.friendly_name,
+                job.last_ok)['size']
+            total_size_mb = size >> 10  # bytes to MiB
+
+            # Get snapshot size and tree.
             snapshot_size_mb = (dutree.size() + 524288) // 1048576
             snapshot_size_yaml = '\n'.join(
                 '{}: {}'.format(
                     yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
                 for i in dutree.get_leaves())
+
+            # Store run info.
             BackupRun.objects.filter(pk=run.pk).update(
                 duration=(time.time() - t0),
                 success=True,
                 total_size_mb=total_size_mb,
                 snapshot_size_mb=snapshot_size_mb,
                 snapshot_size_listing=snapshot_size_yaml)
-            run.refresh_from_db()
 
             # Cache values on the hostconfig.
             now = timezone.now()
-
             HostConfig.objects.filter(pk=job.pk).update(
                 last_ok=now,                        # success
                 last_run=now,                       # now
                 first_fail=None,                    # no failure
                 average_duration=self.get_average_duration(),
-                backup_size_mb=run.total_size_mb)   # "disk usage"
+                total_size_mb=total_size_mb)       # "disk usage"
 
             # Mail if failed recently.
             if first_fail:  # last job was not okay

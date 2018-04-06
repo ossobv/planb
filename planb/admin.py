@@ -48,7 +48,7 @@ class HostConfigAdmin(admin.ModelAdmin):
             'description', 'includes', 'excludes', 'enabled',
         )}),
         ('Status', {'fields': (
-            'last_ok', 'average_duration', 'backup_size_mb',
+            'last_ok', 'average_duration', 'total_size_mb',
             'last_run', 'first_fail', 'queued', 'running',
         )}),
         ('Transport options', {'fields': (
@@ -101,8 +101,8 @@ class HostConfigAdmin(admin.ModelAdmin):
         return ret
 
     def disk_usage(self, object):
-        return human.bytes(object.backup_size_mb << 20)
-    disk_usage.admin_order_field = 'backup_size_mb'
+        return human.bytes(object.total_size_mb << 20)
+    disk_usage.admin_order_field = 'total_size_mb'
     disk_usage.short_description = _('disk usage')
 
     def run_time(self, object):

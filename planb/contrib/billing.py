@@ -86,32 +86,36 @@ def daily_hostgroup_report(data_poster):
     This could be run daily to report to REMOTE how many data each
     hostgroup has backed up.
     """
-    for hostgroup in HostGroup.objects.all():
-        info = hostgroup.get_backup_info()  # list of dicts with backupdata
-        for key, val in info.items():
-            date_ = val['date'].replace(
-                microsecond=0,
-                tzinfo=None)  # remove +00:00
+    first_day_of_this_month = date.today()
+    today_is_first_day_of_the_month = (first_day_of_this_month.day == 1)
+    first_day_of_this_month = first_day_of_this_month.replace(day=1)
 
-            # Special hacks here. REMOTE will accept duplicate values,
-            # but only for the 0th second of the month. If we're pushing
-            # old records -- for stale/disabled backups -- we'll update
-            # the time to the 0th second of this month. That way we'll
-            # get 1 backupinfo record for every month and the hostgroup
-            # can get billed for it.
-            first_day_of_this_month = date.today().replace(day=1)
-            if date_.date() < first_day_of_this_month:
-                date_ = date(
-                    first_day_of_this_month.year,
-                    first_day_of_this_month.month,
-                    1)
-            elif not val['enabled']:
-                continue  # write it once a month, should be enough
+    for hostgroup in HostGroup.objects.order_by('name'):
+        for hostconfig in (
+                # Find hostconfigs which succeeded at least once.
+                hostgroup.hostconfigs.exclude(last_ok=None)
+                .order_by('friendly_name')):
+
+            # Take date, and drop microseconds and timezone.
+            date_ = hostconfig.last_ok.replace(microsecond=0, tzinfo=None)
+
+            if not hostconfig.enabled:
+                # Special hacks here. REMOTE will accept duplicate values,
+                # but only for the 0th second of the month. If we're pushing
+                # old records -- for stale/disabled backups -- we'll update
+                # the time to the 0th second of this month. That way we'll
+                # get 1 backupinfo record for every month and the hostgroup
+                # can get billed for it.
+                if not today_is_first_day_of_the_month:
+                    continue
+                # Update the date to the 0th second of the month.
+                date_ = first_day_of_this_month
 
             # Set values and post.
             data = {
-                'name': '{}-{}'.format(hostgroup.name, key),
+                'name': '{}-{}'.format(
+                    hostgroup.name, hostconfig.friendly_name),
                 'date': date_,
-                'size': val['size'],
+                'size': hostconfig.total_size_mb << 10  # MiB to B
             }
             data_poster.post(data)

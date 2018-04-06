@@ -197,8 +197,7 @@ class Zfs(OldStyleStorage):
         datetimestamp = datetime.date(datetime.strptime(dts, '%Y%m%d%H%M'))
         return datetimestamp < today
 
-    def parse_backup_sizes(self, rootdir, customer, friendly_name,
-                           completion_datetime):
+    def parse_backup_sizes(self, rootdir, customer, friendly_name):
         cmd = (
             'get', '-o', 'value', '-Hp', 'used',
             self.get_dataset_name(rootdir, customer, friendly_name))
@@ -211,7 +210,4 @@ class Zfs(OldStyleStorage):
         else:
             size = out.strip()
 
-        return {
-            'size': size,
-            'date': completion_datetime,
-        }
+        return int(size)

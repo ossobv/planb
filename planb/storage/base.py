@@ -179,13 +179,8 @@ class OldStyleStorage(object):
     def snapshots_rotate(self, rootdir, customer, friendly_name, retention):
         raise NotImplementedError()
 
-    def parse_backup_sizes(self, rootdir, customer, friendly_name,
-                           completion_datetime):
+    def parse_backup_sizes(self, rootdir, customer, friendly_name):
         '''
-        Should return a dict of dicts containing size in bytes and dates.
-        {
-            'used': '123456789',
-            'date': completion_datetime,
-        }
+        Should return the total size used.
         '''
         raise NotImplementedError()

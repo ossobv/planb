@@ -1,10 +1,23 @@
 Changes
 -------
 
-v1.4_dev - *XXXX-XX-XX*
-~~~~~~~~~~~~~~~~~~~~~~~
+v1.4 - *2018-04-06*
+~~~~~~~~~~~~~~~~~~~
 
-- (Version after 1.3.)
+**Web interface**
+
+- Show job failures in hostconfig detail view.
+- Reduce clutter in hostconfig list view, using smaller items and less
+  clutter.
+- Show average run time, instead of last run time.
+
+**Other**
+
+- Fix bug with sending of breport emails.
+- Use git version for pip-install if available; add makefile for quick
+  commands.
+- Update qcluster argv so it's still considered busy while doing the
+  dutree scan.
 
 
 v1.3 - *2018-03-19*

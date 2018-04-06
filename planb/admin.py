@@ -96,8 +96,8 @@ class HostConfigAdmin(admin.ModelAdmin):
 
     def notes(self, object):
         ret = object.description.split('\n', 1)[0].strip()
-        if len(ret) > 32:
-            return ret[0:32] + '...'
+        if len(ret) > 12:
+            return ret[0:12] + '...'
         return ret
 
     def disk_usage(self, object):

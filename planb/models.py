@@ -459,6 +459,11 @@ class HostConfig(models.Model):
             # Work around rsync bug in 3.1.0:
             # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
             ('--block-size=65536',) +
+            # Fix problems when we're not root, but we can download dirs
+            # with improper perms because we're root remotely. Rsync
+            # could set up dir structures where files inside cannot be
+            # accessible anymore. Make sure our user has rwx access.
+            ('--chmod=Du+rwx',) +
             flags +
             self.create_exclude_string() +
             self.create_include_string() +

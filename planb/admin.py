@@ -48,8 +48,9 @@ class HostConfigAdmin(admin.ModelAdmin):
             'description', 'includes', 'excludes', 'enabled',
         )}),
         ('Status', {'fields': (
-            'last_ok', 'average_duration', 'total_size_mb',
+            'last_ok', 'disk_usage', 'run_time',
             'last_run', 'first_fail', 'queued', 'running',
+            'last_error',
         )}),
         ('Transport options', {'fields': (
             'transport', 'src_dir', 'flags',
@@ -119,6 +120,15 @@ class HostConfigAdmin(admin.ModelAdmin):
         return 'OK'
     last_ok_.admin_order_field = 'last_ok'
     last_ok_.short_description = _('-ok')
+
+    def last_error(self, object):
+        if object.first_fail is None:
+            return '-'
+        try:
+            run = object.backuprun_set.order_by('-id')[0]
+        except IndexError:
+            return '-'
+        return run.error_text or '-'
 
     def first_fail_(self, object):
         if not object.first_fail:

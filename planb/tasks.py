@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import time
 
@@ -145,6 +146,66 @@ class JobRunner:
             return 0  # impossible.. we should have backupruns if we call this
         return sum(durations) // len(durations)
 
+    def get_dutree_listing(self, job):
+        # Yuck, use a poor mans file lock to make sure we only run one
+        # dutree() call per dest_pool (backup filesystem). This should
+        # reduce contention.
+        #
+        # Two drawbacks:
+        # - the total run_time is now dependent on other jobs;
+        # - the lock isn't fair, so one job could be waiting for ages
+        #   while others skip the queue.
+        #
+        timeout = 2 * 3600  # 2 hours should be waaaaay too much
+        lock_filename = '/tmp/planb-dutree-{user}-{pool}.lock'.format(
+            user=os.getuid(), pool=job.dest_pool)
+        path = bfs.data_dir_get(
+            job.dest_pool, job.hostgroup.name, job.friendly_name)
+
+        setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
+            job.pk, job.friendly_name))
+
+        while True:
+            try:
+                # Poor mans lock. If this is ever 'kill -9'd, all our
+                # jobs would fail with a runtimeerror after
+                # timeout-time.
+                fd = os.open(lock_filename, os.O_CREAT | os.O_EXCL)
+            except:
+                if timeout is not None and timeout <= 0:
+                    raise RuntimeError('Lock %r is already held' % (
+                        lock_filename,))
+                time.sleep(1)
+                if timeout is not None:
+                    timeout -= 1
+            else:
+                break
+
+        setproctitle('[backing up %d: %s]: dutree' % (
+            job.pk, job.friendly_name))
+        try:
+            dutree = Scanner(path).scan()
+        finally:
+            try:
+                os.close(fd)
+            except:
+                pass
+            try:
+                os.unlink(lock_filename)
+            except:
+                pass
+
+        # Get snapshot size and tree.
+        snapshot_size_mb = (dutree.size() + 524288) >> 20  # bytes to MiB
+        snapshot_size_yaml = '\n'.join(
+            '{}: {}'.format(
+                yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
+            for i in dutree.get_leaves())
+
+        return {
+            'snapshot_size_mb': snapshot_size_mb,
+            'snapshot_size_yaml': snapshot_size_yaml}
+
     def conditional_job_run(self):
         now = timezone.now()
         if 9 <= now.hour < 17:
@@ -197,11 +258,7 @@ class JobRunner:
             job.run_rsync()
 
             # Dutree job.
-            setproctitle('[backing up %d: %s]: dutree' % (
-                job.pk, job.friendly_name))
-            path = bfs.data_dir_get(
-                job.dest_pool, job.hostgroup.name, job.friendly_name)
-            dutree = Scanner(path).scan()
+            dutree = self.get_dutree_listing(job)
 
             # Update snapshots.
             setproctitle('[backing up %d: %s]: snapshots' % (
@@ -218,22 +275,15 @@ class JobRunner:
             # Get total size.
             total_size = bfs.parse_backup_sizes(
                 job.dest_pool, job.hostgroup.name, job.friendly_name)
-            total_size_mb = total_size >> 20  # bytes to MiB
-
-            # Get snapshot size and tree.
-            snapshot_size_mb = (dutree.size() + 524288) // 1048576
-            snapshot_size_yaml = '\n'.join(
-                '{}: {}'.format(
-                    yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
-                for i in dutree.get_leaves())
+            total_size_mb = (total_size + 524288) >> 20  # bytes to MiB
 
             # Store run info.
             BackupRun.objects.filter(pk=run.pk).update(
                 duration=(time.time() - t0),
                 success=True,
                 total_size_mb=total_size_mb,
-                snapshot_size_mb=snapshot_size_mb,
-                snapshot_size_listing=snapshot_size_yaml)
+                snapshot_size_mb=dutree['snapshot_size_mb'],
+                snapshot_size_listing=dutree['snapshot_size_yaml'])
 
             # Cache values on the hostconfig.
             now = timezone.now()

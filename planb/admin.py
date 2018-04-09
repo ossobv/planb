@@ -37,7 +37,9 @@ class HostGroupAdmin(admin.ModelAdmin):
             self.hostconfig_iterator(object))
 
     def hostconfig_iterator(self, object):
-        for pk, name in object.hostconfigs.values_list('id', 'friendly_name'):
+        for pk, name in (
+                object.hostconfigs.values_list('id', 'friendly_name')
+                .order_by('friendly_name')):
             yield (reverse("admin:planb_hostconfig_change", args=(pk,)), name)
 
 

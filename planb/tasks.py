@@ -218,7 +218,7 @@ class JobRunner:
             # Get total size.
             total_size = bfs.parse_backup_sizes(
                 job.dest_pool, job.hostgroup.name, job.friendly_name)
-            total_size_mb = total_size >> 10  # bytes to MiB
+            total_size_mb = total_size >> 20  # bytes to MiB
 
             # Get snapshot size and tree.
             snapshot_size_mb = (dutree.size() + 524288) // 1048576

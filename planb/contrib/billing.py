@@ -116,6 +116,6 @@ def daily_hostgroup_report(data_poster):
                 'name': '{}-{}'.format(
                     hostgroup.name, hostconfig.friendly_name),
                 'date': date_,
-                'size': hostconfig.total_size_mb << 10  # MiB to B
+                'size': hostconfig.total_size_mb << 20  # MiB to B
             }
             data_poster.post(data)

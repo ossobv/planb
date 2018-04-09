@@ -33,14 +33,22 @@ def get_pools():
     pools = []
     for name, pool, bfs in settings.PLANB_STORAGE_POOLS:
         assert bfs == 'zfs', bfs
-        val1 = float(check_output(
-            [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
-             'get', '-Hpo', 'value', 'used', pool]).strip())
-        val2 = float(check_output(
-            [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
-             'get', '-Hpo', 'value', 'available', pool]).strip())
-        pct = '{pct:.0f}%'.format(pct=(100 * (val1 / (val1 + val2))))
-        available = int(val2 / 1024 / 1024 / 1024)
+        try:
+            val1 = float(check_output(
+                [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
+                 'get', '-Hpo', 'value', 'used', pool]).strip())
+            val2 = float(check_output(
+                [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
+                 'get', '-Hpo', 'value', 'available', pool]).strip())
+        except (CalledProcessError, ValueError):
+            # If the ZFS CLI binary is not found, or if you use a bogus
+            # binary (/bin/true) which returns no valid values, don't
+            # die, but let the get_pools() return something sensible.
+            available = pct = '???'
+        else:
+            pct = '{pct:.0f}%'.format(pct=(100 * (val1 / (val1 + val2))))
+            available = int(val2 / 1024 / 1024 / 1024)
+
         pools.append((pool, '{}, {}G free ({} used)'.format(
             name, available, pct)))
     return tuple(pools)

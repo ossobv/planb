@@ -10,7 +10,7 @@ from django.utils.translation import ugettext as _
 from planb.utils import human
 
 from .forms import HostConfigAdminForm
-from .models import BackupRun, HostGroup, HostConfig
+from .models import BOGODATE, BackupRun, HostGroup, HostConfig
 from .tasks import async_backup_job
 
 
@@ -114,10 +114,8 @@ class HostConfigAdmin(admin.ModelAdmin):
     def last_ok_(self, object):
         if not object.last_ok:
             return '-'
-        days = (timezone.now() - object.last_ok).days
-        if days:
-            return '{}d'.format(days)
-        return 'OK'
+        diff = (timezone.now() - object.last_ok)
+        return '-{}'.format(human.seconds(diff.total_seconds()))
     last_ok_.admin_order_field = 'last_ok'
     last_ok_.short_description = _('-ok')
 
@@ -133,8 +131,10 @@ class HostConfigAdmin(admin.ModelAdmin):
     def first_fail_(self, object):
         if not object.first_fail:
             return '-'
-        days = (timezone.now() - object.first_fail).days
-        return '{}d'.format(days)
+        if object.first_fail == BOGODATE:
+            return 'MANUAL'
+        diff = (timezone.now() - object.first_fail)
+        return '-{}'.format(human.seconds(diff.total_seconds()))
     first_fail_.admin_order_field = 'first_fail'
     first_fail_.short_description = _('-fail')
 

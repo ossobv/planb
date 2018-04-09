@@ -1,4 +1,4 @@
-from dateutil.relativedelta import relativedelta
+from datetime import timedelta
 from subprocess import check_output
 
 from django.conf import settings
@@ -26,10 +26,10 @@ class Command(BaseCommand):
         self.send_monthly_reports(qs)
 
     def send_monthly_reports(self, qs):
-        last_month = timezone.now() - relativedelta(days=25)
+        a_while_ago = timezone.now() - timedelta(days=25)
         qs = qs.filter(
             Q(hostgroup__last_monthly_report=None) |
-            Q(hostgroup__last_monthly_report__lt=last_month))
+            Q(hostgroup__last_monthly_report__lt=a_while_ago))
 
         lastgroup = None
         hosts = []

@@ -60,9 +60,8 @@ class HostConfigAdmin(admin.ModelAdmin):
             'use_ionice',
         )}),
         ('Retention', {'fields': (
-            'retention', 'keep_weekly', 'weekly_retention',
-            'keep_monthly', 'monthly_retention', 'keep_yearly',
-            'yearly_retention',
+            'daily_retention', 'weekly_retention',
+            'monthly_retention', 'yearly_retention',
         )}),
     )
 
@@ -178,13 +177,13 @@ class HostConfigAdmin(admin.ModelAdmin):
 
     def retentions(self, object):
         retention = []
-        if object.retention:
-            retention.append('%dd' % object.retention)
-        if object.keep_weekly:
+        if object.daily_retention:
+            retention.append('%dd' % object.daily_retention)
+        if object.weekly_retention:
             retention.append('%dw' % object.weekly_retention)
-        if object.keep_monthly:
+        if object.monthly_retention:
             retention.append('%dm' % object.monthly_retention)
-        if object.keep_yearly:
+        if object.yearly_retention:
             retention.append('%dy' % object.yearly_retention)
         return '/'.join(retention)
 

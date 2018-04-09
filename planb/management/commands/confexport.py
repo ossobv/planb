@@ -144,7 +144,7 @@ class HostAsConfig(object):
 
     def get_retention(self):
         return ('retention', OrderedDict((
-            ('daily', self._host.retention),
+            ('daily', self._host.daily_retention),
             ('weekly', self._host.weekly_retention),
             ('monthly', self._host.monthly_retention),
             ('yearly', self._host.yearly_retention),

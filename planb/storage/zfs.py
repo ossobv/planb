@@ -128,8 +128,8 @@ class Zfs(OldStyleStorage):
         except AttributeError:
             return True  # Keep
         datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-        return datetimestamp > (datetime.now() -
-                                relativedelta(days=retention+1))
+        return datetimestamp > (
+            datetime.now() - relativedelta(days=retention+1))
 
     def snapshot_retain_weekly(self, snapname, retention):
         try:
@@ -138,8 +138,8 @@ class Zfs(OldStyleStorage):
             return True  # Keep
         datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
         snapdate = datetime.date(datetimestamp)
-        today_a_week_ago = datetime.date(datetime.now() -
-                                         relativedelta(weeks=retention+1))
+        today_a_week_ago = datetime.date(
+            datetime.now() - relativedelta(weeks=retention+1))
         return snapdate >= today_a_week_ago
 
     def snapshot_retain_monthly(self, snapname, retention):
@@ -150,8 +150,8 @@ class Zfs(OldStyleStorage):
 
         datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
         snapdate = datetime.date(datetimestamp)
-        today_a_month_ago = datetime.date(datetime.now() -
-                                          relativedelta(months=retention+1))
+        today_a_month_ago = datetime.date(
+            datetime.now() - relativedelta(months=retention+1))
         return snapdate >= today_a_month_ago
 
     def snapshot_retain_yearly(self, snapname, retention):
@@ -161,8 +161,8 @@ class Zfs(OldStyleStorage):
             return True  # Keep
         datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
         snapdate = datetime.date(datetimestamp)
-        today_a_year_ago = datetime.date(datetime.now() -
-                                         relativedelta(years=retention+1))
+        today_a_year_ago = datetime.date(
+            datetime.now() - relativedelta(years=retention+1))
         return snapdate >= today_a_year_ago
 
     def snapshots_rotate(self, rootdir, customer, friendly_name, **kwargs):

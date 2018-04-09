@@ -5,6 +5,7 @@ from dateutil.relativedelta import relativedelta
 
 from django.conf import settings
 from django.core.mail import mail_admins
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
 from django.db import connections, models
 from django.dispatch import receiver
@@ -83,9 +84,6 @@ class HostConfig(models.Model):
     user = models.CharField(max_length=254, default='root')
     src_dir = models.CharField(max_length=254, default='/')
     dest_pool = models.CharField(max_length=254, choices=())  # set in forms.py
-    retention = models.IntegerField(
-        verbose_name=_('Daily retention'), default=15,
-        help_text=_('How many days do we keep?'))
     rsync_path = models.CharField(
         max_length=31, default=settings.PLANB_RSYNC_BIN)
     ionice_path = models.CharField(
@@ -129,18 +127,23 @@ class HostConfig(models.Model):
         HostGroup, related_name='hostconfigs', on_delete=models.PROTECT)
     use_sudo = models.BooleanField(default=False)
     use_ionice = models.BooleanField(default=False)
-    keep_weekly = models.BooleanField(default=False)
-    keep_monthly = models.BooleanField(default=False)
-    keep_yearly = models.BooleanField(default=False)
+
+    daily_retention = models.IntegerField(
+        default=15,
+        validators=[MinValueValidator(1), MaxValueValidator(1000)],
+        help_text=_('How many daily\'s do we keep?'))
     weekly_retention = models.IntegerField(
-        default=3, blank=True, null=True,
-        help_text=_('How many weekly\'s do we need to keep?'))
+        default=3,
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+        help_text=_('How many weekly\'s do we keep?'))
     monthly_retention = models.IntegerField(
-        default=11, blank=True, null=True,
-        help_text=_('How many monthly\'s do we need to keep?'))
+        default=11,
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+        help_text=_('How many monthly\'s do we keep?'))
     yearly_retention = models.IntegerField(
-        default=1, blank=True, null=True,
-        help_text=_('How many yearly\'s do we need to keep?'))
+        default=1,
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+        help_text=_('How many yearly\'s do we keep?'))
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
@@ -153,21 +156,21 @@ class HostConfig(models.Model):
     def retention_display(self):
         retention = [
             ngettext(
-                '%(days)dday', '%(days)ddays', self.retention) % {
-                'days': self.retention}]
-        if self.keep_weekly:
+                '%(days)dday', '%(days)ddays', self.daily_retention) % {
+                'days': self.daily_retention}]
+        if self.weekly_retention:
             retention.append(
                 ngettext(
                     '%(weeks)dweek', '%(weeks)dweeks',
                     self.weekly_retention) % {
                     'weeks': self.weekly_retention})
-        if self.keep_monthly:
+        if self.monthly_retention:
             retention.append(
                 ngettext(
                     '%(months)dmonth', '%(months)dmonths',
                     self.monthly_retention) % {
                     'months': self.monthly_retention})
-        if self.keep_yearly:
+        if self.yearly_retention:
             retention.append(
                 ngettext(
                     '%(years)dyear', '%(years)dyears',
@@ -233,7 +236,7 @@ class HostConfig(models.Model):
         return bfs.snapshots_rotate(
             self.dest_pool, self.hostgroup,
             self.friendly_name,
-            daily_retention=self.retention,
+            daily_retention=self.daily_retention,
             weekly_retention=self.weekly_retention,
             monthly_retention=self.monthly_retention,
             yearly_retention=self.yearly_retention)
@@ -254,18 +257,18 @@ class HostConfig(models.Model):
         snaplist = []
         if not snapshots:
             snaplist.append(datetime.now().strftime('daily-%Y%m%d%H%M'))
-            if self.keep_weekly:
+            if self.weekly_retention:
                 snaplist.append(datetime.now().strftime('weekly-%Y%m%d%H%M'))
-            if self.keep_monthly:
+            if self.monthly_retention:
                 snaplist.append(datetime.now().strftime('monthly-%Y%m%d%H%M'))
-            if self.keep_yearly:
+            if self.yearly_retention:
                 snaplist.append(datetime.now().strftime('yearly-%Y%m%d%H%M'))
         else:
-            # Do we need a daily? We do, otherwise we wouldnt be here
+            # Do we need a daily? We do, otherwise we wouldnt be here.
             snaplist.append(datetime.now().strftime('daily-%Y%m%d%H%M'))
 
             # Do we need a weekly?
-            if self.keep_weekly:
+            if self.weekly_retention:
                 weeklies = [
                     x for x in snapshots
                     if x.split('@')[1].startswith('weekly')]
@@ -273,8 +276,8 @@ class HostConfig(models.Model):
                     latest = sorted(weeklies)[-1]
                     dts = latest.split('@', 1)[1].split('-', 1)[1]
                     datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-                    if datetimestamp < (datetime.now() -
-                                        relativedelta(weeks=1)):
+                    if datetimestamp < (
+                            datetime.now() - relativedelta(weeks=1)):
                         snaplist.append(
                             datetime.now().strftime('weekly-%Y%m%d%H%M'))
                 else:
@@ -282,7 +285,7 @@ class HostConfig(models.Model):
                         datetime.now().strftime('weekly-%Y%m%d%H%M'))
 
             # Do we need a monthly?
-            if self.keep_monthly:
+            if self.monthly_retention:
                 monthlies = [
                     x for x in snapshots
                     if x.split('@')[1].startswith('monthly')]
@@ -290,8 +293,8 @@ class HostConfig(models.Model):
                     latest = sorted(monthlies)[-1]
                     dts = latest.split('@', 1)[1].split('-', 1)[1]
                     datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-                    if datetimestamp < (datetime.now() -
-                                        relativedelta(months=1)):
+                    if datetimestamp < (
+                            datetime.now() - relativedelta(months=1)):
                         snaplist.append(
                             datetime.now().strftime('monthly-%Y%m%d%H%M'))
                 else:
@@ -299,7 +302,7 @@ class HostConfig(models.Model):
                         datetime.now().strftime('monthly-%Y%m%d%H%M'))
 
             # Do we need a yearly?
-            if self.keep_yearly:
+            if self.yearly_retention:
                 yearlies = [
                     x for x in snapshots
                     if x.split('@')[1].startswith('yearly')]
@@ -307,8 +310,8 @@ class HostConfig(models.Model):
                     latest = sorted(yearlies)[-1]
                     dts = latest.split('@', 1)[1].split('-', 1)[1]
                     datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-                    if datetimestamp < (datetime.now() -
-                                        relativedelta(years=1)):
+                    if datetimestamp < (
+                            datetime.now() - relativedelta(years=1)):
                         snaplist.append(
                             datetime.now().strftime('yearly-%Y%m%d%H%M'))
                 else:

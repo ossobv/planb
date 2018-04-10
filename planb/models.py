@@ -228,7 +228,7 @@ class HostConfig(models.Model):
     def can_backup(self):
         if not self.enabled:
             return False
-        if (self.last_ok.date() >= date.today() and
+        if (self.last_ok and self.last_ok.date() >= date.today() and
                 self.first_fail is None):
             return False
         # this one is heavy, avoid it using the date check above..

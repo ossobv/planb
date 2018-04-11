@@ -1,8 +1,8 @@
+FLAKE8 = $(shell which flake8.3 flake8 | head -n1)
+
 .PHONY: all reinstall uninstall-y install has-virtualenv
 
-all:
-	@echo 'Unsure what to make for all' >&2
-	@false
+all: flake8
 
 reload:
 	pkill -P1 -HUP -uplanb uwsgi
@@ -18,3 +18,10 @@ install: has-virtualenv
 
 has-virtualenv:
 	@test -n "$$VIRTUAL_ENV"
+
+.PHONY: flake8
+
+flake8:
+	test -n "$(FLAKE8)"
+	find . -type f -name '*.py' '!' -path '*/migrations/*' | \
+	  LC_ALL=C sort | xargs -d'\n' $(FLAKE8)

@@ -1,7 +1,3 @@
-import logging
-import os
-
-
 _DEFAULT_DIRS = tuple(
     'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
     .split(' '))

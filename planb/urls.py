@@ -3,7 +3,7 @@ from django.views.generic.base import RedirectView
 
 from .views import EnqueueJob
 
-from django.conf.urls import include, url
+from django.conf.urls import url
 
 admin.autodiscover()
 

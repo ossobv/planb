@@ -82,8 +82,6 @@ TODO
 * Re-add non-INFO output from planb_custom.daily...
   # run_backupinfo | grep -vFB1 INFO/ /var/log/osso-backup/billing.log |
   # mail -E -s "[$HOSTNAME] Backup billing push"
-* Add pepcleaning pre-commit hook.
-* Add flake-checking pre-commit hook.
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?

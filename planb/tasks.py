@@ -36,8 +36,7 @@ SINGLE_JOB_OPTS = {
 class FairButUnsafeRedisLock:
     """
     It's a fair lock -- first come first serve -- but if the redis DB is
-    flushed, we don't mind handing out a second or third simultaneous
-    access.
+    flushed, we don't mind handing out a second simultaneous access.
     """
     @staticmethod
     def get_connection():
@@ -74,18 +73,19 @@ class FairButUnsafeRedisLock:
         self._needs_pop = True
 
     def _peek(self):
-        # Allow lindex to return None: when someone flushed the redis.
+        assert self._needs_pop
         ret = self._conn.lindex(self._key, 0)
         if ret is None:
+            # Did someone flush the redis DB? Reschedule self.
             self._needs_pop = False
-            ret = self._value  # pretend we got our value
+            self._enqueue()
         return ret
 
     def _dequeue(self):
-        if self._needs_pop:
-            ret = self._conn.lpop(self._key)
-            assert ret in (self._value, None)  # allow flushed redis
-            self._needs_pop = False
+        assert self._needs_pop
+        ret = self._conn.lpop(self._key)
+        assert ret in (self._value, None)  # allow flushed redis
+        self._needs_pop = False
 
 
 def only_one_dutree_at_a_time(disk_pool):

@@ -75,7 +75,6 @@ TODO
 ----
 
 * Fix logrotate sample.
-* Move broker from Redis to DjangoORM? We don't need redis for anything else..
 * Add uwsgi-uid==djangoq-uid check?
 * Re-add some form of "list-stale-mounts" (!).
   # contrib/list-stale-mounts | mail -E -s "[$HOSTNAME] Stale ZFS mounts?"
@@ -83,7 +82,6 @@ TODO
 * Re-add non-INFO output from planb_custom.daily...
   # run_backupinfo | grep -vFB1 INFO/ /var/log/osso-backup/billing.log |
   # mail -E -s "[$HOSTNAME] Backup billing push"
-* Sort HostGroups in HostConfig sidebar.
 * Add pepcleaning pre-commit hook.
 * Add flake-checking pre-commit hook.
 * Alter HostGroup:
@@ -421,6 +419,9 @@ Rsync complains about ``failed to stat`` or ``mkdir failed``.
 
     Then you may be looking at parent directories with crooked
     permissions, like 077. Fix the permissions on the remote end.
+
+    However, many of these problems have likely been fixed by the
+    addition of the --chmod=Du+rwx rsync option.
 
 
 Backup success mail are sent, but failure mails are not.

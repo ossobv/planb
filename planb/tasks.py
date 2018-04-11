@@ -1,10 +1,12 @@
 import logging
 import os
 import re
+import redis
 import time
 
 from dutree import Scanner
 
+from django.conf import settings
 from django.core.mail import mail_admins
 from django.db import connection
 from django.db.models import Q
@@ -29,6 +31,68 @@ SINGLE_JOB_OPTS = {
     'hook': 'planb.tasks.finalize_job_run',
     'group': 'Single backup job',
 }
+
+
+class FairButUnsafeRedisLock:
+    """
+    It's a fair lock -- first come first serve -- but if the redis DB is
+    flushed, we don't mind handing out a second or third simultaneous
+    access.
+    """
+    @staticmethod
+    def get_connection():
+        return redis.StrictRedis(**settings.Q_CLUSTER['redis'])
+
+    def __init__(self, redisconn, key, uniqueid):
+        self._conn = redisconn
+        self._key = key
+        self._value = str(uniqueid).encode('utf-8')
+        self._needs_pop = False
+
+    def wait_for_turn(self):
+        t0 = time.time()
+        self._enqueue()
+        while self._peek() != self._value:
+            time.sleep(1)
+        return (time.time() - t0)
+
+    def i_am_done(self):
+        self._dequeue()
+
+    def __enter__(self):
+        return self.wait_for_turn()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self.i_am_done()
+        except:
+            pass
+
+    def _enqueue(self):
+        assert not self._needs_pop
+        self._conn.rpush(self._key, self._value)
+        self._needs_pop = True
+
+    def _peek(self):
+        # Allow lindex to return None: when someone flushed the redis.
+        ret = self._conn.lindex(self._key, 0)
+        if ret is None:
+            self._needs_pop = False
+            ret = self._value  # pretend we got our value
+        return ret
+
+    def _dequeue(self):
+        if self._needs_pop:
+            ret = self._conn.lpop(self._key)
+            assert ret in (self._value, None)  # allow flushed redis
+            self._needs_pop = False
+
+
+def only_one_dutree_at_a_time(disk_pool):
+    return FairButUnsafeRedisLock(
+        FairButUnsafeRedisLock.get_connection(),
+        'dutree:{}'.format(disk_pool),
+        os.getpid())
 
 
 def yaml_safe_str(value):
@@ -147,62 +211,29 @@ class JobRunner:
         return sum(durations) // len(durations)
 
     def get_dutree_listing(self, job):
-        # Yuck, use a poor mans file lock to make sure we only run one
-        # dutree() call per dest_pool (backup filesystem). This should
-        # reduce contention.
-        #
-        # Two drawbacks:
-        # - the total run_time is now dependent on other jobs;
-        # - the lock isn't fair, so one job could be waiting for ages
-        #   while others skip the queue.
-        #
-        timeout = 2 * 3600  # 2 hours should be waaaaay too much
-        lock_filename = '/tmp/planb-dutree-{user}-{pool}.lock'.format(
-            user=os.getuid(), pool=job.dest_pool)
-        path = bfs.data_dir_get(
-            job.dest_pool, job.hostgroup.name, job.friendly_name)
-
+        # Only one dutree at a time.
+        logger.info('[%s] Waiting for dutree lock', job)
         setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
             job.pk, job.friendly_name))
 
-        while True:
-            try:
-                # Poor mans lock. If this is ever 'kill -9'd, all our
-                # jobs would fail with a runtimeerror after
-                # timeout-time.
-                fd = os.open(lock_filename, os.O_CREAT | os.O_EXCL)
-            except:
-                if timeout is not None and timeout <= 0:
-                    raise RuntimeError('Lock %r is already held' % (
-                        lock_filename,))
-                time.sleep(1)
-                if timeout is not None:
-                    timeout -= 1
-            else:
-                break
-
-        setproctitle('[backing up %d: %s]: dutree' % (
-            job.pk, job.friendly_name))
-        try:
+        with only_one_dutree_at_a_time(job.dest_pool) as waited_seconds:
+            # Yes, got lock.
+            logger.info('[%s] Got dutree lock', job)
+            setproctitle('[backing up %d: %s]: dutree' % (
+                job.pk, job.friendly_name))
+            path = bfs.data_dir_get(
+                job.dest_pool, job.hostgroup.name, job.friendly_name)
             dutree = Scanner(path).scan()
-        finally:
-            try:
-                os.close(fd)
-            except:
-                pass
-            try:
-                os.unlink(lock_filename)
-            except:
-                pass
 
-        # Get snapshot size and tree.
-        snapshot_size_mb = (dutree.size() + 524288) >> 20  # bytes to MiB
-        snapshot_size_yaml = '\n'.join(
-            '{}: {}'.format(
-                yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
-            for i in dutree.get_leaves())
+            # Get snapshot size and tree.
+            snapshot_size_mb = (dutree.size() + 524288) >> 20  # bytes to MiB
+            snapshot_size_yaml = '\n'.join(
+                '{}: {}'.format(
+                    yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
+                for i in dutree.get_leaves())
 
         return {
+            'lock_wait_time': waited_seconds,
             'snapshot_size_mb': snapshot_size_mb,
             'snapshot_size_yaml': snapshot_size_yaml}
 
@@ -279,7 +310,7 @@ class JobRunner:
 
             # Store run info.
             BackupRun.objects.filter(pk=run.pk).update(
-                duration=(time.time() - t0),
+                duration=(time.time() - t0 - dutree['lock_wait_time']),
                 success=True,
                 total_size_mb=total_size_mb,
                 snapshot_size_mb=dutree['snapshot_size_mb'],

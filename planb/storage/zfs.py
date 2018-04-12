@@ -100,18 +100,18 @@ class Zfs(OldStyleStorage):
             'list', '-r', '-H', '-t', 'snapshot', '-o', 'name',
             self.get_dataset_name(rootdir, customer, friendly_name))
         out = self._perform_binary_command(cmd)
-        if out:
-            snapshots = []
+        if not out:
+            return []
+
+        snapshots = []
+        if typ:
+            snapshot_rgx = re.compile(r'.*@{}\-\d+'.format(typ))
+        else:
             snapshot_rgx = re.compile('^.*@\w+-\d+$')
-            for snapshot in out.split('\n'):
-                if not typ:
-                    if snapshot_rgx.match(snapshot):
-                        snapshots.append(snapshot)
-                else:
-                    snapshot_rgx_special = re.compile(r'.*@%s\-\d+' % typ)
-                    if snapshot_rgx_special.match(snapshot):
-                        snapshots.append(snapshot)
-            return snapshots
+        for snapshot in out.split('\n'):
+            if snapshot_rgx.match(snapshot):
+                snapshots.append(snapshot)
+        return snapshots
 
     # Note: We use retention + 1 to calculate if we need to
     # retain the backup, in this situation we won't run into
@@ -168,32 +168,30 @@ class Zfs(OldStyleStorage):
     def snapshots_rotate(self, rootdir, customer, friendly_name, **kwargs):
         snapshots = self.snapshots_get(rootdir, customer, friendly_name)
         destroyed = []
-        if snapshots:
-            snapshots = filter(None, snapshots)
-            logger.info('snapshots rotation for {0}'.format(
-                self.get_dataset_name(rootdir, customer,
-                                      friendly_name)))
-            for snapshot in snapshots:
-                ds, snapname = snapshot.split('@')
-                snaptype, dts = re.match(r'(\w+)-(\d+)', snapname).groups()
-                snapshot_retain_func = getattr(self,
-                                               'snapshot_retain_%s' % snaptype)
-                retention = kwargs.get('%s_retention' % snaptype)
-                if not snapshot_retain_func(snapname, retention):
-                    self.snapshot_delete(snapshot)
-                    destroyed.append(snapshot)
-                    logger.info('destroyed: {0}, past retention'.format(
-                            snapshot, retention))
+        logger.info('snapshots rotation for {0}'.format(
+            self.get_dataset_name(rootdir, customer, friendly_name)))
+        for snapshot in snapshots:
+            ds, snapname = snapshot.split('@')
+            snaptype, dts = re.match(r'(\w+)-(\d+)', snapname).groups()
+            snapshot_retain_func = getattr(self,
+                                           'snapshot_retain_%s' % snaptype)
+            retention = kwargs.get('%s_retention' % snaptype)
+            if not snapshot_retain_func(snapname, retention):
+                self.snapshot_delete(snapshot)
+                destroyed.append(snapshot)
+                logger.info('destroyed: {0}, past retention'.format(
+                        snapshot, retention))
         return destroyed
 
     def can_backup(self, rootdir, customer, friendly_name):
         snapshots = self.snapshots_get(rootdir, customer, friendly_name)
-        if not snapshots:
-            return True
-        today = datetime.date(datetime.now())
         dailies = [x for x in snapshots if x.split('@')[1].startswith('daily')]
-        latest = sorted(dailies)[-1]
+        dailies.sort()
+        if not dailies:
+            return True
+        latest = dailies[-1]
         dts = re.match(r'\w+-(\d+)', latest.split('@')[1]).groups()[0]
+        today = datetime.date(datetime.now())
         datetimestamp = datetime.date(datetime.strptime(dts, '%Y%m%d%H%M'))
         return datetimestamp < today
 

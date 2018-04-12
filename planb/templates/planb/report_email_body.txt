@@ -21,13 +21,15 @@ better with this report. All numbers in this report use binary prefixes.*
 The following hosts are backed up using the {{ company_name }} Plan B
 backup service.
 
-+--------------------------------+--------------+--------------------------+
-| {{ _('name')|ljust:30 }} | {{ _('disk usage')|ljust:12 }} | {{ _('last backup')|ljust:24 }} |
-+================================+==============+==========================+
-{% for host in hosts %}| {{ host.friendly_name|ljust:30 }} |{% comment %}
-{% endcomment %} {{ host.last_successful_backuprun.total_size|filesizeformat|rjust:12 }} |{% comment %}
-{% endcomment %} {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:10 }} {{ host.last_backup_failure_string|ljust:13 }} |
-+--------------------------------+--------------+--------------------------+
++----------------------------------+------------+--------------------+
+| {{ _('name')|ljust:32 }} | {{ _('disk use')|ljust:10 }} | {{ _('last backup')|ljust:18 }} |
++==================================+============+====================+
+{% for host in hosts %}| {{ host.friendly_name|ljust:32|truncatechars:32 }} |{% comment %}
+{% endcomment %} {{ host.total_size|filesizeformat|rjust:10 }} |{% comment %}
+{% endcomment %} {{ host.last_ok|date:'Y-m-d'|ljust:10 }}{% comment %}
+{% endcomment %} {% if not host.enabled %}{{ _('**off**') }}{% comment %}
+{% endcomment %}{% elif host.first_fail %}{{ _('**err**') }}{% else %}       {% endif %} |
++----------------------------------+------------+--------------------+
 {% endfor %}
 
 ----------------------
@@ -41,25 +43,26 @@ Reports per host below
 +-----------------------+--------------------------------------+
 | Last snapshot size    | {{ host.last_successful_backuprun.snapshot_size|filesizeformat|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Last succesful backup | {{ host.last_successful_backuprun.started|date:'Y-m-d'|ljust:36 }} |
+| Last succesful backup | {{ host.last_ok|date:'Y-m-d H:i:s'|ljust:36 }} |
++-----------------------+--------------------------------------+
+| Average run time      | {{ host.average_duration|formatseconds|ljust:36 }} |
 +-----------------------+--------------------------------------+
 | Configured retention  | {{ host.retention_display|ljust:36 }} |
 +-----------------------+--------------------------------------+
-{% if not host.last_backuprun.success %}
+{% if host.first_fail %}
 Last backup FAILED with error::
 
 {{ host.last_backuprun.error_text|block|default:_('error message missing') }}
+
 {% endif %}
 Included paths:
 
 {% for path in host.includes.split %}- ``/{{ path }}``
 {% endfor %}
-{% if host.excludes %}
-Excluded paths:
+{% if host.excludes %}Excluded paths:
 
 {% for path in host.excludes.split %}- ``/{{ path }}``
-{% endfor %}
-{% endif %}
+{% endfor %}{% endif %}
 {% if host.last_successful_backuprun %}Last snapshot disk usage:
 
 {% for path, size in host.last_successful_backuprun.snapshot_size_listing_as_list %}{% comment %}

@@ -1,5 +1,7 @@
 from django.template.library import Library
 
+from planb.utils import human
+
 register = Library()
 
 
@@ -35,3 +37,14 @@ def replaceany(value, token):
 
     value = str(value)
     return str(token) * len(value)
+
+
+@register.filter(is_safe=False)
+def formatseconds(value):
+    """
+    Format seconds as hours/minutes/seconds.
+    """
+    if value is None:
+        return None
+
+    return human.seconds(value)

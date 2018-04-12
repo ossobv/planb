@@ -186,6 +186,10 @@ class HostConfig(models.Model):
                     'years': self.yearly_retention})
         return ', '.join(retention)
 
+    @property
+    def total_size(self):
+        return self.total_size_mb << 20
+
     @cached_property
     def last_backuprun(self):
         return self.backuprun_set.latest('started')
@@ -193,16 +197,6 @@ class HostConfig(models.Model):
     @cached_property
     def last_successful_backuprun(self):
         return self.backuprun_set.filter(success=True).latest('started')
-
-    def last_backup_failure_string(self):
-        '''
-        Return the status description of the backup if not successful.
-        '''
-        if not self.enabled:
-            return _('**disabled**')
-        if not self.last_backuprun.success:
-            return _('**failed**')
-        return ''  # _('(success)') omitted, empty status for success.
 
     def get_storage(self):
         return Storage(bfs, self.dest_pool)

@@ -47,12 +47,14 @@ Reports per host below
 +-----------------------+--------------------------------------+
 | Average run time      | {{ host.average_duration|formatseconds|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Configured retention  | {{ host.retention_display|ljust:36 }} |
+| Configured retention  | {{ host.retention_display|ljust:36 }} |{% if not host.enabled %}
++-----------------------+--------------------------------------+
+| State                 | DISABLED                             |{% endif %}
 +-----------------------+--------------------------------------+
 {% if host.first_fail %}
 Last backup FAILED with error::
 
-{{ host.last_backuprun.error_text|block|default:_('error message missing') }}
+{{ host.last_backuprun.error_text|default:_('error message missing')|block }}
 
 {% endif %}
 Included paths:

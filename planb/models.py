@@ -575,11 +575,6 @@ class BackupRun(models.Model):
     def snapshot_size(self):
         return self.snapshot_size_mb << 20
 
-    def error_text_as_pre(self):
-        return '\n'.join(
-            ('', '    ' + i.rstrip())[bool(i.rstrip())]
-            for i in self.error_text.strip().split('\n'))
-
     def snapshot_size_listing_as_list(self):
         l = []
         if not self.snapshot_size_listing:

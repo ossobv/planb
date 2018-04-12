@@ -1,5 +1,5 @@
-{% autoescape off %}Plan B backup report for "{{ hostgroup.name }}"
-=========================={% for c in hostgroup.name %}={% endfor %}=
+{% load rst %}{% autoescape off %}Plan B backup report for "{{ hostgroup.name }}"
+=========================={{ hostgroup.name|replaceany:'=' }}=
 
 The following report contains a listing of all Plan B based backups made
 by {{ company_name }}. Please take a moment to examine its correctness:
@@ -14,9 +14,9 @@ backups.
 
 *NOTE: The data sizes mentioned in this report are a snapshot. Sizes on
 your final invoice may differ. Also note that in Februari 2018 we've
-chosen to invoice based on binary prefixed gibibytes (GiB, 2^30) instead
-of SI-unit gigabytes (10^9), so the totals align better with this
-report. All numbers in this report use binary prefixes.*
+chosen to invoice based on binary prefixed gibibytes* (GiB, 2\ :sup:`30`\ )
+*instead of SI-unit gigabytes* (10\ :sup:`9`\ )\ *, so the totals align
+better with this report. All numbers in this report use binary prefixes.*
 
 The following hosts are backed up using the {{ company_name }} Plan B
 backup service.
@@ -35,7 +35,7 @@ Reports per host below
 ----------------------
 {% for host in hosts %}
 +--------------------------------------------------------------+
-| {{ host.friendly_name|ljust:60 }} |
+| {{ host.friendly_name|bold|ljust:60 }} |
 +=======================+======================================+
 | Total size            | {{ host.last_successful_backuprun.total_size|filesizeformat|ljust:36 }} |
 +-----------------------+--------------------------------------+
@@ -48,25 +48,26 @@ Reports per host below
 {% if not host.last_backuprun.success %}
 Last backup FAILED with error::
 
-{{ host.last_backuprun.error_text_as_pre|default:_('error message missing') }}
+{{ host.last_backuprun.error_text|block|default:_('error message missing') }}
 {% endif %}
 Included paths:
 
-{% for path in host.includes.split %}- /{{ path }}
+{% for path in host.includes.split %}- ``/{{ path }}``
 {% endfor %}
 {% if host.excludes %}
 Excluded paths:
 
-{% for path in host.excludes.split %}- /{{ path }}
+{% for path in host.excludes.split %}- ``/{{ path }}``
 {% endfor %}
 {% endif %}
 {% if host.last_successful_backuprun %}Last snapshot disk usage:
 
-{% for path, size in host.last_successful_backuprun.snapshot_size_listing_as_list %}- {{ size|filesizeformat|rjust:10 }} {{ path }}
+{% for path, size in host.last_successful_backuprun.snapshot_size_listing_as_list %}{% comment %}
+{% endcomment %}- {{ size|filesizeformat|rjust:10 }} ``{{ path }}``
 {% endfor %}{% endif %}
 Available snapshots:
 
-{% for snapshot in host.snapshot_list_display %}- {{ snapshot }}
+{% for snapshot in host.snapshot_list_display %}- ``{{ snapshot }}``
 {% empty %}
 {{ _('Warning: there are no snapshots available for this host.') }}
 {% endfor %}
@@ -74,4 +75,4 @@ Available snapshots:
 | --
 | Plan B, the {{ company_name }} backup service
 | Please contact {{ company_email }} if anything is amiss
-{% endautoescape %}
+{% endautoescape %}{# vim: set syn=django: #}

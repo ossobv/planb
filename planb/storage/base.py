@@ -1,6 +1,10 @@
 from planb.common.subprocess2 import check_output
 
 
+class DatasetNotFound(Exception):
+    pass
+
+
 class Storage(object):
     def __init__(self, bfs, poolname):
         self._bfs = bfs

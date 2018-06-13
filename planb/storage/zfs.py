@@ -8,7 +8,7 @@ from django.conf import settings
 
 from planb.common.subprocess2 import CalledProcessError
 
-from .base import OldStyleStorage, Datasets, Dataset
+from .base import OldStyleStorage, Datasets, Dataset, DatasetNotFound
 
 # Check if we can backup (daily)
 # backup
@@ -99,7 +99,17 @@ class Zfs(OldStyleStorage):
         cmd = (
             'list', '-r', '-H', '-t', 'snapshot', '-o', 'name',
             self.get_dataset_name(rootdir, customer, friendly_name))
-        out = self._perform_binary_command(cmd)
+
+        try:
+            out = self._perform_binary_command(cmd)
+        except CalledProcessError as e:
+            # planb.common.subprocess2.CalledProcessError:
+            # /usr/bin/sudo: "cannot open 'poolX/datasetY': dataset does
+            # not exist" (exit 1)
+            if b'dataset does not exist' in e.errput:
+                raise DatasetNotFound()
+            raise
+
         if not out:
             return []
 

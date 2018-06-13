@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import date, datetime
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 from django.conf import settings
@@ -16,7 +16,7 @@ from django.utils.translation import ugettext_lazy as _, ngettext
 from planb.common.subprocess2 import (
     CalledProcessError, check_call, check_output)
 from planb.signals import backup_done
-from planb.storage.base import Storage
+from planb.storage.base import DatasetNotFound, Storage
 from planb.storage.zfs import Zfs
 
 from .fields import FilelistField, MultiEmailField
@@ -222,16 +222,31 @@ class HostConfig(models.Model):
     def can_backup(self):
         if not self.enabled:
             return False
-        if (self.last_ok and self.last_ok.date() >= date.today() and
-                self.first_fail is None):
+
+        if self._has_recent_backup():
             return False
-        # this one is heavy, avoid it using the date check above..
-        if not bfs.can_backup(
-                self.dest_pool, self.hostgroup, self.friendly_name):
-            return False
+
         self.refresh_from_db()
         if self.running:
             return False
+
+        return True
+
+    def _has_recent_backup(self):
+        if self.first_fail is not None:
+            return False  # last backup failed
+
+        if self.last_ok is None:
+            return False  # there was no succesful backup
+
+        now = timezone.now()
+        seconds_since_last = (now - self.last_ok).total_seconds()
+        if self.last_ok.date() < now.date() and (
+                seconds_since_last >= (8 * 3600)):
+            return False  # last backup is of previous day (>8hrs old)
+        if (seconds_since_last + self.average_duration) >= (24 * 3600):
+            return False  # last backup was started more than 24hrs ago
+
         return True
 
     def snapshot_rotate(self):
@@ -248,7 +263,12 @@ class HostConfig(models.Model):
             self.dest_pool, self.hostgroup, self.friendly_name)
 
     def snapshot_list_display(self):
-        return sorted([s.split('@')[-1] for s in self.snapshot_list()])
+        try:
+            snapshots = self.snapshot_list()
+        except DatasetNotFound:
+            return ['(dataset not found in pool {!r})'.format(
+                self.dest_pool)]
+        return sorted([s.split('@')[-1] for s in snapshots])
 
     def snapshot_create(self):
         # Add logica what kind of snapshot
@@ -455,9 +475,12 @@ class HostConfig(models.Model):
 
     def generate_rsync_command(self):
         flags = tuple(self.flags.split())
-        data_dir = (
-            bfs.data_dir_get(
-                self.dest_pool, str(self.hostgroup), self.friendly_name),)
+        data_dir = bfs.data_dir_get(
+            self.dest_pool, str(self.hostgroup), self.friendly_name)
+        if data_dir is None:
+            raise ValueError(
+                'no data_dir found', self.id, self.dest_pool, self.hostgroup_id,
+                self.friendly_name)
 
         args = (
             (settings.PLANB_RSYNC_BIN,) +
@@ -474,13 +497,17 @@ class HostConfig(models.Model):
             self.create_include_string() +
             ('--exclude=*', '--bwlimit=10000') +
             self.get_transport_uri() +
-            data_dir)
+            (data_dir,))
 
         return args
 
     def run_rsync(self):
         cmd = self.generate_rsync_command()
-        logger.info('Running %s: %s', self.friendly_name, ' '.join(cmd))
+        try:
+            logger.info('Running %s: %s', self.friendly_name, ' '.join(cmd))
+        except:
+            logger.error('[%s]', repr(cmd))
+            raise
 
         # Close all DB connections before continuing with the rsync
         # command. Since it may take a while, the connection could get
@@ -584,6 +611,9 @@ class BackupRun(models.Model):
 
 @receiver(post_save, sender=HostConfig)
 def create_dataset(sender, instance, created, *args, **kwargs):
+    if not instance.enabled:
+        return
+
     data_dir_name = bfs.data_dir_get(
         instance.dest_pool, instance.hostgroup,
         instance.friendly_name)
@@ -595,6 +625,7 @@ def create_dataset(sender, instance, created, *args, **kwargs):
         data_dir_name = bfs.data_dir_get(
             instance.dest_pool, instance.hostgroup,
             instance.friendly_name)
+        assert data_dir_name is not None
         try:
             # Create the /data subdir.
             os.makedirs(data_dir_name, 0o755)

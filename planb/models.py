@@ -479,8 +479,8 @@ class HostConfig(models.Model):
             self.dest_pool, str(self.hostgroup), self.friendly_name)
         if data_dir is None:
             raise ValueError(
-                'no data_dir found', self.id, self.dest_pool, self.hostgroup_id,
-                self.friendly_name)
+                'no data_dir found', self.id, self.dest_pool,
+                self.hostgroup_id, self.friendly_name)
 
         args = (
             (settings.PLANB_RSYNC_BIN,) +

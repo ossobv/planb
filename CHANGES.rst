@@ -1,10 +1,28 @@
 Changes
 -------
 
-v1.5_dev - *XXXX-XX-XX*
-~~~~~~~~~~~~~~~~~~~~~~~
+v1.5 - *2018-06-13*
+~~~~~~~~~~~~~~~~~~~
 
-- (Version after 1.4.)
+**Web interface**
+
+- Show "time since last backup" in listing, instead of just OK/FAIL.
+
+**Tasks**
+
+- Add locking to dutree scanner, so the filesystem isn't raped. Only do
+  one dutree scan at a time.
+- Change scheduler: jobs are now scheduled ahead of time by deducting
+  the expected duration.
+- Fix rsync issue when remote directory permissions are wrong
+  (unreadable by user). In that case, the download (as root user) would
+  succeed, but later changes would fail locally (planb user).
+
+**Other**
+
+- Change schema, removing unnecessary weekly/monthly booleans.
+- Fix ``total_size_mb`` in report, which was too large.
+- Improve ``breport`` command to output to stdout by default.
 
 
 v1.4 - *2018-04-06*

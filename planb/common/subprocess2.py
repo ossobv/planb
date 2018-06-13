@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+from re import compile as re_compile
 from subprocess import (
     CalledProcessError as OrigCalledProcessError,
     PIPE, Popen)
@@ -9,6 +10,8 @@ class CalledProcessError(OrigCalledProcessError):
     Version of subprocess.CalledProcessError that also shows the stdout
     and stderr data if available.
     """
+    _anychar_re = re_compile(br'[A-Za-z]')  # bytestring-re
+
     def __init__(self, returncode, cmd, stdout, stderr):
         super().__init__(returncode=returncode, cmd=cmd, output=stdout)
         self.errput = stderr
@@ -26,6 +29,27 @@ class CalledProcessError(OrigCalledProcessError):
 
         return '> ' + '\n> '.join(text.split('\n'))
 
+    @property
+    def _short_stderr(self):
+        # Take first non-empty, meaningful line. For example:
+        # > @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        # > @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+        # > @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+        # Here we'd return the second line.
+        #
+        # >>> timeit.timeit((lambda: any(
+        # ...     i in string for i in (
+        # ...         'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        # ...         'abcdefghijklmnopqrstuvwxyz'))))
+        # 3.488983060999999
+        # >>> timeit.timeit((lambda: anychar.search(string)))
+        # 0.49033315299993774
+        #
+        for line in self.errput.splitlines():  # use iterator instead?
+            if self._anychar_re.search(line):
+                return line.decode('ascii', 'replace').strip()
+        return '?'
+
     def __str__(self):
         stdout = self._quote(self.output)
         stderr = self._quote(self.errput)
@@ -33,12 +57,9 @@ class CalledProcessError(OrigCalledProcessError):
         # Take entire command if string, or first item if tuple.
         short_cmd = self.cmd if isinstance(self.cmd, str) else self.cmd[0]
 
-        # Take the non-blank line of stderr.
-        short_stderr = self.errput.lstrip().split(b'\n', 1)[0].rstrip()
-        short_stderr = short_stderr.decode('ascii', 'replace')
-
+        # Make a meaningful first line.
         ret = ['{cmd}: "{stderr}" (exit {code})'.format(
-            cmd=short_cmd, stderr=short_stderr.replace('"', '""'),
+            cmd=short_cmd, stderr=self._short_stderr.replace('"', '""'),
             code=self.returncode)]
 
         if stderr:

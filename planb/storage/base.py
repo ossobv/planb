@@ -155,13 +155,6 @@ class OldStyleStorage(object):
         '''
         raise NotImplementedError()
 
-    def can_backup(self, rootdir, customer, friendly_name):
-        '''
-        Helper function that should be used in the daily backup routine
-        to check if a backup can be made.
-        '''
-        raise NotImplementedError()
-
     def snapshot_create(self, rootdir, customer, friendly_name):
         raise NotImplementedError()
 

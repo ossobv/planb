@@ -193,18 +193,6 @@ class Zfs(OldStyleStorage):
                         snapshot, retention))
         return destroyed
 
-    def can_backup(self, rootdir, customer, friendly_name):
-        snapshots = self.snapshots_get(rootdir, customer, friendly_name)
-        dailies = [x for x in snapshots if x.split('@')[1].startswith('daily')]
-        dailies.sort()
-        if not dailies:
-            return True
-        latest = dailies[-1]
-        dts = re.match(r'\w+-(\d+)', latest.split('@')[1]).groups()[0]
-        today = datetime.date(datetime.now())
-        datetimestamp = datetime.date(datetime.strptime(dts, '%Y%m%d%H%M'))
-        return datetimestamp < today
-
     def parse_backup_sizes(self, rootdir, customer, friendly_name):
         cmd = (
             'get', '-o', 'value', '-Hp', 'used',

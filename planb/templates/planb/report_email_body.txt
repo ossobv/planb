@@ -13,10 +13,8 @@ listed as well. At your request, we can add paths to exclude from the
 backups.
 
 *NOTE: The data sizes mentioned in this report are a snapshot. Sizes on
-your final invoice may differ. Also note that in Februari 2018 we've
-chosen to invoice based on binary prefixed gibibytes* (GiB, 2\ :sup:`30`\ )
-*instead of SI-unit gigabytes* (10\ :sup:`9`\ )\ *, so the totals align
-better with this report. All numbers in this report use binary prefixes.*
+your final invoice may differ. All numbers in this report use binary
+prefixes:* 1 GB = 2\ :sup:`30`
 
 The following hosts are backed up using the {{ company_name }} Plan B
 backup service.

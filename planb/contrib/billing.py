@@ -140,8 +140,8 @@ class BossoRESTPoster(BasePoster):
             'item_code': hostconfig.friendly_name,
             'service_code': 'backup-size-byte',
             'date': report_date.strftime('%Y-%m-%d'),
-            'value': hostconfig.total_size_mb << 20,  # MiB to B
-            'unit': 'B',
+            'value': hostconfig.total_size_mb,
+            'unit': 'MiB',
         }
 
 

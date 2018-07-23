@@ -103,6 +103,7 @@ class BossoRESTPoster(BasePoster):
         except requests.RequestException:
             logger.exception(
                 '%s: error during POST', self.__class__.__name__)
+            return
 
         if 200 <= response.status_code < 300:
             pass  # Success.

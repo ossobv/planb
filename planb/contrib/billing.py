@@ -141,7 +141,7 @@ class BossoRESTPoster(BasePoster):
             'item_code': hostconfig.friendly_name,
             'service_code': 'backup-size-gibibyte',
             'date': report_date.strftime('%Y-%m-%d'),
-            'value': hostconfig.total_size_mb / 1024,  # MiB to GiB
+            'value': round(hostconfig.total_size_mb / 1024, 5),  # MiB to GiB
             'unit': 'GiB',
         }
 

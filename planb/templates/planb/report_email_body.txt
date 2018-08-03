@@ -49,7 +49,7 @@ Reports per host below
 +-----------------------+--------------------------------------+
 | State                 | DISABLED                             |{% endif %}
 +-----------------------+--------------------------------------+
-{% if host.first_fail %}
+{% if host.first_fail and host.enabled %}
 Last backup FAILED with error::
 
 {{ host.last_backuprun.error_text|default:_('error message missing')|block }}

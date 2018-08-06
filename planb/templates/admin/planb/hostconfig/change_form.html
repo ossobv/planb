@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block object-tools-items %}
-    {% if user.is_superuser %}
+    {% if perms.planb.change_hostconfig %}
         <li><a class="postlink" href="{% url "enqueue" original.pk %}">{% trans "Enqueue" %}</a></li>
     {% endif %}
 

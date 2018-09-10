@@ -608,6 +608,11 @@ class BackupRun(models.Model):
             l.append((path, size))
         return l
 
+    def __str__(self):
+        return '<BackupRun({} #{}-{}{})>'.format(
+            self.started.strftime('%Y-%m-%d'), self.hostconfig.pk, self.pk,
+            '' if self.success else ' failed')
+
 
 @receiver(post_save, sender=HostConfig)
 def create_dataset(sender, instance, created, *args, **kwargs):

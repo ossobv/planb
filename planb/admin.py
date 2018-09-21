@@ -4,7 +4,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import format_html_join
+from django.utils.html import format_html_join, escape as htmlesc
+from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext as _
 
 from planb.utils import human
@@ -52,7 +53,7 @@ class HostConfigAdmin(admin.ModelAdmin):
         ('Status', {'fields': (
             'first_ok', 'last_ok', 'disk_usage', 'run_time',
             'last_run', 'first_fail', 'queued', 'running',
-            'last_error',
+            'last_error', 'last_ok_snapshot',
         )}),
         ('Transport options', {'fields': (
             'transport', 'src_dir', 'flags',
@@ -139,6 +140,26 @@ class HostConfigAdmin(admin.ModelAdmin):
         except IndexError:
             return '-'
         return run.error_text or '-'
+
+    def last_ok_snapshot(self, object):
+        try:
+            run = object.last_successful_backuprun
+        except BackupRun.DoesNotExist:
+            return '-'
+
+        ret = ['<table>']
+        for path, size in run.snapshot_size_listing_as_list():
+            ret.append(
+                '<tr><td style="padding:0;"><code>{}</code></td>'
+                '<td style="padding:0;text-align:right;">{}</td></tr>'
+                .format(htmlesc(path), human.bytes(size)))
+        ret.append(
+            '<tr><th style="padding:0;">TOTAL</th>'
+            '<th style="padding:0;text-align:right;">{}</th></tr>'
+            .format(human.bytes(run.snapshot_size)))
+        ret.append('</table>')
+        return mark_safe(''.join(ret))
+    last_ok_snapshot.short_description = _('Last succesful snapshot')
 
     def first_fail_(self, object):
         if not object.first_fail:

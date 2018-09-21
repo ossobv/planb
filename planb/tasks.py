@@ -176,7 +176,7 @@ class JobSpawner:
                 continue
 
             # Check if the daily exists already.
-            if not job.can_backup():
+            if not job.should_backup():
                 # Unlock.
                 HostConfig.objects.filter(
                     pk=job.pk, queued=True).update(queued=False)

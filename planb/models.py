@@ -219,7 +219,7 @@ class HostConfig(models.Model):
         copy.save()
         return copy
 
-    def can_backup(self):
+    def should_backup(self):
         if not self.enabled:
             return False
 
@@ -233,19 +233,32 @@ class HostConfig(models.Model):
         return True
 
     def _has_recent_backup(self):
+        # If the last backup failed, it is not recent.
         if self.first_fail is not None:
-            return False  # last backup failed
+            return False
 
+        # If there is no backup, it is not recent.
         if self.last_ok is None:
-            return False  # there was no succesful backup
+            return False
 
         now = timezone.now()
+        now_date_lo = timezone.localtime(now).date()
+        backup_date_lo = timezone.localtime(self.last_ok).date()
         seconds_since_last = (now - self.last_ok).total_seconds()
-        if self.last_ok.date() < now.date() and (
+
+        # If previous backup date is unequal to current date (both
+        # localtime) and the last backup was more than 8 hours ago, it
+        # is not recent.
+        # This should make the backups start around 00:00 (localtime).
+        if backup_date_lo < now_date_lo and (
                 seconds_since_last >= (8 * 3600)):
-            return False  # last backup is of previous day (>8hrs old)
+            return False
+
+        # If the last backup was "started" (using average duration) more
+        # than 24 hours ago. If we decrease this, we can make the
+        # backups start sooner than 00:00.
         if (seconds_since_last + self.average_duration) >= (24 * 3600):
-            return False  # last backup was started more than 24hrs ago
+            return False
 
         return True
 

@@ -50,7 +50,7 @@ class HostConfigAdmin(admin.ModelAdmin):
             'description', 'includes', 'excludes', 'enabled',
         )}),
         ('Status', {'fields': (
-            'last_ok', 'disk_usage', 'run_time',
+            'first_ok', 'last_ok', 'disk_usage', 'run_time',
             'last_run', 'first_fail', 'queued', 'running',
             'last_error',
         )}),
@@ -111,6 +111,17 @@ class HostConfigAdmin(admin.ModelAdmin):
         return human.seconds(object.average_duration)
     run_time.admin_order_field = 'average_duration'
     run_time.short_description = _('run time')  # "last run time"
+
+    def first_ok(self, object):
+        try:
+            ret = (
+                object.backuprun_set.filter(success=True)
+                .order_by('started').values_list('started', flat=True)
+                .first()).strftime('%Y-%m-%d')
+        except BackupRun.DoesNotExist:
+            ret = '-'
+        return ret
+    first_ok.short_description = _('First backup success')
 
     def last_ok_(self, object):
         if not object.last_ok:

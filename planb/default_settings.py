@@ -50,6 +50,7 @@ TEMPLATES = [
 MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'kleides_dssoclient.middleware.DssoLoginMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -69,9 +70,17 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
 
     'django_q',
+    'kleides_dssoclient',
 
     'planb',
 )
+
+# Users authenticated using the Dsso backend are added to the user group named
+# in the PLANB_USER_GROUP setting by the PlanbDssoLoginBackend.
+AUTHENTICATION_BACKENDS = [
+    'planb.backends.PlanbDssoLoginBackend',
+]
+PLANB_USER_GROUP = 'PlanB user'
 
 Q_CLUSTER = {
     'name': 'PlanB',
@@ -159,11 +168,11 @@ LOGGING = {
         # Let the handlers below propagate on to here so we can send
         # mail for all ERRORs.
         'planb': {
-            'handlers': ['console', 'logfile'],
+            'handlers': ['console'],
             'level': 'DEBUG',
         },
         'django-q': {
-            'handlers': ['djangoqlogfile'],
+            'handlers': ['console'],
             'level': 'DEBUG',
         },
         'django': {

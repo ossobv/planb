@@ -52,3 +52,6 @@ ALLOWED_HOSTS = ('planb', 'planb.example.com')
 SECRET_KEY = r'''pwgen -ys 58'''
 
 STATIC_ROOT = '/srv/http/planb.example.com/static'
+
+KLEIDES_DSSO_ENDPOINT = 'https://SSO_SERVER/sso/'
+KLEIDES_DSSO_SHARED_KEY = 'oh-sso-very-very-secret'

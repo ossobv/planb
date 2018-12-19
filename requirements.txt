@@ -10,3 +10,6 @@ dutree==1.4
 
 # For rst2html for planb-report as HTML
 # apt-get install python3-docutils --no-install-recommends
+
+# kleides-dssoclient for Discourse Single-Sign-On
+kleides-dssoclient>=0.3

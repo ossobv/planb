@@ -168,11 +168,11 @@ LOGGING = {
         # Let the handlers below propagate on to here so we can send
         # mail for all ERRORs.
         'planb': {
-            'handlers': ['console'],
+            'handlers': ['console', 'logfile'],
             'level': 'DEBUG',
         },
         'django-q': {
-            'handlers': ['console'],
+            'handlers': ['djangoqlogfile'],
             'level': 'DEBUG',
         },
         'django': {

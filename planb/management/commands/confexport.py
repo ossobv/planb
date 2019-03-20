@@ -160,15 +160,18 @@ class HostAsConfig(object):
         )))
 
     def _split_paths(self, list_):
-        from random import choice
-
         paths = []
         if list_:  # skip the "empty string"-list
             for path in list_.split(' '):
-                comment = choice(
-                    ['Because this directory is\nawesome for the win!\n',
-                     "here's the p0rn"] +
-                    [None] * 8)
+                comment = None
+
+                if False:
+                    from random import choice
+                    comment = choice(
+                        ['Because this directory is\nawesome for the win!\n',
+                         "here's the p0rn"] +
+                        [None] * 8)
+
                 paths.append(
                     dict([(path, comment)]) if comment else path)
 

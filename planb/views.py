@@ -9,7 +9,7 @@ from .tasks import async_backup_job
 
 class EnqueueJob(View):
     def post(self, request, hostconfig_id):
-        if not request.user.is_superuser:
+        if not request.user.has_perm('planb.add_backuprun'):
             raise PermissionDenied()
         try:
             hostconfig = HostConfig.objects.get(id=hostconfig_id, enabled=True)

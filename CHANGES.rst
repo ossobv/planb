@@ -1,10 +1,26 @@
 Changes
 -------
 
-v1.6_dev - *XXXX-XX-XX*
-~~~~~~~~~~~~~~~~~~~~~~~
+v1.6 - *2019-03-20*
+~~~~~~~~~~~~~~~~~~~
 
-- (Version after 1.5.)
+**Web interface**
+
+- Show last snapshot size distribution, and first backup success date,
+  in hostconfig edit-view.
+- Show real-used-size instead of apparent-used-size in snapshot data
+  distribution. If you have ZFS compression enabled, you'll see a drop
+  in the snapshot size summaries (not in the total disk usage).
+- Hide last-error message in hostconfig edit-view for hosts that are
+  disabled.
+
+**Other**
+
+- Single Sign-On (Discourse style) can be enabled (using the optional
+  kleides-dssoclient dependency). See KLEIDES_DSSO_ENDPOINT option.
+- Tweak permissions so you don't need is_superuser powers anymore.
+- Update BossoBillingPoster for posting backup data counts to (internal)
+  Bosso system.
 
 
 v1.5 - *2018-06-13*

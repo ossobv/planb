@@ -223,13 +223,13 @@ class JobRunner:
                 job.pk, job.friendly_name))
             path = bfs.data_dir_get(
                 job.dest_pool, job.hostgroup.name, job.friendly_name)
-            dutree = Scanner(path).scan()
+            dutree = Scanner(path).scan(use_apparent_size=False)
 
             # Get snapshot size and tree.
-            snapshot_size_mb = (dutree.size() + 524288) >> 20  # bytes to MiB
+            snapshot_size_mb = (dutree.use_size() + 524288) >> 20  # bytes to MiB
             snapshot_size_yaml = '\n'.join(
                 '{}: {}'.format(
-                    yaml_safe_str(i.name()[len(path):]), yaml_digits(i.size()))
+                    yaml_safe_str(i.name()[len(path):]), yaml_digits(i.use_size()))
                 for i in dutree.get_leaves())
 
         return {

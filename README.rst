@@ -150,12 +150,11 @@ Setting up a virtualenv (optional)::
     # you may need to log in/out once after this
 
     mkvirtualenv planb --python=$(which python3) --system-site-packages
+    workon planb
 
     mkdir /etc/planb
     cd /etc/planb
     pwd >$VIRTUAL_ENV/.project
-
-    workon planb
 
 Installing PlanB using pip::
 

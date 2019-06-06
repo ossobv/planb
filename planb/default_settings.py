@@ -75,10 +75,13 @@ INSTALLED_APPS = (
     'planb',
 )
 
-# Users authenticated using the Dsso backend are added to the user group named
-# in the PLANB_USER_GROUP setting by the PlanbDssoLoginBackend.
 AUTHENTICATION_BACKENDS = [
-    'planb.backends.PlanbDssoLoginBackend',
+    # Users authenticated using the Dsso backend are added to the user
+    # group named in the PLANB_USER_GROUP setting by the
+    # PlanbDssoLoginBackend.
+    # 'planb.backends.PlanbDssoLoginBackend',
+    # Standalone/devoper-style auth:
+    'django.contrib.auth.backends.ModelBackend',
 ]
 PLANB_USER_GROUP = 'PlanB user'
 

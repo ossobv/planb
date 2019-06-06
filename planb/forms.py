@@ -1,9 +1,9 @@
 from django import forms
 
-from .models import HostConfig, get_pools
+from .models import Fileset, get_pools
 
 
-class HostConfigAdminForm(forms.ModelForm):
+class FilesetAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -16,7 +16,7 @@ class HostConfigAdminForm(forms.ModelForm):
                 self.fields['hostgroup'].queryset.order_by('name'))
 
     class Meta:
-        model = HostConfig
+        model = Fileset
         exclude = (
             'last_ok',
             'last_run',

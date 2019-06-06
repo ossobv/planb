@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.views.generic.base import View
 
-from .models import HostConfig
+from .models import Fileset
 from .tasks import async_backup_job
 
 
@@ -12,8 +12,8 @@ class EnqueueJob(View):
         if not request.user.has_perm('planb.add_backuprun'):
             raise PermissionDenied()
         try:
-            hostconfig = HostConfig.objects.get(id=hostconfig_id, enabled=True)
-        except HostConfig.DoesNotExist:
+            hostconfig = Fileset.objects.get(id=hostconfig_id, enabled=True)
+        except Fileset.DoesNotExist:
             raise PermissionDenied()
 
         self.enqueue(hostconfig)
@@ -32,7 +32,7 @@ class EnqueueJob(View):
             return False
 
         # Spawn a single run.
-        HostConfig.objects.filter(pk=hostconfig.pk).update(queued=True)
+        Fileset.objects.filter(pk=hostconfig.pk).update(queued=True)
         task_id = async_backup_job(hostconfig)
         messages.add_message(
             self.request, messages.INFO,

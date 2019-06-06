@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from django_q.tasks import async
 
-from .models import BOGODATE, BackupRun, HostConfig, bfs
+from .models import BOGODATE, BackupRun, Fileset, bfs
 
 try:
     from setproctitle import getproctitle, setproctitle
@@ -162,14 +162,14 @@ class JobSpawner:
 
     def _enum_eligible_jobs(self):
         job_qs = (
-            HostConfig.objects
+            Fileset.objects
             .filter(enabled=True, running=False, queued=False)
             .order_by('last_run'))  # order by last attempt
 
         for job in job_qs:
             # We have a job_id, lock it. If changed is 0, we did not do
             # a change, ergo we did not lock it. Move along.
-            changed = HostConfig.objects.filter(
+            changed = Fileset.objects.filter(
                 pk=job.pk, queued=False).update(queued=True)
             if not changed:
                 logger.info('[%s] Skipped because already locked', job)
@@ -178,7 +178,7 @@ class JobSpawner:
             # Check if the daily exists already.
             if not job.should_backup():
                 # Unlock.
-                HostConfig.objects.filter(
+                Fileset.objects.filter(
                     pk=job.pk, queued=True).update(queued=False)
                 continue
 
@@ -186,7 +186,7 @@ class JobSpawner:
             if job.first_fail and (
                     (timezone.now() - job.last_run).total_seconds() < 3600):
                 # Unlock.
-                HostConfig.objects.filter(
+                Fileset.objects.filter(
                     pk=job.pk, queued=True).update(queued=False)
                 logger.info('[%s] Skipped because of recent failure', job)
                 continue
@@ -240,39 +240,39 @@ class JobRunner:
     def conditional_job_run(self):
         now = timezone.now()
         if 9 <= now.hour < 17:
-            job = HostConfig.objects.get(pk=self._job_id)
+            job = Fileset.objects.get(pk=self._job_id)
             logger.info('[%s] Skipped because of office hours', job)
             # We could retry this, but we don't need to. The jobs are
             # rescheduled every hour, so the next hour we'll arrive here
             # too and do the same time-check.
             # #self.retry(eta=now.replace(hour=17))  # @task(bind=True)
             # Instead, we do this:
-            HostConfig.objects.filter(pk=job.pk).update(
+            Fileset.objects.filter(pk=job.pk).update(
                 queued=False, running=False)
             return
 
         return self.unconditional_job_run()
 
     def manual_job_run(self):
-        job = HostConfig.objects.get(pk=self._job_id)
+        job = Fileset.objects.get(pk=self._job_id)
 
         # The task is delayed, but it has been scheduled/queued.
         logger.info('[%s] Manually requested backup', job)
         if not job.running:
             # Hack so we get success mail. (Only update first_fail if it
             # was unset.)
-            HostConfig.objects.filter(pk=job.pk, first_fail=None).update(
+            Fileset.objects.filter(pk=job.pk, first_fail=None).update(
                 first_fail=BOGODATE)
 
             # Run job. May raise an error. Always restores queued/running.
             self.unconditional_job_run()
 
     def unconditional_job_run(self):
-        job = HostConfig.objects.get(pk=self._job_id)
+        job = Fileset.objects.get(pk=self._job_id)
         first_fail = job.first_fail
 
         # Mark it as running.
-        HostConfig.objects.filter(pk=job.pk).update(running=True)
+        Fileset.objects.filter(pk=job.pk).update(running=True)
         t0 = time.time()
         logger.info('[%s] Starting backup', job)
 
@@ -318,7 +318,7 @@ class JobRunner:
 
             # Cache values on the hostconfig.
             now = timezone.now()
-            HostConfig.objects.filter(pk=job.pk).update(
+            Fileset.objects.filter(pk=job.pk).update(
                 last_ok=now,                        # success
                 last_run=now,                       # now
                 first_fail=None,                    # no failure
@@ -356,9 +356,9 @@ class JobRunner:
 
             # Cache values on the hostconfig.
             now = timezone.now()
-            HostConfig.objects.filter(pk=job.pk).update(
+            Fileset.objects.filter(pk=job.pk).update(
                 last_run=now)    # don't overwrite last_ok
-            (HostConfig.objects.filter(pk=job.pk)
+            (Fileset.objects.filter(pk=job.pk)
              .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
              .update(first_fail=now))  # overwrite first_fail only if unset
 
@@ -375,8 +375,8 @@ class JobRunner:
 
     def finalize_job_run(self, success, resultset):
         # Set the queued/running to False when we're done.
-        job = HostConfig.objects.get(pk=self._job_id)
-        HostConfig.objects.filter(pk=job.pk).update(
+        job = Fileset.objects.get(pk=self._job_id)
+        Fileset.objects.filter(pk=job.pk).update(
             queued=False, running=False)
 
         # This is never not success, as we handled all cases in the

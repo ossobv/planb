@@ -10,14 +10,14 @@ from django.utils.translation import ugettext as _
 
 from planb.utils import human
 
-from .forms import HostConfigAdminForm
-from .models import BOGODATE, BackupRun, HostGroup, HostConfig
+from .forms import FilesetAdminForm
+from .models import BOGODATE, BackupRun, HostGroup, Fileset
 from .tasks import async_backup_job
 
 
 def enqueue_multiple(modeladmin, request, queryset):
     for obj in queryset.filter(queued=False, enabled=True):
-        HostConfig.objects.filter(pk=obj.pk).update(queued=True)
+        Fileset.objects.filter(pk=obj.pk).update(queued=True)
         async_backup_job(obj)
 enqueue_multiple.short_description = _(  # noqa
     'Enqueue selected hosts for immediate backup')
@@ -44,7 +44,7 @@ class HostGroupAdmin(admin.ModelAdmin):
             yield (reverse("admin:planb_hostconfig_change", args=(pk,)), name)
 
 
-class HostConfigAdmin(admin.ModelAdmin):
+class FilesetAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': (
             'friendly_name', 'hostgroup', 'dest_pool', 'host',
@@ -89,7 +89,7 @@ class HostConfigAdmin(admin.ModelAdmin):
     list_filter += ('hostgroup', 'running', 'first_fail')
 
     actions = [enqueue_multiple]
-    form = HostConfigAdminForm
+    form = FilesetAdminForm
     search_fields = ('friendly_name', 'host', 'hostgroup__name', 'description')
 
     def get_readonly_fields(self, request, obj=None):
@@ -224,4 +224,4 @@ class HostConfigAdmin(admin.ModelAdmin):
 
 admin.site.register(BackupRun, BackupRunAdmin)
 admin.site.register(HostGroup, HostGroupAdmin)
-admin.site.register(HostConfig, HostConfigAdmin)
+admin.site.register(Fileset, FilesetAdmin)

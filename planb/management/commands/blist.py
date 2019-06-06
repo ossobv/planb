@@ -1,7 +1,7 @@
 import json
 
 from planb.management.base import BaseCommandWithZabbix
-from planb.models import HostConfig
+from planb.models import Fileset
 
 
 class Command(BaseCommandWithZabbix):
@@ -9,7 +9,7 @@ class Command(BaseCommandWithZabbix):
 
     def handle(self, *args, **options):
         qs = (
-            HostConfig.objects.filter(enabled=True)
+            Fileset.objects.filter(enabled=True)
             .order_by('hostgroup__name', 'friendly_name'))
         if options['zabbix']:
             self.dump_zabbix_discovery(qs)

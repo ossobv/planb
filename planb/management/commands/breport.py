@@ -11,7 +11,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.translation import ugettext as _
 
-from planb.models import HostConfig, HostGroup
+from planb.models import Fileset, HostGroup
 
 
 class Command(BaseCommand):
@@ -49,11 +49,11 @@ class Command(BaseCommand):
 
     def get_hostconfigs(self, groups_glob, hosts_glob, with_disabled=False):
         groups = HostGroup.objects.all()
-        hosts = HostConfig.objects.all()
+        hosts = Fileset.objects.all()
 
         groups = [
             group for group in groups if fnmatch(group.name, groups_glob)]
-        hosts = HostConfig.objects.filter(id__in=(
+        hosts = Fileset.objects.filter(id__in=(
             host.id for host in (
                 hosts.filter(hostgroup__in=groups)
                 .prefetch_related('hostgroup'))

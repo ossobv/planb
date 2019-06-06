@@ -4,7 +4,7 @@ import json
 import re
 
 from planb.management.base import BaseCommand
-from planb.models import HostConfig, HostGroup
+from planb.models import Fileset, HostGroup
 
 
 class CustomYaml(object):
@@ -247,7 +247,7 @@ class Command(BaseCommand):
 
     def get_hostconfigs(self, groups_glob, hosts_glob, with_disabled=False):
         groups = HostGroup.objects.all()
-        hosts = HostConfig.objects.all()
+        hosts = Fileset.objects.all()
         if not with_disabled:
             hosts = hosts.exclude(enabled=False)
 

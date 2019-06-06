@@ -85,7 +85,7 @@ TODO
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
-* Alter HostConfig:
+* Alter Fileset:
   - use fs-name and optionally human-name
   - use asciifield for fs-name?
 * Replace the exception mails for common errors (like failing rsync) to
@@ -93,7 +93,7 @@ TODO
 * After using mail_admins style mail, we can start introducing mail digests
   instead: daily summary of backup successes and failures.
 * Fix admin "Planb" name as "PlanB".
-* Split off the subparts of the HostConfig to separate configs:
+* Split off the subparts of the Fileset to separate configs:
   - include-config
   - transport-config
   - retention-config

@@ -3,7 +3,7 @@ from django.db.models import Q
 
 from django_q.brokers import get_broker
 
-from planb.models import HostConfig
+from planb.models import Fileset
 
 
 class Command(BaseCommand):
@@ -14,7 +14,7 @@ class Command(BaseCommand):
         broker_queue = broker.queue_size()
 
         db_queue = (
-            HostConfig.objects.filter(Q(running=True) | Q(queued=True))
+            Fileset.objects.filter(Q(running=True) | Q(queued=True))
             .update(running=False, queued=False))
         broker.purge_queue()
 

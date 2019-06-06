@@ -21,8 +21,8 @@ class Datasets(list):
     """
     @staticmethod
     def get_hostconfig_class():
-        from planb.models import HostConfig
-        return HostConfig
+        from planb.models import Fileset
+        return Fileset
 
     def sort(self, key=None, reverse=False):
         """

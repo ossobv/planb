@@ -80,7 +80,7 @@ class HostGroup(models.Model):
         ordering = ('name',)
 
 
-class HostConfig(models.Model):
+class Fileset(models.Model):
     friendly_name = models.CharField(
         # FIXME: should be unique with hostgroup?
         verbose_name=_('Name'), max_length=63, unique=True,
@@ -543,7 +543,7 @@ class HostConfig(models.Model):
             returncode, self.friendly_name, output)
 
     def signal_done(self, success):
-        instance = HostConfig.objects.get(pk=self.pk)
+        instance = Fileset.objects.get(pk=self.pk)
         # Using send_robust, because we do not want user-code to mess up
         # the rest of our state.
         backup_done.send_robust(
@@ -553,7 +553,7 @@ class HostConfig(models.Model):
         # Notify the same users who get ERROR / Success for backups that
         # the job was disabled/re-enabled.
         if self.pk:
-            old_enabled = HostConfig.objects.values_list(
+            old_enabled = Fileset.objects.values_list(
                 'enabled', flat=True).get(pk=self.pk)
             if self.enabled != old_enabled:
                 mail_admins(
@@ -567,13 +567,13 @@ class HostConfig(models.Model):
 class BackupRun(models.Model):
     """
     Info about a single backup run. Some of these fields are duplicated
-    in the HostConfig model. We like those there too, so we use it to
+    in the Fileset model. We like those there too, so we use it to
     quickly sort those records.
 
     Runs with success==True show sensible info. For others you may need
     to take (some of) the values with a grain of salt.
     """
-    hostconfig = models.ForeignKey(HostConfig, on_delete=models.CASCADE)
+    hostconfig = models.ForeignKey(Fileset, on_delete=models.CASCADE)
 
     started = models.DateTimeField(
         auto_now_add=True, db_index=True,
@@ -627,7 +627,7 @@ class BackupRun(models.Model):
             '' if self.success else ' failed')
 
 
-@receiver(post_save, sender=HostConfig)
+@receiver(post_save, sender=Fileset)
 def create_dataset(sender, instance, created, *args, **kwargs):
     if not instance.enabled:
         return

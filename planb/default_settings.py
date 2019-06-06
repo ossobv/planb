@@ -73,6 +73,7 @@ INSTALLED_APPS = (
     'kleides_dssoclient',
 
     'planb',
+    'planb.transport_rsync',
 )
 
 AUTHENTICATION_BACKENDS = [

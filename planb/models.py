@@ -20,7 +20,9 @@ from planb.storage.base import DatasetNotFound, Storage
 from planb.storage.zfs import Zfs
 
 from .fields import FilelistField, MultiEmailField
-from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
+
+from planb.transport_rsync.rsync import (
+    RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES)
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +202,15 @@ class Fileset(models.Model):
 
     def get_storage(self):
         return Storage(bfs, self.dest_pool)
+
+    def get_storage_destination(self):
+        data_dir = bfs.data_dir_get(
+            self.dest_pool, str(self.hostgroup), self.friendly_name)
+        if data_dir is None:
+            raise ValueError(
+                'no data_dir found', self.id, self.dest_pool,
+                self.hostgroup_id, self.friendly_name)
+        return data_dir
 
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8
@@ -518,7 +529,7 @@ class Fileset(models.Model):
         cmd = self.generate_rsync_command()
         try:
             logger.info('Running %s: %s', self.friendly_name, ' '.join(cmd))
-        except:
+        except Exception:
             logger.error('[%s]', repr(cmd))
             raise
 
@@ -610,16 +621,17 @@ class BackupRun(models.Model):
         return self.snapshot_size_mb << 20
 
     def snapshot_size_listing_as_list(self):
-        l = []
         if not self.snapshot_size_listing:
-            return l
+            return []
+
+        list_ = []
         for line in self.snapshot_size_listing.splitlines():
             path, size = line.rsplit(':', 1)
             if path[0] == path[-1] == '"':
                 path = path[1:-1]
             size = int(size.replace(',', ''))
-            l.append((path, size))
-        return l
+            list_.append((path, size))
+        return list_
 
     def __str__(self):
         return '<BackupRun({} #{}-{}{})>'.format(

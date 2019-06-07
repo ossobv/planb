@@ -18,6 +18,8 @@
         {% else %}
             {# FIXME: don't hardcode this #}
             <li><a href="/transport_rsync/config/add/?fileset={{ original.pk }}">{% trans "New rsync/ssh transport" %}</a></li>
+            {# FIXME: order this somehow, by prio in PLANB_TRANSPORTS? #}
+            <li><a href="/transport_exec/config/add/?fileset={{ original.pk }}">{% trans "New exec transport" %}</a></li>
         {% endif %}{% endwith %}
         <li><a class="postlink" href="{% url "enqueue" original.pk %}">{% trans "Enqueue" %}</a></li>
     {% endif %}

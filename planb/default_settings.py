@@ -73,6 +73,7 @@ INSTALLED_APPS = (
     'kleides_dssoclient',
 
     'planb',
+    'planb.transport_exec',
     'planb.transport_rsync',
 )
 
@@ -89,7 +90,8 @@ PLANB_USER_GROUP = 'PlanB user'
 # FIXME: can we populate this automatically through INSTALLED_APPS?
 # ... or we might want to use this to "order"/sort the preferred transports
 PLANB_TRANSPORTS = [
-    'transport_rsync.Config',
+    'transport_rsync.Config',   # common
+    'transport_exec.Config',    # rare
 ]
 
 Q_CLUSTER = {

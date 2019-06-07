@@ -4,6 +4,7 @@ from datetime import datetime
 
 from django.conf import settings
 from django.db import connections, models
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 
@@ -72,6 +73,9 @@ class Config(models.Model):
 
     def __str__(self):
         return '{}: rsync transport'.format(self.fileset)
+
+    def get_change_url(self):
+        return reverse('admin:transport_rsync_config_change', args=(self.pk,))
 
     def create_exclude_string(self):
         exclude_list = []

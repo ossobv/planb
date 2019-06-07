@@ -39,7 +39,7 @@ class HostGroupAdmin(admin.ModelAdmin):
         for pk, name in (
                 object.filesets.values_list('id', 'friendly_name')
                 .order_by('friendly_name')):
-            yield (reverse("admin:planb_fileset_change", args=(pk,)), name)
+            yield (reverse('admin:planb_fileset_change', args=(pk,)), name)
 
 
 class FilesetAdmin(admin.ModelAdmin):

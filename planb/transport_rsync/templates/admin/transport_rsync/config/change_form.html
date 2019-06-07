@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if perms.planb.change_fileset %}
+        <li><a href="{% url "admin:planb_fileset_change" original.fileset.pk %}">{% trans "Back to fileset" %}</a></li>
+    {% endif %}
+
+    {{ block.super }}
+{% endblock %}

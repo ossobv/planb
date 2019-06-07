@@ -13,6 +13,12 @@
 
 {% block object-tools-items %}
     {% if perms.planb.change_fileset %}
+        {% with original.get_transport as transport %}{% if transport %}
+            <li><a href="{{ transport.get_change_url }}">{% trans "Edit transport" %}</a></li>
+        {% else %}
+            {# FIXME: don't hardcode this #}
+            <li><a href="/transport_rsync/config/add/?fileset={{ original.pk }}">{% trans "New rsync/ssh transport" %}</a></li>
+        {% endif %}{% endwith %}
         <li><a class="postlink" href="{% url "enqueue" original.pk %}">{% trans "Enqueue" %}</a></li>
     {% endif %}
 

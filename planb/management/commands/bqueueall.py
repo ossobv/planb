@@ -9,8 +9,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         qs = Fileset.objects.filter(queued=False).order_by('pk')
-        for hostconfig in qs:
-            Fileset.objects.filter(pk=hostconfig.pk).update(queued=True)
-            task_id = async_backup_job(hostconfig)
+        for fileset in qs:
+            Fileset.objects.filter(pk=fileset.pk).update(queued=True)
+            task_id = async_backup_job(fileset)
             self.stdout.write(self.style.SUCCESS(
-                'Enqueued {} job as {}'.format(hostconfig, task_id)))
+                'Enqueued {} job as {}'.format(fileset, task_id)))

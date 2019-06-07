@@ -44,6 +44,9 @@ class PlanbDssoLoginBackend(DssoLoginBackend):
                 Permission.objects
                 .filter(content_type__app_label='planb')
                 .filter(content_type__model__in=(
-                    'hostgroup', 'hostconfig', 'backuprun'))
+                    'hostgroup', 'fileset', 'backuprun'))
                 .exclude(codename='change_backuprun')))
+            group.permissions.add(*(
+                Permission.objects
+                .filter(content_type__app_label='transport_rsync')))
         return group

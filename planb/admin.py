@@ -1,5 +1,3 @@
-from zlib import adler32
-
 from django.conf import settings
 from django.contrib import admin
 from django.urls import reverse
@@ -25,42 +23,35 @@ enqueue_multiple.short_description = _(  # noqa
 
 class BackupRunAdmin(admin.ModelAdmin):
     list_display = (
-        'started', 'hostconfig', 'success', 'total_size_mb',
+        'started', 'fileset', 'success', 'total_size_mb',
         'snapshot_size_mb')
 
 
 class HostGroupAdmin(admin.ModelAdmin):
-    list_display = ('name', 'notify_email', 'hosts')
+    list_display = ('name', 'notify_email', 'filesets')
 
-    def hosts(self, object):
+    def filesets(self, object):
         return format_html_join(
             ' ', '\u25cf <a href="{}">{}</a>',
-            self.hostconfig_iterator(object))
+            self.fileset_iterator(object))
 
-    def hostconfig_iterator(self, object):
+    def fileset_iterator(self, object):
         for pk, name in (
-                object.hostconfigs.values_list('id', 'friendly_name')
+                object.filesets.values_list('id', 'friendly_name')
                 .order_by('friendly_name')):
-            yield (reverse("admin:planb_hostconfig_change", args=(pk,)), name)
+            yield (reverse("admin:planb_fileset_change", args=(pk,)), name)
 
 
 class FilesetAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': (
-            'friendly_name', 'hostgroup', 'dest_pool', 'host',
-            'description', 'includes', 'excludes', 'enabled',
+            'friendly_name', 'hostgroup', 'dest_pool',
+            'notes', 'enabled',
         )}),
         ('Status', {'fields': (
             'first_ok', 'last_ok', 'disk_usage', 'run_time',
             'last_run', 'first_fail', 'queued', 'running',
             'last_error', 'last_ok_snapshot',
-        )}),
-        ('Transport options', {'fields': (
-            'transport', 'src_dir', 'flags',
-        )}),
-        ('Additional options for SSH transport', {'fields': (
-            'rsync_path', 'user', 'ionice_path', 'use_sudo',
-            'use_ionice',
         )}),
         ('Retention', {'fields': (
             'daily_retention', 'weekly_retention',
@@ -78,8 +69,8 @@ class FilesetAdmin(admin.ModelAdmin):
         'friendly_name', 'hostgroup', 'dest_pool')
 
     list_display = (
-        'friendly_name', 'hostgroup', 'notes', 'host',
-        'disk_usage', 'run_time', 'options',
+        'friendly_name', 'hostgroup', 'notes',
+        'disk_usage', 'run_time', 'retention',
         'last_ok_', 'first_fail_',
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
@@ -90,7 +81,7 @@ class FilesetAdmin(admin.ModelAdmin):
 
     actions = [enqueue_multiple]
     form = FilesetAdminForm
-    search_fields = ('friendly_name', 'host', 'hostgroup__name', 'description')
+    search_fields = ('friendly_name', 'hostgroup__name', 'notes')
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
@@ -98,7 +89,7 @@ class FilesetAdmin(admin.ModelAdmin):
         return self.readonly_fields
 
     def notes(self, object):
-        ret = object.description.split('\n', 1)[0].strip()
+        ret = object.notes.split('\n', 1)[0].strip()
         if len(ret) > 12:
             return ret[0:12] + '...'
         return ret
@@ -189,37 +180,17 @@ class FilesetAdmin(admin.ModelAdmin):
     running_r.boolean = True
     running_r.short_description = 'R'
 
-    def options(self, object):
-        def crc(data):
-            value = adler32(data.encode('utf-8', 'replace'))
-            if value < 0:
-                value += 0x100000000
-            return value
-
-        ret = [self.retentions(object), object.user]
-        if object.use_sudo:
-            ret.append('sudo')
-        if object.use_ionice:
-            ret.append('ionice')
-        if object.includes:
-            ret.append('inc=%d:%x' % (
-                len(object.includes.split(' ')), crc(object.includes)))
-        if object.excludes:
-            ret.append('exc=%d:%x' % (
-                len(object.excludes.split(' ')), crc(object.excludes)))
-        return ', '.join(ret)
-
-    def retentions(self, object):
-        retention = []
+    def retention(self, object):
+        ret = []
         if object.daily_retention:
-            retention.append('%dd' % object.daily_retention)
+            ret.append('%dd' % object.daily_retention)
         if object.weekly_retention:
-            retention.append('%dw' % object.weekly_retention)
+            ret.append('%dw' % object.weekly_retention)
         if object.monthly_retention:
-            retention.append('%dm' % object.monthly_retention)
+            ret.append('%dm' % object.monthly_retention)
         if object.yearly_retention:
-            retention.append('%dy' % object.yearly_retention)
-        return '/'.join(retention)
+            ret.append('%dy' % object.yearly_retention)
+        return '/'.join(ret)
 
 
 admin.site.register(BackupRun, BackupRunAdmin)

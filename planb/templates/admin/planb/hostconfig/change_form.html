@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block object-tools-items %}
-    {% if perms.planb.change_hostconfig %}
+    {% if perms.planb.change_fileset %}
         <li><a class="postlink" href="{% url "enqueue" original.pk %}">{% trans "Enqueue" %}</a></li>
     {% endif %}
 

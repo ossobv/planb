@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.mail import mail_admins
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
-from django.db import connections, models
+from django.db import models
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -19,10 +19,7 @@ from planb.signals import backup_done
 from planb.storage.base import DatasetNotFound, Storage
 from planb.storage.zfs import Zfs
 
-from .fields import FilelistField, MultiEmailField
-
-from planb.transport_rsync.rsync import (
-    RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES)
+from .fields import MultiEmailField
 
 logger = logging.getLogger(__name__)
 
@@ -87,33 +84,12 @@ class Fileset(models.Model):
         # FIXME: should be unique with hostgroup?
         verbose_name=_('Name'), max_length=63, unique=True,
         help_text=_('Short name, should be unique per host group.'))
-    host = models.CharField(max_length=254)
-    description = models.TextField(blank=True, help_text=_(
+    hostgroup = models.ForeignKey(
+        HostGroup, related_name='filesets', on_delete=models.PROTECT)
+    notes = models.TextField(blank=True, help_text=_(
         'Quick description/tips. Use the first line for labels/tags.'))
-    transport = TransportChoices()
-    user = models.CharField(max_length=254, default='root')
-    src_dir = models.CharField(max_length=254, default='/')
+
     dest_pool = models.CharField(max_length=254, choices=())  # set in forms.py
-    rsync_path = models.CharField(
-        max_length=31, default=settings.PLANB_RSYNC_BIN)
-    ionice_path = models.CharField(
-        max_length=31, default='/usr/bin/ionice', blank=True)
-    # When files have legacy/Latin-1 encoding, you'll get rsync exit
-    # code 23 and this message:
-    #   rsync: recv_generator: failed to stat "...":
-    #   Invalid or incomplete multibyte or wide character (84)
-    # Solution, add: --iconv=utf8,latin1
-    flags = models.CharField(
-        max_length=511, default='-az --numeric-ids --stats --delete',
-        help_text=_(
-            'Default "-az --delete", add "--no-perms --chmod=D0700,F600" '
-            'for (windows) hosts without permission bits, add '
-            '"--iconv=utf8,latin1" for hosts with files with legacy (Latin-1) '
-            'encoding.'))
-    includes = FilelistField(
-        max_length=1023, default=settings.PLANB_DEFAULT_INCLUDES)
-    excludes = FilelistField(
-        max_length=1023, blank=True)
 
     last_ok = models.DateTimeField(
         _('Last backup success'), blank=True, null=True)
@@ -132,11 +108,6 @@ class Fileset(models.Model):
     enabled = models.BooleanField(default=True)
     running = models.BooleanField(default=False)
     queued = models.BooleanField(default=False)
-
-    hostgroup = models.ForeignKey(
-        HostGroup, related_name='hostconfigs', on_delete=models.PROTECT)
-    use_sudo = models.BooleanField(default=False)
-    use_ionice = models.BooleanField(default=False)
 
     daily_retention = models.IntegerField(
         default=15,
@@ -369,196 +340,12 @@ class Fileset(models.Model):
                 self.dest_pool, self.hostgroup, self.friendly_name,
                 snapname=snapname))
 
-    def create_exclude_string(self):
-        exclude_list = []
-        if self.excludes:
-            for piece in self.excludes.split():
-                exclude_list.append('--exclude=%s' % piece)
-        return tuple(exclude_list)
-
-    def create_include_string(self):
-        # Create list of includes, with parent-paths included before the
-        # includes.
-        include_list = []
-        for include in self.includes.split():
-            included_parts = ''
-            elems = include.split('/')
-
-            # Add parent paths.
-            for part in elems[0:-1]:
-                included_parts = '/'.join([included_parts, part]).lstrip('/')
-                include_list.append(included_parts + '/')
-
-            # Add final path. If the basename contains a '*', we treat
-            # it as file, otherwise we treat is as dir and add '/***'.
-            included_parts = '/'.join([included_parts, elems[-1]]).lstrip('/')
-            if '*' in included_parts:
-                include_list.append(included_parts)
-            else:
-                include_list.append(included_parts + '/***')
-
-        # Sorted/uniqued include list, removing duplicates.
-        include_list = sorted(set(include_list))
-
-        # Return values with '--include=' prepended.
-        return tuple(('--include=' + i) for i in include_list)
-
-    def get_transport_ssh_rsync_path(self):
-        """
-        Return --rsync-path=... for the ssh-transport.
-
-        May optionally add 'sudo' and 'ionice'.
-        """
-        flag = ['--rsync-path=']
-        if self.use_sudo:
-            flag.append('sudo ')
-        if self.use_ionice:
-            flag.append(self.ionice_path)
-            flag.append(' -c2 -n7 ')
-        flag.append(self.rsync_path)
-        return (''.join(flag),)
-
-    def get_transport_ssh_options(self):
-        """
-        Get rsync '-e' option which specifies ssh binary and arguments,
-        used to set a per-host known_hosts file, and ignore host checking
-        on the first run.
-
-        For compatibility with this, you may want this function in your
-        planb user .bashrc::
-
-            ssh() {
-                for arg in "$@"; do
-                    case $arg in
-                    -*) ;;
-                    *) break ;;
-                    esac
-                done
-                if test -n "$arg"; then
-                    host=${arg##*@}
-                    /usr/bin/ssh -o HashKnownHosts=no \\
-                      -o UserKnownHostsFile=$HOME/.ssh/known_hosts.d/$host "$@"
-                else
-                    /usr/bin/ssh "$@"
-                fi
-            }
-        """
-        option = '-e'
-        binary = 'ssh'
-        args = self.get_transport_ssh_known_hosts_args()
-        return (
-            '%(option)s%(binary)s %(args)s' % {
-                'option': option, 'binary': binary, 'args': ' '.join(args)},)
-
-    def get_transport_ssh_known_hosts_d(self):
-        # FIXME: assert that there is no nastiness in $HOME? This value
-        # is placed in the rsync ssh options call later on.
-        known_hosts_d = (
-            os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
-        try:
-            os.makedirs(known_hosts_d, 0o755)
-        except FileExistsError:
-            pass
-        return known_hosts_d
-
-    def get_transport_ssh_known_hosts_args(self):
-        known_hosts_d = self.get_transport_ssh_known_hosts_d()
-        known_hosts_file = os.path.join(known_hosts_d, self.host)
-
-        args = [
-            '-o HashKnownHosts=no',
-            '-o UserKnownHostsFile=%s' % (known_hosts_file,),
-        ]
-        if os.path.exists(os.path.join(known_hosts_d, self.host)):
-            # If the file exists, check the keys.
-            args.append('-o StrictHostKeyChecking=yes')
-        else:
-            # If the file does not exist, create it and don't care
-            # about the fingerprint.
-            args.append('-o StrictHostKeyChecking=no')
-
-        return args
-
-    def get_transport_ssh_uri(self):
-        return ('%s@%s:%s' % (self.user, self.host, self.src_dir),)
-
-    def get_transport_rsync_uri(self):
-        return ('%s::%s' % (self.host, self.src_dir),)
-
-    def get_transport_uri(self):
-        if self.transport == TransportChoices.SSH:
-            return (
-                self.get_transport_ssh_rsync_path() +
-                self.get_transport_ssh_options() +
-                self.get_transport_ssh_uri())
-        elif self.transport == TransportChoices.RSYNC:
-            return self.get_transport_rsync_uri()
-        else:
-            raise NotImplementedError(
-                'Unknown transport: %r' % (self.transport,))
-
-    def generate_rsync_command(self):
-        flags = tuple(self.flags.split())
-        data_dir = bfs.data_dir_get(
-            self.dest_pool, str(self.hostgroup), self.friendly_name)
-        if data_dir is None:
-            raise ValueError(
-                'no data_dir found', self.id, self.dest_pool,
-                self.hostgroup_id, self.friendly_name)
-
-        args = (
-            (settings.PLANB_RSYNC_BIN,) +
-            # Work around rsync bug in 3.1.0:
-            # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
-            ('--block-size=65536',) +
-            # Fix problems when we're not root, but we can download dirs
-            # with improper perms because we're root remotely. Rsync
-            # could set up dir structures where files inside cannot be
-            # accessible anymore. Make sure our user has rwx access.
-            ('--chmod=Du+rwx',) +
-            flags +
-            self.create_exclude_string() +
-            self.create_include_string() +
-            ('--exclude=*', '--bwlimit=10000') +
-            self.get_transport_uri() +
-            (data_dir,))
-
-        return args
-
-    def run_rsync(self):
-        cmd = self.generate_rsync_command()
-        try:
-            logger.info('Running %s: %s', self.friendly_name, ' '.join(cmd))
-        except Exception:
-            logger.error('[%s]', repr(cmd))
-            raise
-
-        # Close all DB connections before continuing with the rsync
-        # command. Since it may take a while, the connection could get
-        # dropped and we'd have issues later on.
-        connections.close_all()
-
-        try:
-            output = check_output(cmd).decode('utf-8')
-            returncode = 0
-        except CalledProcessError as e:
-            returncode, output = e.returncode, e.output
-            errstr = RSYNC_EXITCODES.get(returncode, 'Return code not matched')
-            logging.warning(
-                'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e))
-            if returncode not in RSYNC_HARMLESS_EXITCODES:
-                raise
-
-        logger.info(
-            'Rsync exited with code %s for %s. Output: %s',
-            returncode, self.friendly_name, output)
-
     def signal_done(self, success):
         instance = Fileset.objects.get(pk=self.pk)
         # Using send_robust, because we do not want user-code to mess up
         # the rest of our state.
         backup_done.send_robust(
-            sender=self.__class__, hostconfig=instance, success=success)
+            sender=self.__class__, fileset=instance, success=success)
 
     def save(self, *args, **kwargs):
         # Notify the same users who get ERROR / Success for backups that
@@ -584,7 +371,7 @@ class BackupRun(models.Model):
     Runs with success==True show sensible info. For others you may need
     to take (some of) the values with a grain of salt.
     """
-    hostconfig = models.ForeignKey(Fileset, on_delete=models.CASCADE)
+    fileset = models.ForeignKey(Fileset, on_delete=models.CASCADE)
 
     started = models.DateTimeField(
         auto_now_add=True, db_index=True,
@@ -635,7 +422,7 @@ class BackupRun(models.Model):
 
     def __str__(self):
         return '<BackupRun({} #{}-{}{})>'.format(
-            self.started.strftime('%Y-%m-%d'), self.hostconfig.pk, self.pk,
+            self.started.strftime('%Y-%m-%d'), self.fileset_id, self.pk,
             '' if self.success else ' failed')
 
 

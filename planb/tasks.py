@@ -28,7 +28,7 @@ _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9*/_.-]*$')
 
 
 SINGLE_JOB_OPTS = {
-    'hook': 'planb.tasks.finalize_job_run',
+    'hook': 'planb.tasks.finalize_run',
     'group': 'Single backup job',
 }
 
@@ -64,7 +64,7 @@ class FairButUnsafeRedisLock:
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
             self.i_am_done()
-        except:
+        except Exception:
             pass
 
     def _enqueue(self):
@@ -114,122 +114,126 @@ def yaml_digits(value):
 
 
 # Sync called task; spawns async.
-def async_backup_job(job):
+def async_backup_job(fileset):
     """
-    Schedule the specified job to run at once.
+    Schedule the specified fileset to backup at once.
     """
     return async(
-        'planb.tasks.manual_job_run', job.pk,
+        'planb.tasks.manual_run', fileset.pk,
         q_options=SINGLE_JOB_OPTS)
 
 
 # Sync called task; spawns async.
 def spawn_backup_jobs():
     """
-    Schedule all eligible jobs to run soon.
+    Schedule all eligible filesets to backup soon.
     """
     JobSpawner().spawn_eligible()
 
 
 # Async called task:
-def conditional_job_run(job_id):
-    JobRunner(job_id).conditional_job_run()
+def conditional_run(fileset_id):
+    FilesetRunner(fileset_id).conditional_run()
 
 
 # Async called task:
-def manual_job_run(job_id):
-    JobRunner(job_id).manual_job_run()
+def manual_run(fileset_id):
+    FilesetRunner(fileset_id).manual_run()
 
 
 # Async called task:
-def unconditional_job_run(job_id):
-    JobRunner(job_id).unconditional_job_run()
+def unconditional_run(fileset_id):
+    FilesetRunner(fileset_id).unconditional_run()
 
 
 # Async called task:
-def finalize_job_run(task):
-    job_id = task.args[0]
-    JobRunner(job_id).finalize_job_run(task.success, task.result)
+def finalize_run(task):
+    fileset_id = task.args[0]
+    FilesetRunner(fileset_id).finalize_run(task.success, task.result)
 
 
 class JobSpawner:
     def spawn_eligible(self):
-        for job in self._enum_eligible_jobs():
+        for fileset in self._enum_eligible_filesets():
             async(
-                'planb.tasks.conditional_job_run', job.pk,
+                'planb.tasks.conditional_run', fileset.pk,
                 q_options=SINGLE_JOB_OPTS)
-            logger.info('[%s] Scheduled backup', job)
+            logger.info('[%s] Scheduled backup', fileset)
 
-    def _enum_eligible_jobs(self):
-        job_qs = (
+    def _enum_eligible_filesets(self):
+        fileset_qs = (
             Fileset.objects
             .filter(enabled=True, running=False, queued=False)
             .order_by('last_run'))  # order by last attempt
 
-        for job in job_qs:
-            # We have a job_id, lock it. If changed is 0, we did not do
+        for fileset in fileset_qs:
+            # We have a fileset_id, lock it. If changed is 0, we did not do
             # a change, ergo we did not lock it. Move along.
             changed = Fileset.objects.filter(
-                pk=job.pk, queued=False).update(queued=True)
+                pk=fileset.pk, queued=False).update(queued=True)
             if not changed:
-                logger.info('[%s] Skipped because already locked', job)
+                logger.info('[%s] Skipped because already locked', fileset)
                 continue
 
             # Check if the daily exists already.
-            if not job.should_backup():
+            if not fileset.should_backup():
                 # Unlock.
                 Fileset.objects.filter(
-                    pk=job.pk, queued=True).update(queued=False)
+                    pk=fileset.pk, queued=True).update(queued=False)
                 continue
 
             # Check if we failed recently.
-            if job.first_fail and (
-                    (timezone.now() - job.last_run).total_seconds() < 3600):
+            if fileset.first_fail and (
+                    (timezone.now() - fileset.last_run).total_seconds() <
+                    3600):
                 # Unlock.
                 Fileset.objects.filter(
-                    pk=job.pk, queued=True).update(queued=False)
-                logger.info('[%s] Skipped because of recent failure', job)
+                    pk=fileset.pk, queued=True).update(queued=False)
+                logger.info('[%s] Skipped because of recent failure', fileset)
                 continue
 
             # This one is good. May start the backup.
-            logger.info('[%s] Eligible for backup', job)
-            yield job
+            logger.info('[%s] Eligible for backup', fileset)
+            yield fileset
 
 
-class JobRunner:
-    def __init__(self, job_id):
-        self._job_id = job_id
+class FilesetRunner:
+    def __init__(self, fileset_id):
+        self._fileset_id = fileset_id
 
     def get_average_duration(self):
         # Take average of last 10 runs.
         durations = (
             BackupRun.objects
-            .filter(hostconfig_id=self._job_id, success=True)
+            .filter(hostconfig_id=self._fileset_id, success=True)
             .order_by('-id').values_list('duration', flat=True))[0:10]
         if not durations:
             return 0  # impossible.. we should have backupruns if we call this
         return sum(durations) // len(durations)
 
-    def get_dutree_listing(self, job):
+    def get_dutree_listing(self, fileset):
         # Only one dutree at a time.
-        logger.info('[%s] Waiting for dutree lock', job)
+        logger.info('[%s] Waiting for dutree lock', fileset)
         setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
-            job.pk, job.friendly_name))
+            fileset.pk, fileset.friendly_name))
 
-        with only_one_dutree_at_a_time(job.dest_pool) as waited_seconds:
+        with only_one_dutree_at_a_time(fileset.dest_pool) as waited_seconds:
             # Yes, got lock.
-            logger.info('[%s] Got dutree lock', job)
+            logger.info('[%s] Got dutree lock', fileset)
             setproctitle('[backing up %d: %s]: dutree' % (
-                job.pk, job.friendly_name))
+                fileset.pk, fileset.friendly_name))
             path = bfs.data_dir_get(
-                job.dest_pool, job.hostgroup.name, job.friendly_name)
+                fileset.dest_pool, fileset.hostgroup.name,
+                fileset.friendly_name)
             dutree = Scanner(path).scan(use_apparent_size=False)
 
             # Get snapshot size and tree.
-            snapshot_size_mb = (dutree.use_size() + 524288) >> 20  # bytes to MiB
+            snapshot_size_mb = (
+                dutree.use_size() + 524288) >> 20  # bytes to MiB
             snapshot_size_yaml = '\n'.join(
                 '{}: {}'.format(
-                    yaml_safe_str(i.name()[len(path):]), yaml_digits(i.use_size()))
+                    yaml_safe_str(i.name()[len(path):]),
+                    yaml_digits(i.use_size()))
                 for i in dutree.get_leaves())
 
         return {
@@ -237,75 +241,76 @@ class JobRunner:
             'snapshot_size_mb': snapshot_size_mb,
             'snapshot_size_yaml': snapshot_size_yaml}
 
-    def conditional_job_run(self):
+    def conditional_run(self):
         now = timezone.now()
         if 9 <= now.hour < 17:
-            job = Fileset.objects.get(pk=self._job_id)
-            logger.info('[%s] Skipped because of office hours', job)
+            fileset = Fileset.objects.get(pk=self._fileset_id)
+            logger.info('[%s] Skipped because of office hours', fileset)
             # We could retry this, but we don't need to. The jobs are
             # rescheduled every hour, so the next hour we'll arrive here
             # too and do the same time-check.
             # #self.retry(eta=now.replace(hour=17))  # @task(bind=True)
             # Instead, we do this:
-            Fileset.objects.filter(pk=job.pk).update(
+            Fileset.objects.filter(pk=fileset.pk).update(
                 queued=False, running=False)
             return
 
-        return self.unconditional_job_run()
+        return self.unconditional_run()
 
-    def manual_job_run(self):
-        job = Fileset.objects.get(pk=self._job_id)
+    def manual_run(self):
+        fileset = Fileset.objects.get(pk=self._fileset_id)
 
         # The task is delayed, but it has been scheduled/queued.
-        logger.info('[%s] Manually requested backup', job)
-        if not job.running:
+        logger.info('[%s] Manually requested backup', fileset)
+        if not fileset.running:
             # Hack so we get success mail. (Only update first_fail if it
             # was unset.)
-            Fileset.objects.filter(pk=job.pk, first_fail=None).update(
+            Fileset.objects.filter(pk=fileset.pk, first_fail=None).update(
                 first_fail=BOGODATE)
 
-            # Run job. May raise an error. Always restores queued/running.
-            self.unconditional_job_run()
+            # Run fileset. May raise an error. Always restores queued/running.
+            self.unconditional_run()
 
-    def unconditional_job_run(self):
-        job = Fileset.objects.get(pk=self._job_id)
-        first_fail = job.first_fail
+    def unconditional_run(self):
+        fileset = Fileset.objects.get(pk=self._fileset_id)
+        first_fail = fileset.first_fail
 
         # Mark it as running.
-        Fileset.objects.filter(pk=job.pk).update(running=True)
+        Fileset.objects.filter(pk=fileset.pk).update(running=True)
         t0 = time.time()
-        logger.info('[%s] Starting backup', job)
+        logger.info('[%s] Starting backup', fileset)
 
         # State that we're running.
         if getproctitle:
             oldproctitle = getproctitle()
 
         # Create log.
-        run = BackupRun.objects.create(hostconfig_id=job.pk)
+        run = BackupRun.objects.create(hostconfig_id=fileset.pk)
         try:
-            # Rsync job.
+            # Rsync fileset.
             setproctitle('[backing up %d: %s]: rsync' % (
-                job.pk, job.friendly_name))
-            job.run_rsync()
+                fileset.pk, fileset.friendly_name))
+            fileset.run_transport()
 
-            # Dutree job.
-            dutree = self.get_dutree_listing(job)
+            # Dutree fileset.
+            dutree = self.get_dutree_listing(fileset)
 
             # Update snapshots.
             setproctitle('[backing up %d: %s]: snapshots' % (
-                job.pk, job.friendly_name))
-            job.snapshot_rotate()
-            job.snapshot_create()
+                fileset.pk, fileset.friendly_name))
+            fileset.snapshot_rotate()
+            fileset.snapshot_create()
 
             # Close the DB connection because it may be stale.
             connection.close()
 
             # Yay, we're done.
-            job.refresh_from_db()
+            fileset.refresh_from_db()
 
             # Get total size.
             total_size = bfs.parse_backup_sizes(
-                job.dest_pool, job.hostgroup.name, job.friendly_name)
+                fileset.dest_pool, fileset.hostgroup.name,
+                fileset.friendly_name)
             total_size_mb = (total_size + 524288) >> 20  # bytes to MiB
 
             # Store run info.
@@ -318,7 +323,7 @@ class JobRunner:
 
             # Cache values on the hostconfig.
             now = timezone.now()
-            Fileset.objects.filter(pk=job.pk).update(
+            Fileset.objects.filter(pk=fileset.pk).update(
                 last_ok=now,                        # success
                 last_run=now,                       # now
                 first_fail=None,                    # no failure
@@ -328,12 +333,12 @@ class JobRunner:
             # Mail if failed recently.
             if first_fail:  # last job was not okay
                 if first_fail == BOGODATE:
-                    msg = 'Backing up {} was a success.\n'.format(job)
+                    msg = 'Backing up {} was a success.\n'.format(fileset)
                 else:
                     msg = (
                         'Backing up {} which was failing since {}.\n\n'
-                        'Now all is well again.\n'.format(job, first_fail))
-                mail_admins('OK: Backup success of {}'.format(job), msg)
+                        'Now all is well again.\n'.format(fileset, first_fail))
+                mail_admins('OK: Backup success of {}'.format(fileset), msg)
 
         except Exception as e:
             if True:  # isinstance(e, DigestableError)
@@ -341,7 +346,7 @@ class JobRunner:
                 # for Django-Q but it logs errors instead of exceptions and
                 # then we don't have any useful tracebacks.
                 logger.exception(
-                    'Backup failed of %s on %s', job, job.host)
+                    'Backup failed of %s on %s', fileset, fileset.host)
             else:
                 # If the error is digestable, log an error without mail and
                 # have someone run a daily mail about this instead.
@@ -350,15 +355,15 @@ class JobRunner:
             # Close the DB connection because it may be stale.
             connection.close()
 
-            # Store failure on the run job.
+            # Store failure on the run fileset.
             BackupRun.objects.filter(pk=run.pk).update(
                 duration=(time.time() - t0), success=False, error_text=str(e))
 
             # Cache values on the hostconfig.
             now = timezone.now()
-            Fileset.objects.filter(pk=job.pk).update(
+            Fileset.objects.filter(pk=fileset.pk).update(
                 last_run=now)    # don't overwrite last_ok
-            (Fileset.objects.filter(pk=job.pk)
+            (Fileset.objects.filter(pk=fileset.pk)
              .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
              .update(first_fail=now))  # overwrite first_fail only if unset
 
@@ -367,25 +372,25 @@ class JobRunner:
             # #raise
 
         else:
-            logger.info('[%s] Completed successfully', job)
+            logger.info('[%s] Completed successfully', fileset)
 
         finally:
             if getproctitle:
                 setproctitle(oldproctitle)
 
-    def finalize_job_run(self, success, resultset):
+    def finalize_run(self, success, resultset):
         # Set the queued/running to False when we're done.
-        job = Fileset.objects.get(pk=self._job_id)
-        Fileset.objects.filter(pk=job.pk).update(
+        fileset = Fileset.objects.get(pk=self._fileset_id)
+        Fileset.objects.filter(pk=fileset.pk).update(
             queued=False, running=False)
 
         # This is never not success, as we handled all cases in the
-        # unconditional_job_run, we hope.
+        # unconditional_run, we hope.
         if not success:
             # This should mail someone.
-            logger.error('[%s] Job run failure: %r', job, resultset)
-            job.signal_done(success=False)
+            logger.error('[%s] Job run failure: %r', fileset, resultset)
+            fileset.signal_done(success=False)
             return
 
-        logger.info('[%s] Done', job)
-        job.signal_done(success=True)
+        logger.info('[%s] Done', fileset)
+        fileset.signal_done(success=True)

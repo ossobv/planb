@@ -59,19 +59,6 @@ def backward(apps, schema_editor):
         config.delete()
 
 
-# self.create_exclude_string
-# self.create_include_string
-# self.generate_rsync_command
-# self.get_transport_rsync_uri
-# self.get_transport_ssh_known_hosts_args
-# self.get_transport_ssh_known_hosts_d
-# self.get_transport_ssh_options
-# self.get_transport_ssh_rsync_path
-# self.get_transport_ssh_uri
-# self.get_transport_uri
-
-# run_rsync -> run_transport
-
 class Migration(migrations.Migration):
 
     dependencies = [

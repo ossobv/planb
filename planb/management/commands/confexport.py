@@ -188,7 +188,7 @@ class HostAsConfig(object):
         return ('exclude', self._split_paths(self._host.excludes))
 
     def get_notes(self):
-        return ('notes', self._host.description)
+        return ('notes', self._host.notes)
 
     def to_dict(self):
         return self.get_all()

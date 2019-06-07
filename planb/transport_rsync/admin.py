@@ -29,8 +29,10 @@ class ConfigAdmin(admin.ModelAdmin):
     )
 
     # form = FilesetAdminForm
-    # search_fields = ('friendly_name', 'host', 'hostgroup__name',
-    #   'description')
+    search_fields = (
+        'host', 'fileset__friendly_name', 'fileset__hostgroup__name',
+        'fileset__notes',
+    )
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
@@ -44,16 +46,16 @@ class ConfigAdmin(admin.ModelAdmin):
                 value += 0x100000000
             return value
 
-        ret = []
+        ret = [object.user]
         if object.use_sudo:
             ret.append('sudo')
         if object.use_ionice:
             ret.append('ionice')
         if object.includes:
-            ret.append('inc=%d:%x' % (
+            ret.append('incl=%d:%x' % (
                 len(object.includes.split(' ')), crc(object.includes)))
         if object.excludes:
-            ret.append('exc=%d:%x' % (
+            ret.append('excl=%d:%x' % (
                 len(object.excludes.split(' ')), crc(object.excludes)))
         return ', '.join(ret)
 

@@ -24,11 +24,11 @@ class Command(BaseCommand):
         parser.add_argument('--force', action='store_true', help=(
             'If output is email and it was sent recently, send anyway'))
         parser.add_argument('--with-disabled', action='store_true', help=(
-            'Also list disabled (inactive) hosts'))
+            'Also list disabled (inactive) filesets'))
         parser.add_argument('groups', nargs='?', default='*', help=(
             'Which hostgroups to operate on, allows globbing'))
-        parser.add_argument('hosts', nargs='?', default='*', help=(
-            'Which hostconfigs to operate on, allows globbing'))
+        parser.add_argument('filesets', nargs='?', default='*', help=(
+            'Which filesets to operate on, allows globbing'))
 
         return super().add_arguments(parser)
 
@@ -42,24 +42,24 @@ class Command(BaseCommand):
         else:
             assert False, options
 
-        hostconfigs = self.get_hostconfigs(
-            options['groups'], options['hosts'])
+        filesets = self.get_filesets(
+            options['groups'], options['filesets'])
 
-        self.run_per_group(func, hostconfigs, options['force'])
+        self.run_per_group(func, filesets, options['force'])
 
-    def get_hostconfigs(self, groups_glob, hosts_glob, with_disabled=False):
+    def get_filesets(self, groups_glob, filesets_glob, with_disabled=False):
         groups = HostGroup.objects.all()
-        hosts = Fileset.objects.all()
+        filesets = Fileset.objects.all()
 
         groups = [
             group for group in groups if fnmatch(group.name, groups_glob)]
-        hosts = Fileset.objects.filter(id__in=(
-            host.id for host in (
-                hosts.filter(hostgroup__in=groups)
+        filesets = Fileset.objects.filter(id__in=(
+            fs.id for fs in (
+                filesets.filter(hostgroup__in=groups)
                 .prefetch_related('hostgroup'))
-            if fnmatch(host.friendly_name, hosts_glob)))
+            if fnmatch(fs.friendly_name, filesets_glob)))
 
-        return hosts
+        return filesets
 
     def run_per_group(self, func, qs, force_send):
         # Fix so we can aggregate by group below.
@@ -67,23 +67,23 @@ class Command(BaseCommand):
             'hostgroup__name', 'hostgroup__id', 'friendly_name', 'id')
 
         lastgroup = None
-        hosts = []
-        for host in qs:
-            if lastgroup != host.hostgroup:
+        filesets = []
+        for fileset in qs:
+            if lastgroup != fileset.hostgroup:  # prefetched
                 if lastgroup is not None:
-                    func(lastgroup, hosts, force_send)
-                lastgroup = host.hostgroup
-                hosts = []
-            hosts.append(host)
+                    func(lastgroup, filesets, force_send)
+                lastgroup = fileset.hostgroup
+                filesets = []
+            filesets.append(fileset)
 
         if lastgroup is not None:
-            func(lastgroup, hosts, force_send)
+            func(lastgroup, filesets, force_send)
 
-    def generate_subject(self, hostgroup, hosts):
+    def generate_subject(self, hostgroup, filesets):
         hosts_disabled = sum(
-            1 for i in hosts if not i.enabled)
+            1 for i in filesets if not i.enabled)
         hosts_failed = sum(
-            1 for i in hosts if i.enabled and not i.last_backuprun.success)
+            1 for i in filesets if i.enabled and not i.last_backuprun.success)
 
         subject = _('%s backup report "%s"') % (
             settings.COMPANY_NAME, hostgroup.name)
@@ -93,10 +93,10 @@ class Command(BaseCommand):
 
         return subject
 
-    def generate_text(self, hostgroup, hosts):
+    def generate_text(self, hostgroup, filesets):
         context = {
             'hostgroup': hostgroup,
-            'hosts': hosts,
+            'filesets': filesets,
             'company_name': settings.COMPANY_NAME,
             'company_email': settings.COMPANY_EMAIL,
         }
@@ -114,16 +114,16 @@ class Command(BaseCommand):
 
         return html
 
-    def output_text(self, hostgroup, hosts, force_send):
-        text = self.generate_text(hostgroup, hosts)
+    def output_text(self, hostgroup, filesets, force_send):
+        text = self.generate_text(hostgroup, filesets)
         self.stdout.write(text)
 
-    def output_html(self, hostgroup, hosts, force_send):
-        text = self.generate_text(hostgroup, hosts)
+    def output_html(self, hostgroup, filesets, force_send):
+        text = self.generate_text(hostgroup, filesets)
         html = self.generate_html(text)
         self.stdout.write(html)
 
-    def output_email(self, hostgroup, hosts, force_send):
+    def output_email(self, hostgroup, filesets, force_send):
         if not hostgroup.notify_email:
             self.stderr.write(
                 'No notify addresses for group {}, skipping..'.format(
@@ -138,8 +138,8 @@ class Command(BaseCommand):
                         hostgroup))
                 return
 
-        subject = self.generate_subject(hostgroup, hosts)
-        text = self.generate_text(hostgroup, hosts)
+        subject = self.generate_subject(hostgroup, filesets)
+        text = self.generate_text(hostgroup, filesets)
         html = self.generate_html(text)
 
         recipients = hostgroup.notify_email

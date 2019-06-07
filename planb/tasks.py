@@ -205,7 +205,7 @@ class FilesetRunner:
         # Take average of last 10 runs.
         durations = (
             BackupRun.objects
-            .filter(hostconfig_id=self._fileset_id, success=True)
+            .filter(fileset_id=self._fileset_id, success=True)
             .order_by('-id').values_list('duration', flat=True))[0:10]
         if not durations:
             return 0  # impossible.. we should have backupruns if we call this
@@ -285,7 +285,7 @@ class FilesetRunner:
             oldproctitle = getproctitle()
 
         # Create log.
-        run = BackupRun.objects.create(hostconfig_id=fileset.pk)
+        run = BackupRun.objects.create(fileset_id=fileset.pk)
         try:
             # Rsync fileset.
             setproctitle('[backing up %d: %s]: rsync' % (
@@ -321,7 +321,7 @@ class FilesetRunner:
                 snapshot_size_mb=dutree['snapshot_size_mb'],
                 snapshot_size_listing=dutree['snapshot_size_yaml'])
 
-            # Cache values on the hostconfig.
+            # Cache values on the fileset.
             now = timezone.now()
             Fileset.objects.filter(pk=fileset.pk).update(
                 last_ok=now,                        # success
@@ -345,8 +345,7 @@ class FilesetRunner:
                 # Raise log exception with traceback. We could pass it along
                 # for Django-Q but it logs errors instead of exceptions and
                 # then we don't have any useful tracebacks.
-                logger.exception(
-                    'Backup failed of %s on %s', fileset, fileset.host)
+                logger.exception('Backing up %s failed', fileset)
             else:
                 # If the error is digestable, log an error without mail and
                 # have someone run a daily mail about this instead.
@@ -359,7 +358,7 @@ class FilesetRunner:
             BackupRun.objects.filter(pk=run.pk).update(
                 duration=(time.time() - t0), success=False, error_text=str(e))
 
-            # Cache values on the hostconfig.
+            # Cache values on the fileset.
             now = timezone.now()
             Fileset.objects.filter(pk=fileset.pk).update(
                 last_run=now)    # don't overwrite last_ok

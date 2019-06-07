@@ -1,15 +1,18 @@
 import json
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from planb.management.base import BaseCommandWithZabbix
 from planb.models import Fileset
 
 
 class Command(BaseCommandWithZabbix):
-    help = 'Lists hosts'
+    help = 'Lists filesets'
 
     def handle(self, *args, **options):
         qs = (
             Fileset.objects.filter(enabled=True)
+            .prefetch_related('hostgroup')
             .order_by('hostgroup__name', 'friendly_name'))
         if options['zabbix']:
             self.dump_zabbix_discovery(qs)
@@ -20,14 +23,20 @@ class Command(BaseCommandWithZabbix):
         ret = []
 
         lastgroup = None
-        for host in qs:
-            if lastgroup != host.hostgroup:
-                lastgroup = host.hostgroup
+        for fileset in qs:
+            if lastgroup != fileset.hostgroup:  # prefetched
+                lastgroup = fileset.hostgroup
                 if ret:
                     ret.append('')
-                ret.append('[{}]'.format(host.hostgroup))
-            ret.append('{host.friendly_name:30s}  {host.host}'.format(
-                host=host))
+                ret.append('[{}]'.format(fileset.hostgroup))
+
+            try:
+                host = fileset.get_transport().host
+            except ObjectDoesNotExist:
+                host = 'MISSING_TRANSPORT'
+
+            ret.append('{fileset.friendly_name:30s}  {host}'.format(
+                fileset=fileset, host=host))
 
         if ret:
             ret.append('')

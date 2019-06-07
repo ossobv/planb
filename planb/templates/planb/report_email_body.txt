@@ -22,55 +22,55 @@ backup service.
 +----------------------------------+------------+--------------------+
 | {{ _('name')|ljust:32 }} | {{ _('disk use')|ljust:10 }} | {{ _('last backup')|ljust:18 }} |
 +==================================+============+====================+
-{% for host in hosts %}| {{ host.friendly_name|ljust:32|truncatechars:32 }} |{% comment %}
-{% endcomment %} {{ host.total_size|filesizeformat|rjust:10 }} |{% comment %}
-{% endcomment %} {{ host.last_ok|date:'Y-m-d'|ljust:10 }}{% comment %}
-{% endcomment %} {% if not host.enabled %}{{ _('**off**') }}{% comment %}
-{% endcomment %}{% elif host.first_fail %}{{ _('**err**') }}{% else %}       {% endif %} |
+{% for fileset in filesets %}| {{ fileset.friendly_name|ljust:32|truncatechars:32 }} |{% comment %}
+{% endcomment %} {{ fileset.total_size|filesizeformat|rjust:10 }} |{% comment %}
+{% endcomment %} {{ fileset.last_ok|date:'Y-m-d'|ljust:10 }}{% comment %}
+{% endcomment %} {% if not fileset.enabled %}{{ _('**off**') }}{% comment %}
+{% endcomment %}{% elif fileset.first_fail %}{{ _('**err**') }}{% else %}       {% endif %} |
 +----------------------------------+------------+--------------------+
 {% endfor %}
 
 ----------------------
 Reports per host below
 ----------------------
-{% for host in hosts %}
+{% for fileset in filesets %}
 +--------------------------------------------------------------+
-| {{ host.friendly_name|bold|ljust:60 }} |
+| {{ fileset.friendly_name|bold|ljust:60 }} |
 +=======================+======================================+
-| Total size            | {{ host.last_successful_backuprun.total_size|filesizeformat|ljust:36 }} |
+| Total size            | {{ fileset.last_successful_backuprun.total_size|filesizeformat|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Last snapshot size    | {{ host.last_successful_backuprun.snapshot_size|filesizeformat|ljust:36 }} |
+| Last snapshot size    | {{ fileset.last_successful_backuprun.snapshot_size|filesizeformat|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Last succesful backup | {{ host.last_ok|date:'Y-m-d H:i:s'|ljust:36 }} |
+| Last succesful backup | {{ fileset.last_ok|date:'Y-m-d H:i:s'|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Average run time      | {{ host.average_duration|formatseconds|ljust:36 }} |
+| Average run time      | {{ fileset.average_duration|formatseconds|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Configured retention  | {{ host.retention_display|ljust:36 }} |{% if not host.enabled %}
+| Configured retention  | {{ fileset.retention_display|ljust:36 }} |{% if not fileset.enabled %}
 +-----------------------+--------------------------------------+
 | State                 | DISABLED                             |{% endif %}
 +-----------------------+--------------------------------------+
-{% if host.first_fail and host.enabled %}
+{% if fileset.first_fail and fileset.enabled %}
 Last backup FAILED with error::
 
-{{ host.last_backuprun.error_text|default:_('error message missing')|block }}
+{{ fileset.last_backuprun.error_text|default:_('error message missing')|block }}
 
 {% endif %}
-Included paths:
+{% with fileset.get_transport.includes as includes %}{% if includes %}Included paths:
 
-{% for path in host.includes.split %}- ``/{{ path }}``
-{% endfor %}
-{% if host.excludes %}Excluded paths:
+{% for path in includes.split %}- ``/{{ path }}``
+{% endfor %}{% endif %}{% endwith %}
+{% with fileset.get_transport.excludes as excludes %}{% if excludes %}Excluded paths:
 
-{% for path in host.excludes.split %}- ``/{{ path }}``
-{% endfor %}{% endif %}
-{% if host.last_successful_backuprun %}Last snapshot disk usage:
+{% for path in excludes.split %}- ``/{{ path }}``
+{% endfor %}{% endif %}{% endwith %}
+{% if fileset.last_successful_backuprun %}Last snapshot disk usage:
 
-{% for path, size in host.last_successful_backuprun.snapshot_size_listing_as_list %}{% comment %}
+{% for path, size in fileset.last_successful_backuprun.snapshot_size_listing_as_list %}{% comment %}
 {% endcomment %}- {{ size|filesizeformat|rjust:10 }} ``{{ path }}``
 {% endfor %}{% endif %}
 Available snapshots:
 
-{% for snapshot in host.snapshot_list_display %}- ``{{ snapshot }}``
+{% for snapshot in fileset.snapshot_list_display %}- ``{{ snapshot }}``
 {% empty %}
 {{ _('Warning: there are no snapshots available for this host.') }}
 {% endfor %}

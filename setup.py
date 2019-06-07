@@ -78,7 +78,7 @@ if __name__ == '__main__':
             'planb.fixtures': ['*.xml'],
             'planb.static': ['planb/js/jquery-postlink.js'],
             'planb.templates': [
-                'admin/planb/hostconfig/change_form.html',
+                'admin/planb/fileset/change_form.html',
                 'planb/report_email_body.txt']},
         description='PlanB automates remote SSH+rsync backups',
         long_description=('\n\n\n'.join([readme, changes])),

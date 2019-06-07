@@ -17,8 +17,8 @@ class BasePoster(object):
         self.use_batch = use_batch
         self.data = []
 
-    def add(self, hostgroup, hostconfig, report_date):
-        data = self.format_data(hostgroup, hostconfig, report_date)
+    def add(self, hostgroup, fileset, report_date):
+        data = self.format_data(hostgroup, fileset, report_date)
         if self.use_batch:
             self.data.append(data)
         else:
@@ -69,12 +69,12 @@ class BossoBillingPoster(BasePoster):
         else:
             logger.error(response)
 
-    def format_data(self, hostgroup, hostconfig, report_date):
+    def format_data(self, hostgroup, fileset, report_date):
         return {
             'name': '{}-{}'.format(
-                hostgroup.name, hostconfig.friendly_name),
+                hostgroup.name, fileset.friendly_name),
             'date': report_date,
-            'size': hostconfig.total_size_mb << 20  # MiB to B
+            'size': fileset.total_size_mb << 20  # MiB to B
         }
 
 
@@ -135,13 +135,13 @@ class BossoRESTPoster(BasePoster):
         else:
             logger.error('%r returned error %r', data, error)
 
-    def format_data(self, hostgroup, hostconfig, report_date):
+    def format_data(self, hostgroup, fileset, report_date):
         return {
             'relation_code': hostgroup.name,
-            'item_code': hostconfig.friendly_name,
+            'item_code': fileset.friendly_name,
             'service_code': 'backup-size-gibibyte',
             'date': report_date.strftime('%Y-%m-%d'),
-            'value': round(hostconfig.total_size_mb / 1024, 5),  # MiB to GiB
+            'value': round(fileset.total_size_mb / 1024, 5),  # MiB to GiB
             'unit': 'GiB',
         }
 
@@ -156,12 +156,12 @@ def daily_hostgroup_report(data_poster):
     first_day_of_this_month = today.replace(day=1)
 
     for hostgroup in HostGroup.objects.order_by('name'):
-        for hostconfig in (
-                # Find hostconfigs which succeeded at least once.
-                hostgroup.hostconfigs.exclude(last_ok=None)
+        for fileset in (
+                # Find filesets which succeeded at least once.
+                hostgroup.filesets.exclude(last_ok=None)
                 .order_by('friendly_name')):
 
-            if not hostconfig.enabled:
+            if not fileset.enabled:
                 # Always push data for disabled hosts on the first of the month
                 # so the hostgroup can get billed for it.
                 if not today_is_first_day_of_the_month:
@@ -169,8 +169,8 @@ def daily_hostgroup_report(data_poster):
                 date_ = first_day_of_this_month
             else:
                 # Take date, and drop microseconds and timezone.
-                date_ = hostconfig.last_ok.replace(microsecond=0, tzinfo=None)
+                date_ = fileset.last_ok.replace(microsecond=0, tzinfo=None)
             # Add or post the data.
-            data_poster.add(hostgroup, hostconfig, date_)
+            data_poster.add(hostgroup, fileset, date_)
         # Post the batch if needed.
         data_poster.close_batch()

@@ -326,9 +326,9 @@ You can add something like this to your settings::
     from planb.signals import backup_done
 
     @receiver(backup_done)
-    def notify_zabbix(sender, hostconfig, success, **kwargs):
+    def notify_zabbix(sender, fileset, success, **kwargs):
         if success:
-            key = 'planb.get_latest[{}]'.format(hostconfig.identifier)
+            key = 'planb.get_latest[{}]'.format(fileset.identifier)
             val = datetime.now().strftime('%s')
             cmd = (
                 'zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf',
@@ -394,7 +394,7 @@ Rsync complains about ``Invalid or incomplete multibyte or wide character``.
           Invalid or incomplete multibyte or wide character (84)
 
     Then you might be backing up old hosts with legacy Latin-1 encoding
-    on the filesystem. Adding ``--iconv=utf8,latin1`` to the hostconfig
+    on the filesystem. Adding ``--iconv=utf8,latin1`` to the rsync transport
     flags should fix it.
 
     You may need rsync version 3 or higher for that.

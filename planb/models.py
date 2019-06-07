@@ -3,7 +3,9 @@ import os
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
+from django.apps import apps
 from django.conf import settings
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.core.mail import mail_admins
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models.signals import post_save
@@ -128,6 +130,19 @@ class Fileset(models.Model):
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
+
+    def get_transport(self):
+        ret = []
+        for transport_class_name in settings.PLANB_TRANSPORTS:
+            transport_class = apps.get_model(transport_class_name)
+            ret.extend(transport_class.objects.filter(fileset=self))
+        if not ret:
+            raise ObjectDoesNotExist(
+                'no transport for {!r}'.format(self))
+        if len(ret) > 1:
+            raise MultipleObjectsReturned(
+                    'multiple transports for {!r}'.format(self))
+        return ret[0]
 
     @property
     def identifier(self):

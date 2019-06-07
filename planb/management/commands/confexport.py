@@ -3,6 +3,8 @@ from fnmatch import fnmatch
 import json
 import re
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from planb.management.base import BaseCommand
 from planb.models import Fileset, HostGroup
 
@@ -112,8 +114,8 @@ class HostAsConfigListingConfig(object):
 
 
 class HostAsConfig(object):
-    def __init__(self, hostconfig, config=HostAsConfigListingConfig()):
-        self._host = hostconfig
+    def __init__(self, fileset, config=HostAsConfigListingConfig()):
+        self._host = fileset
         self._config = config
 
     def get_all(self):
@@ -134,7 +136,7 @@ class HostAsConfig(object):
 
     def get_version(self):
         # Optionally version info? Should we call this options instead? Right
-        # now all the options pretty much match the PlanB hostconfig data model
+        # now all the options pretty much match the PlanB fileset data model
         # directly.
         return ('v', 1)
         # return ('v', ['list', '1', {'x': 1, 'y': 2}])  # test only
@@ -154,7 +156,7 @@ class HostAsConfig(object):
         return ('paths', OrderedDict((
             # Root of the filesystem. Should be '/'. In the future we
             # could put something else in here, like '/encrypted-root/'.
-            ('root', '/'),
+            self.get_root(),
             self.get_includes(),
             self.get_excludes(),
         )))
@@ -177,15 +179,31 @@ class HostAsConfig(object):
 
         return paths
 
+    def get_root(self):
+        try:
+            return ('root', self._host.get_transport().src_dir)
+        except ObjectDoesNotExist:
+            return ('root', None)
+
     def get_includes(self):
         # A list of "glob" names to include; started from 'root'
         # without that slash.
-        return ('include', self._split_paths(self._host.includes))
+        try:
+            return ('include', self._split_paths(
+                self._host.get_transport().includes))
+        except ObjectDoesNotExist:
+            # No transport configured? Then no includes..
+            return ('include', 'NO TRANSPORT CONFIGURED')
 
     def get_excludes(self):
         # A list of "glob" names to exclude; started from 'root'
         # without that slash.
-        return ('exclude', self._split_paths(self._host.excludes))
+        try:
+            return ('exclude', self._split_paths(
+                self._host.get_transport().excludes))
+        except ObjectDoesNotExist:
+            # No transport configured? Then no excludes..
+            return ('exclude', 'NO TRANSPORT CONFIGURED')
 
     def get_notes(self):
         return ('notes', self._host.notes)
@@ -214,12 +232,12 @@ class Command(BaseCommand):
         parser.add_argument('groups', nargs='?', default='*', help=(
             'Which hostgroups to operate on, allows globbing'))
         parser.add_argument('hosts', nargs='?', default='*', help=(
-            'Which hostconfigs to operate on, allows globbing'))
+            'Which filesets to operate on, allows globbing'))
 
         return super().add_arguments(parser)
 
     def handle(self, *args, **options):
-        hostconfigs = self.get_hostconfigs(
+        filesets = self.get_filesets(
             options['groups'], options['hosts'],
             with_disabled=options['with_disabled'])
         listingconfig = HostAsConfigListingConfig()
@@ -229,23 +247,23 @@ class Command(BaseCommand):
             listingconfig.with_schedule = False
 
         if options['yaml']:
-            self.hosts2yaml(hostconfigs, listingconfig)
+            self.hosts2yaml(filesets, listingconfig)
         else:
-            self.hosts2json(hostconfigs, listingconfig)
+            self.hosts2json(filesets, listingconfig)
 
-    def hosts2json(self, hostconfigs, listingconfig):
-        for hostconfig in hostconfigs:
-            jsonblob = HostAsConfig(hostconfig, listingconfig).to_json()
+    def hosts2json(self, filesets, listingconfig):
+        for fileset in filesets:
+            jsonblob = HostAsConfig(fileset, listingconfig).to_json()
             self.stdout.write('/* {} */\n\n{}\n\n'.format(
-                hostconfig.identifier, jsonblob))
+                fileset.identifier, jsonblob))
 
-    def hosts2yaml(self, hostconfigs, listingconfig):
-        for hostconfig in hostconfigs:
-            yamlblob = HostAsConfig(hostconfig, listingconfig).to_yaml()
+    def hosts2yaml(self, filesets, listingconfig):
+        for fileset in filesets:
+            yamlblob = HostAsConfig(fileset, listingconfig).to_yaml()
             self.stdout.write('---\n# {}\n\n{}\n\n'.format(
-                hostconfig.identifier, yamlblob))
+                fileset.identifier, yamlblob))
 
-    def get_hostconfigs(self, groups_glob, hosts_glob, with_disabled=False):
+    def get_filesets(self, groups_glob, hosts_glob, with_disabled=False):
         groups = HostGroup.objects.all()
         hosts = Fileset.objects.all()
         if not with_disabled:

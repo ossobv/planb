@@ -8,12 +8,12 @@ class Command(BaseCommand):
     help = 'Clones the Fileset of ID n'
 
     def add_arguments(self, parser):
-        parser.add_argument('hostconfig_id', type=int)
+        parser.add_argument('fileset_id', type=int)
         parser.add_argument('friendly_name')
         parser.add_argument('host')
 
     def handle(self, *args, **options):
-        template = Fileset.objects.get(pk=options['hostconfig_id'])
+        template = Fileset.objects.get(pk=options['fileset_id'])
         copy = template.clone(
             friendly_name=options['friendly_name'],
             host=options['host'])

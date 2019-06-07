@@ -25,10 +25,10 @@ class Command(BaseCommand):
             datasets = Datasets([
                 i for i in datasets if not fnmatch(i.identifier, exclude)])
 
-        datasets.load_hostconfigs()
+        datasets.load_filesets()
         if options['stale']:
             datasets = Datasets([
-                i for i in datasets if not i.hostconfig])
+                i for i in datasets if not i.fileset])
 
         datasets.sort()
         self.dump_list(datasets)
@@ -38,7 +38,7 @@ class Command(BaseCommand):
 
         lastgroup = None
         for dataset in datasets:
-            host = dataset.hostconfig
+            host = dataset.fileset
             hostgroup = host.hostgroup if host else '(nogroup)'
             if lastgroup != hostgroup:
                 lastgroup = hostgroup

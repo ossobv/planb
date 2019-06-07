@@ -86,6 +86,11 @@ AUTHENTICATION_BACKENDS = [
 ]
 PLANB_USER_GROUP = 'PlanB user'
 
+# FIXME: can we populate this automatically through INSTALLED_APPS?
+PLANB_TRANSPORTS = [
+    'transport_rsync.Config',
+]
+
 Q_CLUSTER = {
     'name': 'PlanB',
     'workers': 7,

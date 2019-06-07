@@ -20,7 +20,7 @@ class Datasets(list):
     A list of Dataset objects.
     """
     @staticmethod
-    def get_hostconfig_class():
+    def get_fileset_class():
         from planb.models import Fileset
         return Fileset
 
@@ -33,18 +33,18 @@ class Datasets(list):
 
         return super().sort(key=key, reverse=reverse)
 
-    def load_hostconfigs(self):
+    def load_filesets(self):
         """
-        Set reference to hostconfigs.
+        Set reference to filesets.
         """
         configs_by_identifier = {}
-        for config in self.get_hostconfig_class().objects.all():
+        for config in self.get_fileset_class().objects.all():
             identifier = config.get_storage().get_identifier(config.identifier)
             configs_by_identifier[identifier] = config
 
         for dataset in self:
             config = configs_by_identifier.get(dataset.identifier, False)
-            dataset.set_hostconfig(config)
+            dataset.set_fileset(config)
 
 
 class Dataset(object):
@@ -71,28 +71,28 @@ class Dataset(object):
         self.identifier = identifier
         self._backend = backend
         self._disk_usage = None
-        self._hostconfig = None
+        self._fileset = None
 
     def __repr__(self):
         return '<{}:{}>'.format(self._backend.name, self.identifier)
 
     @property
     def disk_usage(self):
-        assert self._hostconfig is not None
+        assert self._fileset is not None
         return self._disk_usage
 
     @property
-    def hostconfig(self):
-        assert self._hostconfig is not None
-        return self._hostconfig
+    def fileset(self):
+        assert self._fileset is not None
+        return self._fileset
 
     def set_disk_usage(self, usage):
         assert self._disk_usage is None
         self._disk_usage = usage
 
-    def set_hostconfig(self, hostconfig):
-        assert self._hostconfig is None
-        self._hostconfig = hostconfig
+    def set_fileset(self, fileset):
+        assert self._fileset is None
+        self._fileset = fileset
 
 
 class OldStyleStorage(object):

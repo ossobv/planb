@@ -12,6 +12,7 @@ from planb.common.subprocess2 import (
 from planb.fields import FilelistField
 
 
+from .apps import TABLE_PREFIX
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,9 @@ class Config(models.Model):
             'for (windows) hosts without permission bits, add '
             '"--iconv=utf8,latin1" for hosts with files with legacy (Latin-1) '
             'encoding.'))
+
+    class Meta:
+        db_table = TABLE_PREFIX  # or '{}_config'.format(TABLE_PREFIX)
 
     def __str__(self):
         return '{}: rsync transport'.format(self.fileset)

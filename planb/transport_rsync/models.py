@@ -207,7 +207,7 @@ class Config(models.Model):
 
     def generate_rsync_command(self):
         flags = tuple(self.flags.split())
-        data_dir = self.get_storage_destination()
+        data_dir = self.fileset.get_storage_destination()
 
         args = (
             (settings.PLANB_RSYNC_BIN,) +
@@ -231,7 +231,7 @@ class Config(models.Model):
     def run_transport(self):
         cmd = self.generate_rsync_command()
         try:
-            logger.info('Running %s: %s', self.friendly_name, ' '.join(cmd))
+            logger.info('Running %s: %s', self.fileset.friendly_name, ' '.join(cmd))
         except Exception:
             logger.error('[%s]', repr(cmd))
             raise
@@ -254,4 +254,4 @@ class Config(models.Model):
 
         logger.info(
             'Rsync exited with code %s for %s. Output: %s',
-            returncode, self.friendly_name, output)
+            returncode, self.fileset.friendly_name, output)

@@ -290,7 +290,7 @@ class FilesetRunner:
             # Rsync fileset.
             setproctitle('[backing up %d: %s]: rsync' % (
                 fileset.pk, fileset.friendly_name))
-            fileset.run_transport()
+            fileset.get_transport().run_transport()
 
             # Dutree fileset.
             dutree = self.get_dutree_listing(fileset)

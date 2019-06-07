@@ -12,13 +12,10 @@ from planb.common.subprocess2 import (
     CalledProcessError, check_output)
 from planb.fields import FilelistField
 
-
 from .apps import TABLE_PREFIX
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
 
 logger = logging.getLogger(__name__)
-
-BOGODATE = datetime(1970, 1, 2, tzinfo=timezone.utc)
 
 
 class TransportChoices(models.PositiveSmallIntegerField):
@@ -34,7 +31,8 @@ class TransportChoices(models.PositiveSmallIntegerField):
 
 
 class Config(models.Model):
-    fileset = models.OneToOneField('planb.Fileset', on_delete=models.CASCADE)
+    fileset = models.OneToOneField(
+        'planb.Fileset', on_delete=models.CASCADE, related_name='+')
 
     host = models.CharField(max_length=254)
 

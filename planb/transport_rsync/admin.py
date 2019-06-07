@@ -2,9 +2,9 @@ from zlib import adler32
 
 from django.contrib import admin
 
-from .models import Config
+from planb.forms import generate_filesetref_form
 
-# from .forms import FilesetAdminForm
+from .models import Config
 
 
 class ConfigAdmin(admin.ModelAdmin):
@@ -13,22 +13,22 @@ class ConfigAdmin(admin.ModelAdmin):
             'fileset', 'host', 'src_dir', 'includes', 'excludes',
         )}),
         ('Transport options', {'fields': (
-            'user', 'use_sudo', 'use_ionice',
+            'user', 'use_sudo', 'use_ionice', 'transport',
         )}),
         ('Advanced options', {'fields': (
-            'transport', 'flags', 'rsync_path', 'ionice_path',
+            'flags', 'rsync_path', 'ionice_path',
         )}),
     )
 
+    form = generate_filesetref_form(Config)
     readonly_change_fields = (
         'fileset',
     )
 
     list_display = (
-        'fileset', 'host', 'options',
+        'fileset', 'host', 'user', 'options',
     )
 
-    # form = FilesetAdminForm
     search_fields = (
         'host', 'fileset__friendly_name', 'fileset__hostgroup__name',
         'fileset__notes',
@@ -46,7 +46,7 @@ class ConfigAdmin(admin.ModelAdmin):
                 value += 0x100000000
             return value
 
-        ret = [object.user]
+        ret = []
         if object.use_sudo:
             ret.append('sudo')
         if object.use_ionice:

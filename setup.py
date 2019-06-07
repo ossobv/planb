@@ -79,7 +79,11 @@ if __name__ == '__main__':
             'planb.static': ['planb/js/jquery-postlink.js'],
             'planb.templates': [
                 'admin/planb/fileset/change_form.html',
-                'planb/report_email_body.txt']},
+                'planb/report_email_body.txt'],
+            'planb.transport_exec': [
+                'templates/admin/transport_exec/config/change_form.html'],
+            'planb.transport_rsync': [
+                'templates/admin/transport_rsync/config/change_form.html']},
         description='PlanB automates remote SSH+rsync backups',
         long_description=('\n\n\n'.join([readme, changes])),
         author='Alex Boonstra, Walter Doekes, OSSO B.V.',

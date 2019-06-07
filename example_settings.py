@@ -46,6 +46,10 @@ DATABASES = {
     }
 }
 
+for key, handler in LOGGING['handlers'].items():
+    if handler.get('filename', '').startswith('/var/log/planb/'):
+        handler['filename'] = 'logs/{}'.format(handler['filename'][15:])
+
 ALLOWED_HOSTS = ('planb', 'planb.example.com')
 
 # Please replace this with the output of: pwgen -ys 58

@@ -272,19 +272,21 @@ class FilesetRunner:
     def unconditional_run(self):
         fileset = Fileset.objects.get(pk=self._fileset_id)
         first_fail = fileset.first_fail
+        if getproctitle:
+            oldproctitle = getproctitle()
 
         # Mark it as running.
         Fileset.objects.filter(pk=fileset.pk).update(running=True)
         t0 = time.time()
         logger.info('[%s] Starting backup', fileset)
 
-        # State that we're running.
-        if getproctitle:
-            oldproctitle = getproctitle()
-
-        # Create log.
-        run = BackupRun.objects.create(fileset_id=fileset.pk)
+        # Lock and open dataset for work.
+        dataset = fileset.get_dataset()
+        dataset.begin_work()
         try:
+            # Create log.
+            run = BackupRun.objects.create(fileset_id=fileset.pk)
+
             # Rsync fileset.
             setproctitle('[backing up %d: %s]: rsync' % (
                 fileset.pk, fileset.friendly_name))
@@ -370,6 +372,8 @@ class FilesetRunner:
             logger.info('[%s] Completed successfully', fileset)
 
         finally:
+            dataset.end_work()
+
             if getproctitle:
                 setproctitle(oldproctitle)
 

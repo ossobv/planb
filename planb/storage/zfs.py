@@ -254,6 +254,31 @@ class ZfsDataset(Dataset):
         except CalledProcessError:
             pass
 
+    def begin_work(self):
+        path = self.get_data_path()  # mount point
+        try:
+            self._backend.zfs_mount(self.identifier)  # zfs dataset
+        except CalledProcessError:
+            # Maybe it was already mounted?
+            if not os.path.exists(path):
+                raise ValueError('Failed to mount {} => {}'.format(
+                    self.identifier, path))
+
+        # Jump into 'data' directory, so it cannot be unmounted while we work.
+        os.chdir(path)
+
+    def end_work(self):
+        # Leave directory, so it can be unmounted.
+        os.chdir('/')
+        try:
+            self._backend.zfs_unmount(self.identifier)  # zfs dataset
+        except CalledProcessError:
+            # Ok. This might be because someone else is using it. Ignore.
+            pass
+
+        # Note that the mount point directory stays, but it will be
+        # empty/unmounted (and owned by root) at this point.
+
     def get_data_path(self):
         if not hasattr(self, '_zfs_data_path'):
             local_path = self._backend.zfs_get_local_path(self.identifier)

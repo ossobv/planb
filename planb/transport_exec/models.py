@@ -36,11 +36,30 @@ class Config(models.Model):
         return self.transport_command.strip().split()
 
     def generate_env(self):
-        env = os.environ.copy()
+        env = {}
+
+        # Don't blindly keep all env. We don't want e.g. PYTHONPATH because it
+        # might be some virtual-envy python that has no access to where we want
+        # to be.
+        keep_env = (
+            # Mandatory:
+            'PATH',
+            # Nice to have for shell apps:
+            'HOME', 'PWD', 'SHELL', 'USER',
+            # #'LANG', 'TZ',
+            # Systemd/logging stuff:
+            # #'JOURNAL_STREAM', 'LOGNAME', 'INVOCATION_ID',
+        )
+        for key in keep_env:
+            if key in os.environ:
+                env[key] = os.environ[key]
+
+        # Add our own env.
         env['planb_fileset_id'] = str(self.fileset.id)
         env['planb_fileset_friendly_name'] = self.fileset.friendly_name
         env['planb_storage_destination'] = (
             self.fileset.get_dataset().get_data_path())
+
         return env
 
     def run_transport(self):

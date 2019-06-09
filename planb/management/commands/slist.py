@@ -25,10 +25,10 @@ class Command(BaseCommand):
             datasets = Datasets([
                 i for i in datasets if not fnmatch(i.identifier, exclude)])
 
-        datasets.load_filesets()
+        datasets.load_database_config()
         if options['stale']:
             datasets = Datasets([
-                i for i in datasets if not i.fileset])
+                i for i in datasets if not i.exists_in_database])
 
         datasets.sort()
         self.dump_list(datasets)
@@ -38,21 +38,21 @@ class Command(BaseCommand):
 
         lastgroup = None
         for dataset in datasets:
-            host = dataset.fileset
-            hostgroup = host.hostgroup if host else '(nogroup)'
+            fileset = dataset.database_object
+            hostgroup = fileset.hostgroup if fileset else '(nogroup)'
             if lastgroup != hostgroup:
                 lastgroup = hostgroup
                 if ret:
                     ret.append('')
                 ret.append('; {}'.format(hostgroup))
 
-            if host:
+            if fileset:
                 ret.append(
                     '{dataset.identifier:54s}  {disk_usage:>8s}  '
-                    'id={host.id}'.format(
+                    'id={fileset.id}'.format(
                         dataset=dataset,
                         disk_usage=human.bytes(dataset.disk_usage),
-                        host=host))
+                        fileset=fileset))
             else:
                 ret.append(
                     '{dataset.identifier:54s}  {disk_usage:>8s}  '

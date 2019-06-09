@@ -20,7 +20,7 @@ class Datasets(list):
     A list of Dataset objects.
     """
     @staticmethod
-    def get_fileset_class():
+    def get_database_class():
         from planb.models import Fileset
         return Fileset
 
@@ -33,18 +33,20 @@ class Datasets(list):
 
         return super().sort(key=key, reverse=reverse)
 
-    def load_filesets(self):
+    def load_database_config(self):
         """
-        Set reference to filesets.
+        Set reference to database instances (of type Fileset).
         """
         configs_by_identifier = {}
-        for config in self.get_fileset_class().objects.all():
+        for config in self.get_database_class().objects.all():
             identifier = config.get_storage().get_identifier(config.identifier)
             configs_by_identifier[identifier] = config
 
         for dataset in self:
+            # Set all database_object's to the corresponding object or False if
+            # not found.
             config = configs_by_identifier.get(dataset.identifier, False)
-            dataset.set_fileset(config)
+            dataset.set_database_object(config)  # of type Fileset
 
 
 class Dataset(object):
@@ -65,34 +67,41 @@ class Dataset(object):
         If we used the __eq__ and __lt__ operators, they would be called
         O(n^2) times.
         """
-        return (instance._backend.name, instance.identifier)
+        return (
+            (instance._database_object and
+             instance._database_object.hostgroup.name or ''),
+            instance._backend.name, instance.identifier)
 
     def __init__(self, backend, identifier):
         self.identifier = identifier
         self._backend = backend
         self._disk_usage = None
-        self._fileset = None
+        self._database_object = None  # of type Fileset
 
     def __repr__(self):
         return '<{}:{}>'.format(self._backend.name, self.identifier)
 
     @property
-    def disk_usage(self):
-        assert self._fileset is not None
-        return self._disk_usage
+    def exists_in_database(self):
+        assert self._database_object is not None
+        return (self._database_object is not False)
 
     @property
-    def fileset(self):
-        assert self._fileset is not None
-        return self._fileset
+    def database_object(self):
+        return self._database_object  # might be None
+
+    @property
+    def disk_usage(self):
+        assert self._disk_usage is not None
+        return self._disk_usage
 
     def set_disk_usage(self, usage):
         assert self._disk_usage is None
         self._disk_usage = usage
 
-    def set_fileset(self, fileset):
-        assert self._fileset is None
-        self._fileset = fileset
+    def set_database_object(self, database_object):
+        assert self._database_object is None
+        self._database_object = database_object
 
 
 class OldStyleStorage(object):

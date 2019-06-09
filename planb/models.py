@@ -145,7 +145,7 @@ class Fileset(models.Model):
         return ret[0]
 
     @property
-    def identifier(self):
+    def basename(self):
         return '{}-{}'.format(self.hostgroup.name, self.friendly_name)
 
     @property

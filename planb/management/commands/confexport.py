@@ -255,13 +255,13 @@ class Command(BaseCommand):
         for fileset in filesets:
             jsonblob = HostAsConfig(fileset, listingconfig).to_json()
             self.stdout.write('/* {} */\n\n{}\n\n'.format(
-                fileset.identifier, jsonblob))
+                fileset.basename, jsonblob))
 
     def hosts2yaml(self, filesets, listingconfig):
         for fileset in filesets:
             yamlblob = HostAsConfig(fileset, listingconfig).to_yaml()
             self.stdout.write('---\n# {}\n\n{}\n\n'.format(
-                fileset.identifier, yamlblob))
+                fileset.basename, yamlblob))
 
     def get_filesets(self, groups_glob, hosts_glob, with_disabled=False):
         groups = HostGroup.objects.all()

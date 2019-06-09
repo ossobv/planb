@@ -328,7 +328,7 @@ You can add something like this to your settings::
     @receiver(backup_done)
     def notify_zabbix(sender, fileset, success, **kwargs):
         if success:
-            key = 'planb.get_latest[{}]'.format(fileset.identifier)
+            key = 'planb.get_latest[{}]'.format(fileset.basename)
             val = datetime.now().strftime('%s')
             cmd = (
                 'zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf',

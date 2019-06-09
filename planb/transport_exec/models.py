@@ -37,7 +37,7 @@ class Config(models.Model):
 
     def generate_env(self):
         env = os.environ.copy()
-        env['planb_fileset_id'] = self.fileset.id
+        env['planb_fileset_id'] = str(self.fileset.id)
         env['planb_fileset_friendly_name'] = self.fileset.friendly_name
         env['planb_storage_destination'] = (
             self.fileset.get_storage_destination())

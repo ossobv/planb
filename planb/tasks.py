@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from django_q.tasks import async
 
-from .models import BOGODATE, BackupRun, Fileset, bfs
+from .models import BOGODATE, BackupRun, Fileset
 
 try:
     from setproctitle import getproctitle, setproctitle
@@ -211,7 +211,7 @@ class FilesetRunner:
             return 0  # impossible.. we should have backupruns if we call this
         return sum(durations) // len(durations)
 
-    def get_dutree_listing(self, fileset):
+    def get_dutree_listing(self, fileset, dataset):
         # Only one dutree at a time.
         logger.info('[%s] Waiting for dutree lock', fileset)
         setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
@@ -222,9 +222,7 @@ class FilesetRunner:
             logger.info('[%s] Got dutree lock', fileset)
             setproctitle('[backing up %d: %s]: dutree' % (
                 fileset.pk, fileset.friendly_name))
-            path = bfs.data_dir_get(
-                fileset.dest_pool, fileset.hostgroup.name,
-                fileset.friendly_name)
+            path = dataset.get_data_path()
             dutree = Scanner(path).scan(use_apparent_size=False)
 
             # Get snapshot size and tree.
@@ -293,7 +291,7 @@ class FilesetRunner:
             fileset.get_transport().run_transport()
 
             # Dutree fileset.
-            dutree = self.get_dutree_listing(fileset)
+            dutree = self.get_dutree_listing(fileset, dataset)
 
             # Update snapshots.
             setproctitle('[backing up %d: %s]: snapshots' % (
@@ -308,9 +306,7 @@ class FilesetRunner:
             fileset.refresh_from_db()
 
             # Get total size.
-            total_size = bfs.parse_backup_sizes(
-                fileset.dest_pool, fileset.hostgroup.name,
-                fileset.friendly_name)
+            total_size = dataset.get_used_size()
             total_size_mb = (total_size + 524288) >> 20  # bytes to MiB
 
             # Store run info.

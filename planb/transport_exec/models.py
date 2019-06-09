@@ -40,7 +40,7 @@ class Config(models.Model):
         env['planb_fileset_id'] = str(self.fileset.id)
         env['planb_fileset_friendly_name'] = self.fileset.friendly_name
         env['planb_storage_destination'] = (
-            self.fileset.get_storage_destination())
+            self.fileset.get_dataset().get_data_path())
         return env
 
     def run_transport(self):

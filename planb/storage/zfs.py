@@ -41,52 +41,86 @@ class Zfs(OldStyleStorage):
 
         datasets = Datasets()
         for line in output.rstrip().split('\n'):
-            name, used = line.split('\t')
+            dataset_name, used = line.split('\t')
 
-            if any(name.startswith(i[1] + '/')
-                   for i in settings.PLANB_STORAGE_POOLS):
-                dataset = Dataset(backend=self, identifier=name)
+            if any(dataset_name.startswith(ppool + '/')
+                   for pname, ppool, ptype in settings.PLANB_STORAGE_POOLS):
+                dataset = Dataset(backend=self, identifier=dataset_name)
                 dataset.set_disk_usage(int(used))
                 datasets.append(dataset)
 
         return datasets
 
-    def data_dir_create(self, rootdir, customer, friendly_name):
-        cmd = (
-            'create',
-            self.get_dataset_name(rootdir, customer, friendly_name))
-        self._perform_binary_command(cmd)
-        # After mount, make it ours. Blegh. Unfortunate side-effect of
-        # using sudo for the ZFS create.
-        self._perform_sudo_command(
-            ('chown', str(os.getuid()), self._root_dir_get(
-                rootdir, customer, friendly_name)))
+    def get_dataset(self, rootdir, customer, friendly_name):
+        dataset_name = self._args_to_dataset_name(
+            rootdir, customer, friendly_name)
+        return ZfsDataset(backend=self, identifier=dataset_name)
 
-        logger.info('Created ZFS dataset: %s' % self.get_dataset_name(
-            rootdir, customer, friendly_name))
+    def _args_to_dataset_name(self, rootdir, customer, friendly_name):
+        return '{}/{}-{}'.format(rootdir, customer, friendly_name)
 
-    def get_dataset_name(self, rootdir, customer, friendly_name):
-        return '{0}/{1}-{2}'.format(rootdir, customer, friendly_name)
+    def _identifier_to_dataset_name(self, identifier):
+        return identifier
 
-    def _root_dir_get(self, rootdir, customer, friendly_name):
-        dataset_name = self.get_dataset_name(rootdir, customer, friendly_name)
-        cmd = (
-            'get', '-Ho', 'value', 'mountpoint', dataset_name)
+    def zfs_get_local_path(self, identifier):
+        cmd = ('get', '-Ho', 'value', 'mountpoint', identifier)
         try:
             out = self._perform_binary_command(cmd).rstrip('\r\n')
         except CalledProcessError:
             out = None
         return out
 
-    def data_dir_get(self, rootdir, customer, friendly_name):
-        root_dir = self._root_dir_get(rootdir, customer, friendly_name)
-        if not root_dir:
-            return root_dir  # =None
-        return os.path.join(root_dir, 'data')
+    def zfs_get_used_size(self, identifier):
+        dataset_name = self._identifier_to_dataset_name(identifier)
+        cmd = (
+            'get', '-o', 'value', '-Hp', 'used', dataset_name)
+        try:
+            out = self._perform_binary_command(cmd)
+        except CalledProcessError as e:
+            msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
+            logger.warning(msg)
+            size = '0'
+        else:
+            size = out.strip()
+
+        return int(size)
+
+    def zfs_create(self, identifier):
+        dataset_name = self._identifier_to_dataset_name(identifier)
+        self._perform_binary_command(('create', dataset_name))
+
+        # After mount, make it ours. Blegh. Unfortunate side-effect of
+        # using sudo for the ZFS create.
+        try:
+            self.zfs_mount(identifier)
+        except CalledProcessError:
+            pass  # already mounted (we hope?)
+        path = self.zfs_get_local_path(identifier)
+        self._perform_sudo_command(('chown', str(os.getuid()), path))
+
+        # Log something.
+        logger.info('Created ZFS dataset: %s' % identifier)
+
+    def zfs_mount(self, identifier):
+        # Even if we have user-powers on /dev/zfs, we still cannot call
+        # all commands.
+        # $ /sbin/zfs mount rpool/BACKUP/example-example
+        # mount: only root can use "--options" option
+        # cannot mount 'rpool/BACKUP/example-example': Invalid argument
+        # Might as well use sudo everywhere then.
+        dataset_name = self._identifier_to_dataset_name(identifier)
+        self._perform_binary_command(('mount', dataset_name))
+
+    def zfs_unmount(self, identifier):
+        dataset_name = self._identifier_to_dataset_name(identifier)
+        self._perform_binary_command(('unmount', dataset_name))
+
+    # (old style)
 
     def snapshot_create(self, rootdir, customer, friendly_name, snapname=None):
-        datasetname = self.get_dataset_name(rootdir, customer, friendly_name)
-        snapshot_name = '{0}@{1}'.format(datasetname, snapname)
+        dataset_name = self._args_to_dataset_name(
+            rootdir, customer, friendly_name)
+        snapshot_name = '{}@{}'.format(dataset_name, snapname)
         cmd = ('snapshot', snapshot_name)
         self._perform_binary_command(cmd)
         return snapshot_name
@@ -96,10 +130,10 @@ class Zfs(OldStyleStorage):
         self._perform_binary_command(cmd)
 
     def snapshots_get(self, rootdir, customer, friendly_name, typ=None):
+        dataset_name = self._args_to_dataset_name(
+            rootdir, customer, friendly_name)
         cmd = (
-            'list', '-r', '-H', '-t', 'snapshot', '-o', 'name',
-            self.get_dataset_name(rootdir, customer, friendly_name))
-
+            'list', '-r', '-H', '-t', 'snapshot', '-o', 'name', dataset_name)
         try:
             out = self._perform_binary_command(cmd)
         except CalledProcessError as e:
@@ -176,10 +210,11 @@ class Zfs(OldStyleStorage):
         return snapdate >= today_a_year_ago
 
     def snapshots_rotate(self, rootdir, customer, friendly_name, **kwargs):
+        dataset_name = self._args_to_dataset_name(
+            rootdir, customer, friendly_name)
         snapshots = self.snapshots_get(rootdir, customer, friendly_name)
         destroyed = []
-        logger.info('snapshots rotation for {0}'.format(
-            self.get_dataset_name(rootdir, customer, friendly_name)))
+        logger.info('snapshots rotation for {}'.format(dataset_name))
         for snapshot in snapshots:
             ds, snapname = snapshot.split('@')
             snaptype, dts = re.match(r'(\w+)-(\d+)', snapname).groups()
@@ -189,21 +224,48 @@ class Zfs(OldStyleStorage):
             if not snapshot_retain_func(snapname, retention):
                 self.snapshot_delete(snapshot)
                 destroyed.append(snapshot)
-                logger.info('destroyed: {0}, past retention'.format(
+                logger.info('destroyed: {}, past retention'.format(
                         snapshot, retention))
         return destroyed
 
-    def parse_backup_sizes(self, rootdir, customer, friendly_name):
-        cmd = (
-            'get', '-o', 'value', '-Hp', 'used',
-            self.get_dataset_name(rootdir, customer, friendly_name))
-        try:
-            out = self._perform_binary_command(cmd)
-        except CalledProcessError as e:
-            msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
-            logger.warning(msg)
-            size = '0'
-        else:
-            size = out.strip()
 
-        return int(size)
+class ZfsDataset(Dataset):
+    # TODO/FIXME: check these methods and add them as NotImplemented to the
+    # base
+
+    def ensure_exists(self):
+        # Common case is the unmounted yet existing path. If the mount point
+        # exists, everything in it should be fine too.
+        if self._backend.zfs_get_local_path(self.identifier):
+            return
+
+        # Try creating it. (Creation also mounts it.)
+        self._backend.zfs_create(self.identifier)
+
+        # Now it should exist. Create the 'data' subdirectory as well.
+        if hasattr(self, '_zfs_data_path'):
+            del self._zfs_data_path
+        path = self.get_data_path()
+        os.makedirs(path, 0o700)
+
+        # Unmount if possible.
+        try:
+            self._backend.zfs_unmount(self.identifier)
+        except CalledProcessError:
+            pass
+
+    def get_data_path(self):
+        if not hasattr(self, '_zfs_data_path'):
+            local_path = self._backend.zfs_get_local_path(self.identifier)
+            if not local_path:
+                raise ValueError(
+                    'path {!r} for {!r} does not exist'.format(
+                        local_path, self.identifier))
+            self._zfs_data_path = os.path.join(local_path, 'data')
+        return self._zfs_data_path
+
+    def get_used_size(self):
+        if not hasattr(self, '_zfs_get_used_size'):
+            self._zfs_get_used_size = self._backend.zfs_get_used_size(
+                self.identifier)
+        return self._zfs_get_used_size

@@ -1,5 +1,4 @@
 import logging
-import os
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -16,7 +15,7 @@ from django.utils.functional import cached_property
 from django.utils.translation import ugettext_lazy as _, ngettext
 
 from planb.common.subprocess2 import (
-    CalledProcessError, check_call, check_output)
+    CalledProcessError, check_output)
 from planb.signals import backup_done
 from planb.storage.base import DatasetNotFound, Storage
 from planb.storage.zfs import Zfs
@@ -186,17 +185,9 @@ class Fileset(models.Model):
     def last_successful_backuprun(self):
         return self.backuprun_set.filter(success=True).latest('started')
 
-    def get_storage(self):
-        return Storage(bfs, self.dest_pool)
-
-    def get_storage_destination(self):
-        data_dir = bfs.data_dir_get(
-            self.dest_pool, str(self.hostgroup), self.friendly_name)
-        if data_dir is None:
-            raise ValueError(
-                'no data_dir found', self.id, self.dest_pool,
-                self.hostgroup_id, self.friendly_name)
-        return data_dir
+    def get_dataset(self):
+        storage = Storage(bfs, self.dest_pool)
+        return storage.get_dataset(str(self.hostgroup), self.friendly_name)
 
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8
@@ -446,33 +437,5 @@ def create_dataset(sender, instance, created, *args, **kwargs):
     if not instance.enabled:
         return
 
-    data_dir_name = bfs.data_dir_get(
-        instance.dest_pool, instance.hostgroup,
-        instance.friendly_name)
-
-    if data_dir_name is None:
-        bfs.data_dir_create(
-            instance.dest_pool, instance.hostgroup,
-            instance.friendly_name)
-        data_dir_name = bfs.data_dir_get(
-            instance.dest_pool, instance.hostgroup,
-            instance.friendly_name)
-        assert data_dir_name is not None
-        try:
-            # Create the /data subdir.
-            os.makedirs(data_dir_name, 0o755)
-        except FileExistsError:
-            pass
-
-    if not os.path.exists(data_dir_name):
-        # Even if we have user-powers on /dev/zfs, we still cannot call
-        # all commands.
-        # $ /sbin/zfs mount rpool/BACKUP/example-example
-        # mount: only root can use "--options" option
-        # cannot mount 'rpool/BACKUP/example-example': Invalid argument
-        # Might as well use sudo everywhere then.
-        dataset_name = bfs.get_dataset_name(
-            instance.dest_pool, instance.hostgroup,
-            instance.friendly_name)
-        check_call(
-            (settings.PLANB_SUDO_BIN, bfs.binary, 'mount', dataset_name))
+    dataset = instance.get_dataset()
+    dataset.ensure_exists()

@@ -1,4 +1,8 @@
-from planb.common.subprocess2 import check_output
+import logging
+
+from planb.common.subprocess2 import CalledProcessError, check_output
+
+logger = logging.getLogger(__name__)
 
 
 class DatasetNotFound(Exception):
@@ -10,9 +14,8 @@ class Storage(object):
         self._bfs = bfs
         self._poolname = poolname
 
-    def get_identifier(self, identifier):
-        # FIXME: should be ZFS-specific?
-        return '/'.join([self._poolname, identifier])
+    def get_dataset(self, customer, friendly_name):
+        return self._bfs.get_dataset(self._poolname, customer, friendly_name)
 
 
 class Datasets(list):
@@ -39,7 +42,7 @@ class Datasets(list):
         """
         configs_by_identifier = {}
         for config in self.get_database_class().objects.all():
-            identifier = config.get_storage().get_identifier(config.identifier)
+            identifier = config.get_dataset().identifier
             configs_by_identifier[identifier] = config
 
         for dataset in self:
@@ -111,18 +114,23 @@ class OldStyleStorage(object):
         self.binary = binary
         self.sudobin = sudobin
 
-    def _perform_system_command(self, cmd):
+    def __perform_system_command(self, cmd):
         """
         Do exec command, expect 0 return value, convert output to utf-8.
         """
-        output = check_output(cmd)
+        try:
+            output = check_output(cmd)
+        except CalledProcessError as e:
+            logger.info('Non-zero exit after cmd {!r}: {}'.format(
+                cmd, e))
+            raise
         return output.decode('utf-8')  # expect valid ascii/utf-8
 
     def _perform_sudo_command(self, cmd):
         """
-        Do _perform_system_command, but with 'sudo'.
+        Do __perform_system_command, but with 'sudo'.
         """
-        return self._perform_system_command(
+        return self.__perform_system_command(
             (self.sudobin,) + tuple(cmd))
 
     def _perform_binary_command(self, cmd):
@@ -144,26 +152,6 @@ class OldStyleStorage(object):
         """
         raise NotImplementedError()
 
-    def get_dataset_name(self, rootdir, customer, friendly_name):
-        '''
-        Should return a relative path leading to the backupdir, e.g.:
-            testbackup/backupnameA
-        '''
-        raise NotImplementedError()
-
-    def data_dir_create(self, rootdir, customer, friendly_name):
-        '''
-        Should create the datadir returned by data_dir_get()
-        '''
-        raise NotImplementedError()
-
-    def data_dir_get(self, rootdir, customer, friendly_name):
-        '''
-        Should return an absolute path where to backup to e.g.:
-            /backups/testbackup-backupnameA/data
-        '''
-        raise NotImplementedError()
-
     def snapshot_create(self, rootdir, customer, friendly_name):
         raise NotImplementedError()
 
@@ -183,10 +171,4 @@ class OldStyleStorage(object):
         raise NotImplementedError()
 
     def snapshots_rotate(self, rootdir, customer, friendly_name, retention):
-        raise NotImplementedError()
-
-    def parse_backup_sizes(self, rootdir, customer, friendly_name):
-        '''
-        Should return the total size used.
-        '''
         raise NotImplementedError()

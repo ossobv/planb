@@ -203,7 +203,7 @@ class Config(models.Model):
 
     def generate_rsync_command(self):
         flags = tuple(self.flags.split())
-        data_dir = self.fileset.get_storage_destination()
+        data_dir = self.fileset.get_dataset().get_data_path()
 
         args = (
             (settings.PLANB_RSYNC_BIN,) +

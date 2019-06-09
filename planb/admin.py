@@ -69,7 +69,7 @@ class FilesetAdmin(admin.ModelAdmin):
         'friendly_name', 'hostgroup', 'dest_pool')
 
     list_display = (
-        'friendly_name', 'hostgroup', 'notes',
+        'friendly_name', 'hostgroup', 'tags',
         'disk_usage', 'run_time', 'retention',
         'last_ok_', 'first_fail_',
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
@@ -88,7 +88,8 @@ class FilesetAdmin(admin.ModelAdmin):
             return self.readonly_change_fields + self.readonly_fields
         return self.readonly_fields
 
-    def notes(self, object):
+    def tags(self, object):
+        "Take first line of notes"
         ret = object.notes.split('\n', 1)[0].strip()
         if len(ret) > 12:
             return ret[0:12] + '...'

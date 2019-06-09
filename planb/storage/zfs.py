@@ -87,7 +87,19 @@ class Zfs(OldStyleStorage):
 
     def zfs_create(self, identifier):
         dataset_name = self._identifier_to_dataset_name(identifier)
-        self._perform_binary_command(('create', dataset_name))
+
+        # For multi-slash paths, we may need to create parents as well.
+        parts = dataset_name.split('/')
+        for idx, last_part in enumerate(parts):
+            part = '/'.join(parts[0:(idx + 1)])
+            try:
+                cmd = ('get', '-o', 'value', '-Hp', 'type', part)
+                type_ = self._perform_binary_command(cmd).rstrip('\r\n')
+            except CalledProcessError:
+                # Does not exist. Create it.
+                self._perform_binary_command(('create', part))
+            else:
+                assert type_ == 'filesystem', (identifier, part, type_)
 
         # After mount, make it ours. Blegh. Unfortunate side-effect of
         # using sudo for the ZFS create.

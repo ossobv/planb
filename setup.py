@@ -20,7 +20,7 @@ def version_from_git():
             "git describe --tags --dirty | "
             "sed -e 's/-/+/;s/[^A-Za-z0-9.+]/./g'",
             shell=True)
-    except:  # (AttributeError, CalledProcessError)
+    except Exception:  # (AttributeError, CalledProcessError)
         return None
 
     version = version.decode('ascii', 'replace')

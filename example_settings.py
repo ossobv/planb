@@ -1,4 +1,5 @@
 from planb.default_settings import *  # noqa
+from planb.default_settings import LOGGING  # fix flake warning
 
 # Remember that DEBUG=True causes error-mails to not get sent, while
 # successmails still get sent. This should probably be fixed. (FIXME)

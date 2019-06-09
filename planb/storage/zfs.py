@@ -117,7 +117,7 @@ class Zfs(OldStyleStorage):
         if typ:
             snapshot_rgx = re.compile(r'.*@{}\-\d+'.format(typ))
         else:
-            snapshot_rgx = re.compile('^.*@\w+-\d+$')
+            snapshot_rgx = re.compile(r'^.*@\w+-\d+$')
         for snapshot in out.split('\n'):
             if snapshot_rgx.match(snapshot):
                 snapshots.append(snapshot)

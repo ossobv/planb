@@ -1,11 +1,9 @@
 import logging
 import os
-from datetime import datetime
 
 from django.conf import settings
 from django.db import connections, models
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 
 from planb.common.subprocess2 import (
@@ -229,7 +227,8 @@ class Config(models.Model):
     def run_transport(self):
         cmd = self.generate_rsync_command()
         try:
-            logger.info('Running %s: %s', self.fileset.friendly_name, ' '.join(cmd))
+            logger.info(
+                'Running %s: %s', self.fileset.friendly_name, ' '.join(cmd))
         except Exception:
             logger.error('[%s]', repr(cmd))
             raise

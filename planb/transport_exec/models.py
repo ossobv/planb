@@ -5,8 +5,7 @@ from django.db import connections, models
 from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
-from planb.common.subprocess2 import (
-    CalledProcessError, check_output)
+from planb.common.subprocess2 import CalledProcessError, check_output
 from planb.fields import CommandField
 
 from .apps import TABLE_PREFIX
@@ -78,14 +77,17 @@ class Config(models.Model):
         # dropped and we'd have issues later on.
         connections.close_all()
 
+        stderr = []
         try:
             # FIXME: do we want timeout handling here?
-            output = check_output(cmd, env=env).decode('utf-8')
+            output = check_output(
+                cmd, env=env, return_stderr=stderr).decode('utf-8')
         except CalledProcessError as e:
             logging.warning(
                 'Failure during exec %r: %s', ' '.join(cmd), str(e))
             raise
 
         logger.info(
-            'Exec success for %s. Output: %s',
-            self.fileset.friendly_name, output)
+            'Exec success for %s transport:\n\n(stdout)\n\n%s\n(stderr)\n\n%s',
+            self.fileset.friendly_name, output,
+            b'\n'.join(stderr).decode('utf-8', 'replace'))

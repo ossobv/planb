@@ -83,7 +83,8 @@ def check_call(cmd, *, env=None, shell=False, timeout=None):
     check_output(cmd, env=env, shell=shell, timeout=timeout)
 
 
-def check_output(cmd, *, env=None, shell=False, timeout=None):
+def check_output(cmd, *, env=None, return_stderr=None, shell=False,
+                 timeout=None):
     """
     Run command with arguments and return its output.
 
@@ -91,7 +92,10 @@ def check_output(cmd, *, env=None, shell=False, timeout=None):
     CalledProcessError on error.
 
     You'll need to decode stdout from binary encoding yourself.
+
+    If return_stderr is a list, stderr will be added to it, if it's non-empty.
     """
+    assert isinstance(return_stderr, list) or return_stderr is None
     assert timeout is None, 'Timeout is not supported for now'
 
     fp, ret, stdout, stderr = None, -1, '', ''
@@ -107,4 +111,6 @@ def check_output(cmd, *, env=None, shell=False, timeout=None):
         if fp:
             fp.kill()
 
+    if stderr:
+        return_stderr.append(stderr)
     return stdout

@@ -242,8 +242,9 @@ class Config(models.Model):
         # dropped and we'd have issues later on.
         connections.close_all()
 
+        stderr = []
         try:
-            output = check_output(cmd).decode('utf-8')
+            output = check_output(cmd, return_stderr=stderr).decode('utf-8')
             returncode = 0
         except CalledProcessError as e:
             returncode, output = e.returncode, e.output
@@ -254,5 +255,7 @@ class Config(models.Model):
                 raise
 
         logger.info(
-            'Rsync exited with code %s for %s. Output: %s',
-            returncode, self.fileset.friendly_name, output)
+            'Rsync exited with code %s for %s:'
+            '\n\n(stdout)\n\n%s\n(stderr)\n\n%s',
+            returncode, self.fileset.friendly_name, output,
+            b'\n'.join(stderr).decode('utf-8', 'replace'))

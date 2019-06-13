@@ -161,7 +161,7 @@ def daily_hostgroup_report(data_poster):
                 hostgroup.filesets.exclude(last_ok=None)
                 .order_by('friendly_name')):
 
-            if not fileset.enabled:
+            if not fileset.is_enabled:
                 # Always push data for disabled hosts on the first of the month
                 # so the hostgroup can get billed for it.
                 if not today_is_first_day_of_the_month:

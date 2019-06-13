@@ -21,7 +21,7 @@ class Command(BaseCommand):
             template, copy)))
 
         # Spawn a single run.
-        Fileset.objects.filter(pk=copy.pk).update(queued=True)
+        Fileset.objects.filter(pk=copy.pk).update(is_queued=True)
         task_id = async_backup_job(copy)
         self.stdout.write(self.style.SUCCESS('Enqueued {} job as {}'.format(
             copy, task_id)))

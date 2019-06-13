@@ -25,7 +25,7 @@ backup service.
 {% for fileset in filesets %}| {{ fileset.friendly_name|ljust:32|truncatechars:32 }} |{% comment %}
 {% endcomment %} {{ fileset.total_size|filesizeformat|rjust:10 }} |{% comment %}
 {% endcomment %} {{ fileset.last_ok|date:'Y-m-d'|ljust:10 }}{% comment %}
-{% endcomment %} {% if not fileset.enabled %}{{ _('**off**') }}{% comment %}
+{% endcomment %} {% if not fileset.is_enabled %}{{ _('**off**') }}{% comment %}
 {% endcomment %}{% elif fileset.first_fail %}{{ _('**err**') }}{% else %}       {% endif %} |
 +----------------------------------+------------+--------------------+
 {% endfor %}
@@ -45,11 +45,11 @@ Reports per host below
 +-----------------------+--------------------------------------+
 | Average run time      | {{ fileset.average_duration|formatseconds|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Configured retention  | {{ fileset.retention_display|ljust:36 }} |{% if not fileset.enabled %}
+| Configured retention  | {{ fileset.retention_display|ljust:36 }} |{% if not fileset.is_enabled %}
 +-----------------------+--------------------------------------+
 | State                 | DISABLED                             |{% endif %}
 +-----------------------+--------------------------------------+
-{% if fileset.first_fail and fileset.enabled %}
+{% if fileset.first_fail and fileset.is_enabled %}
 Last backup FAILED with error::
 
 {{ fileset.last_backuprun.error_text|default:_('error message missing')|block }}

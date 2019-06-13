@@ -12,7 +12,7 @@ class EnqueueJob(View):
         if not request.user.has_perm('planb.add_backuprun'):
             raise PermissionDenied()
         try:
-            fileset = Fileset.objects.get(id=fileset_id, enabled=True)
+            fileset = Fileset.objects.get(id=fileset_id, is_enabled=True)
         except Fileset.DoesNotExist:
             raise PermissionDenied()
 
@@ -25,14 +25,14 @@ class EnqueueJob(View):
             self.request.path_info.rsplit('/', 2)[0] + '/')
 
     def enqueue(self, fileset):
-        if fileset.queued or fileset.running:
+        if fileset.is_queued or fileset.is_running:
             messages.add_message(
                 self.request, messages.ERROR,
                 'Job was already queued/running!')
             return False
 
         # Spawn a single run.
-        Fileset.objects.filter(pk=fileset.pk).update(queued=True)
+        Fileset.objects.filter(pk=fileset.pk).update(is_queued=True)
         task_id = async_backup_job(fileset)
         messages.add_message(
             self.request, messages.INFO,

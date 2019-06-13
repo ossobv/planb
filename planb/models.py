@@ -106,9 +106,15 @@ class Fileset(models.Model):
         'Time', default=0,  # this value may vary..
         help_text=_('Average duration of succesful jobs in seconds.'))
 
-    enabled = models.BooleanField(default=True)
-    running = models.BooleanField(default=False)
-    queued = models.BooleanField(default=False)
+    do_snapshot_size_listing = models.BooleanField(
+        _('Create disk usage summary'), blank=True, default=True,
+        help_text=_(
+            'Summarize disk usage after the transport. '
+            'This can be slow if there are many files.'))
+
+    is_enabled = models.BooleanField(default=True)
+    is_running = models.BooleanField(default=False)
+    is_queued = models.BooleanField(default=False)
 
     daily_retention = models.IntegerField(
         default=15,
@@ -196,7 +202,7 @@ class Fileset(models.Model):
         copy.last_ok = None
         copy.last_run = BOGODATE
         copy.first_fail = None
-        copy.queued = copy.running = False
+        copy.is_queued = copy.is_running = False
         copy.average_duration = 0
         copy.total_size_mb = 0
 
@@ -208,14 +214,14 @@ class Fileset(models.Model):
         return copy
 
     def should_backup(self):
-        if not self.enabled:
+        if not self.is_enabled:
             return False
 
         if self._has_recent_backup():
             return False
 
         self.refresh_from_db()
-        if self.running:
+        if self.is_running:
             return False
 
         return True
@@ -358,12 +364,12 @@ class Fileset(models.Model):
         # the job was disabled/re-enabled.
         if self.pk:
             old_enabled = Fileset.objects.values_list(
-                'enabled', flat=True).get(pk=self.pk)
-            if self.enabled != old_enabled:
+                'is_enabled', flat=True).get(pk=self.pk)
+            if self.is_enabled != old_enabled:
                 mail_admins(
                     'INFO: Backup {} of {}'.format(
-                        'ENABLED' if self.enabled else 'DISABLED', self),
-                    'Toggled enabled-flag on {}.\n'.format(self))
+                        'ENABLED' if self.is_enabled else 'DISABLED', self),
+                    'Toggled is_enabled-flag on {}.\n'.format(self))
 
         return super().save(*args, **kwargs)
 
@@ -405,6 +411,9 @@ class BackupRun(models.Model):
         # This will be populated by dutree-output.
         help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'))
 
+    # TODO: do we want to store (a json blob of) the fileset config
+    # (including transport?) as well?
+
     @property
     def total_size(self):
         return self.total_size_mb << 20
@@ -434,7 +443,7 @@ class BackupRun(models.Model):
 
 @receiver(post_save, sender=Fileset)
 def create_dataset(sender, instance, created, *args, **kwargs):
-    if not instance.enabled:
+    if not instance.is_enabled:
         return
 
     dataset = instance.get_dataset()

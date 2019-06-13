@@ -14,8 +14,8 @@ from .tasks import async_backup_job
 
 
 def enqueue_multiple(modeladmin, request, queryset):
-    for obj in queryset.filter(queued=False, enabled=True):
-        Fileset.objects.filter(pk=obj.pk).update(queued=True)
+    for obj in queryset.filter(is_queued=False, is_enabled=True):
+        Fileset.objects.filter(pk=obj.pk).update(is_queued=True)
         async_backup_job(obj)
 enqueue_multiple.short_description = _(  # noqa
     'Enqueue selected hosts for immediate backup')
@@ -46,16 +46,19 @@ class FilesetAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': (
             'friendly_name', 'hostgroup', 'dest_pool',
-            'notes', 'enabled',
+            'notes', 'is_enabled',
         )}),
         ('Status', {'fields': (
             'first_ok', 'last_ok', 'disk_usage', 'run_time',
-            'last_run', 'first_fail', 'queued', 'running',
+            'last_run', 'first_fail', 'is_queued', 'is_running',
             'last_error', 'last_ok_snapshot',
         )}),
         ('Retention', {'fields': (
             'daily_retention', 'weekly_retention',
             'monthly_retention', 'yearly_retention',
+        )}),
+        ('Advanced', {'fields': (
+            'do_snapshot_size_listing',
         )}),
     )
 
@@ -74,10 +77,10 @@ class FilesetAdmin(admin.ModelAdmin):
         'last_ok_', 'first_fail_',
         'dest_pool', 'enabled_x', 'queued_q', 'running_r',
     )
-    list_filter = ('enabled',)
+    list_filter = ('is_enabled',)
     if len(settings.PLANB_STORAGE_POOLS) != 1:
         list_filter += ('dest_pool',)
-    list_filter += ('hostgroup', 'running', 'first_fail')
+    list_filter += ('hostgroup', 'is_running', 'first_fail')
 
     actions = [enqueue_multiple]
     form = FilesetAdminForm
@@ -164,20 +167,20 @@ class FilesetAdmin(admin.ModelAdmin):
     first_fail_.short_description = _('-fail')
 
     def enabled_x(self, object):
-        return object.enabled
-    enabled_x.admin_order_field = 'enabled'
+        return object.is_enabled
+    enabled_x.admin_order_field = 'is_enabled'
     enabled_x.boolean = True
     enabled_x.short_description = 'X'
 
     def queued_q(self, object):
-        return object.queued
-    queued_q.admin_order_field = 'queued'
+        return object.is_queued
+    queued_q.admin_order_field = 'is_queued'
     queued_q.boolean = True
     queued_q.short_description = 'Q'
 
     def running_r(self, object):
-        return object.running
-    running_r.admin_order_field = 'running'
+        return object.is_running
+    running_r.admin_order_field = 'is_running'
     running_r.boolean = True
     running_r.short_description = 'R'
 

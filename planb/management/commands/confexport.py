@@ -267,7 +267,7 @@ class Command(BaseCommand):
         groups = HostGroup.objects.all()
         hosts = Fileset.objects.all()
         if not with_disabled:
-            hosts = hosts.exclude(enabled=False)
+            hosts = hosts.exclude(is_enabled=False)
 
         groups = [
             group for group in groups if fnmatch(group.name, groups_glob)]

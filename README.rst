@@ -382,7 +382,7 @@ That combines nicely with a backup host discovery rule using ``blist``::
 Doing daily jobs
 ----------------
 
-A quick hack to get daily reports up and running is by placing something
+A quick hack to get daily reports up and running, is by placing something
 like this in ``/etc/planb/planb_custom.py``::
 
     from planb.contrib.billing import BossoBillingPoster, daily_hostgroup_report

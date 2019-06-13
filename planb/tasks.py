@@ -163,14 +163,14 @@ class JobSpawner:
     def _enum_eligible_filesets(self):
         fileset_qs = (
             Fileset.objects
-            .filter(enabled=True, running=False, queued=False)
+            .filter(is_enabled=True, is_running=False, is_queued=False)
             .order_by('last_run'))  # order by last attempt
 
         for fileset in fileset_qs:
             # We have a fileset_id, lock it. If changed is 0, we did not do
             # a change, ergo we did not lock it. Move along.
             changed = Fileset.objects.filter(
-                pk=fileset.pk, queued=False).update(queued=True)
+                pk=fileset.pk, is_queued=False).update(is_queued=True)
             if not changed:
                 logger.info('[%s] Skipped because already locked', fileset)
                 continue
@@ -179,7 +179,7 @@ class JobSpawner:
             if not fileset.should_backup():
                 # Unlock.
                 Fileset.objects.filter(
-                    pk=fileset.pk, queued=True).update(queued=False)
+                    pk=fileset.pk, is_queued=True).update(is_queued=False)
                 continue
 
             # Check if we failed recently.
@@ -188,7 +188,7 @@ class JobSpawner:
                     3600):
                 # Unlock.
                 Fileset.objects.filter(
-                    pk=fileset.pk, queued=True).update(queued=False)
+                    pk=fileset.pk, is_queued=True).update(is_queued=False)
                 logger.info('[%s] Skipped because of recent failure', fileset)
                 continue
 
@@ -212,27 +212,34 @@ class FilesetRunner:
         return sum(durations) // len(durations)
 
     def get_dutree_listing(self, fileset, dataset):
-        # Only one dutree at a time.
-        logger.info('[%s] Waiting for dutree lock', fileset)
-        setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
-            fileset.pk, fileset.friendly_name))
-
-        with only_one_dutree_at_a_time(fileset.dest_pool) as waited_seconds:
-            # Yes, got lock.
-            logger.info('[%s] Got dutree lock', fileset)
-            setproctitle('[backing up %d: %s]: dutree' % (
+        if fileset.do_snapshot_size_listing:
+            # Only one dutree at a time.
+            logger.info('[%s] Waiting for dutree lock', fileset)
+            setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
                 fileset.pk, fileset.friendly_name))
-            path = dataset.get_data_path()
-            dutree = Scanner(path).scan(use_apparent_size=False)
 
-            # Get snapshot size and tree.
-            snapshot_size_mb = (
-                dutree.use_size() + 524288) >> 20  # bytes to MiB
-            snapshot_size_yaml = '\n'.join(
-                '{}: {}'.format(
-                    yaml_safe_str(i.name()[len(path):]),
-                    yaml_digits(i.use_size()))
-                for i in dutree.get_leaves())
+            with only_one_dutree_at_a_time(fileset.dest_pool) as \
+                    waited_seconds:
+                # Yes, got lock.
+                logger.info('[%s] Got dutree lock', fileset)
+                setproctitle('[backing up %d: %s]: dutree' % (
+                    fileset.pk, fileset.friendly_name))
+                path = dataset.get_data_path()
+                dutree = Scanner(path).scan(use_apparent_size=False)
+
+                # Get snapshot size and tree.
+                snapshot_size_mb = (
+                    dutree.use_size() + 524288) >> 20  # bytes to MiB
+                snapshot_size_yaml = '\n'.join(
+                    '{}: {}'.format(
+                        yaml_safe_str(i.name()[len(path):]),
+                        yaml_digits(i.use_size()))
+                    for i in dutree.get_leaves())
+        else:
+            # Set the values to empty.
+            waited_seconds = 0
+            snapshot_size_mb = 0  # FIXME: get from elsewhere?
+            snapshot_size_yaml = 'summary_disabled: 0'
 
         return {
             'lock_wait_time': waited_seconds,
@@ -250,7 +257,7 @@ class FilesetRunner:
             # #self.retry(eta=now.replace(hour=17))  # @task(bind=True)
             # Instead, we do this:
             Fileset.objects.filter(pk=fileset.pk).update(
-                queued=False, running=False)
+                is_queued=False, is_running=False)
             return
 
         return self.unconditional_run()
@@ -260,7 +267,7 @@ class FilesetRunner:
 
         # The task is delayed, but it has been scheduled/queued.
         logger.info('[%s] Manually requested backup', fileset)
-        if not fileset.running:
+        if not fileset.is_running:
             # Hack so we get success mail. (Only update first_fail if it
             # was unset.)
             Fileset.objects.filter(pk=fileset.pk, first_fail=None).update(
@@ -276,7 +283,7 @@ class FilesetRunner:
             oldproctitle = getproctitle()
 
         # Mark it as running.
-        Fileset.objects.filter(pk=fileset.pk).update(running=True)
+        Fileset.objects.filter(pk=fileset.pk).update(is_running=True)
         t0 = time.time()
         logger.info('[%s] Starting backup', fileset)
 
@@ -292,7 +299,7 @@ class FilesetRunner:
                 fileset.pk, fileset.friendly_name))
             fileset.get_transport().run_transport()
 
-            # Dutree fileset.
+            # Get snapshot_size_listing.
             dutree = self.get_dutree_listing(fileset, dataset)
 
             # Update snapshots.
@@ -381,7 +388,7 @@ class FilesetRunner:
         # Set the queued/running to False when we're done.
         fileset = Fileset.objects.get(pk=self._fileset_id)
         Fileset.objects.filter(pk=fileset.pk).update(
-            queued=False, running=False)
+            is_queued=False, is_running=False)
 
         # This is never not success, as we handled all cases in the
         # unconditional_run, we hope.

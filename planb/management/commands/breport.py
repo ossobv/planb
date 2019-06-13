@@ -81,9 +81,10 @@ class Command(BaseCommand):
 
     def generate_subject(self, hostgroup, filesets):
         hosts_disabled = sum(
-            1 for i in filesets if not i.enabled)
+            1 for i in filesets if not i.is_enabled)
         hosts_failed = sum(
-            1 for i in filesets if i.enabled and not i.last_backuprun.success)
+            1 for i in filesets
+            if i.is_enabled and not i.last_backuprun.success)
 
         subject = _('%s backup report "%s"') % (
             settings.COMPANY_NAME, hostgroup.name)

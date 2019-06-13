@@ -11,7 +11,7 @@ class Command(BaseCommandWithZabbix):
 
     def handle(self, *args, **options):
         qs = (
-            Fileset.objects.filter(enabled=True)
+            Fileset.objects.filter(is_enabled=True)
             .prefetch_related('hostgroup')
             .order_by('hostgroup__name', 'friendly_name'))
         if options['zabbix']:

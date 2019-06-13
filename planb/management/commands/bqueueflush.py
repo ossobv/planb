@@ -14,8 +14,8 @@ class Command(BaseCommand):
         broker_queue = broker.queue_size()
 
         db_queue = (
-            Fileset.objects.filter(Q(running=True) | Q(queued=True))
-            .update(running=False, queued=False))
+            Fileset.objects.filter(Q(is_running=True) | Q(is_queued=True))
+            .update(is_running=False, is_queued=False))
         broker.purge_queue()
 
         if broker_queue:

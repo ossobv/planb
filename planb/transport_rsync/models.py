@@ -207,9 +207,13 @@ class Config(models.Model):
 
         args = (
             (settings.PLANB_RSYNC_BIN,) +
-            # Work around rsync bug in 3.1.0:
+            # Work around rsync bug in 3.1.0. Possibly not needed when
+            # we (also) use --whole-file.
             # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
-            ('--block-size=65536',) +
+            ('--block-size=131072',) +  # 128k == MAX_BLOCK_SIZE (1 << 17)
+            # We rarely update files and we have fast link everywhere.
+            # Don't spend time on checking/transferring partial files.
+            ('--whole-file',) +
             # Fix problems when we're not root, but we can download dirs
             # with improper perms because we're root remotely. Rsync
             # could set up dir structures where files inside cannot be

@@ -98,6 +98,7 @@ class Zfs(OldStyleStorage):
             except CalledProcessError:
                 # Does not exist. Create it.
                 self._perform_binary_command(('create', part))
+                self._perform_binary_command(('set', 'canmount=noauto', part))
             else:
                 assert type_ == 'filesystem', (identifier, part, type_)
 

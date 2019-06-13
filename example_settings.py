@@ -13,7 +13,7 @@ PLANB_RSYNC_BIN = '/usr/bin/rsync'
 # Provide filesystem name + internal name. For ZFS that is "name", and "zfs
 # path". The first one will be the default.
 PLANB_STORAGE_POOLS = (
-    ('Pool I', 'rpool/BACKUP', 'zfs'),
+    ('Pool I', 'tank/BACKUP', 'zfs'),
 )
 
 MANAGERS = ADMINS = (

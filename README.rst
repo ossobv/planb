@@ -19,7 +19,7 @@ The files are stored on ZFS storage, using snapshots to keep earlier versions
 of tiles. See this example shell transscript::
 
     # zfs list | grep mongo2
-    rpool/BACKUP/experience-mongo2         9,34G  1,60T   855M  /srv/backups/experience-mongo2
+    tank/BACKUP/experience-mongo2   9,34G  1,60T   855M  /srv/backups/experience-mongo2
 
     # ls -l /srv/backups/experience-mongo2/data/srv/mongodb
     total 646610
@@ -29,11 +29,11 @@ of tiles. See this example shell transscript::
 
 Those are the "current" files in the workspace. But you can go back in time::
 
-    # zfs list -r -t all rpool/BACKUP/experience-mongo2 | head -n4
-    NAME                                                  USED  AVAIL  REFER  MOUNTPOINT
-    rpool/BACKUP/experience-mongo2                       9,34G  1,60T   855M  /srv/backups/experience-mongo2
-    rpool/BACKUP/experience-mongo2@daily-201706031147        0      -   809M  -
-    rpool/BACKUP/experience-mongo2@monthly-201706031147      0      -   809M  -
+    # zfs list -r -t all tank/BACKUP/experience-mongo2 | head -n4
+    NAME                                                 USED  AVAIL  REFER  MOUNTPOINT
+    tank/BACKUP/experience-mongo2                       9,34G  1,60T   855M  /srv/backups/experience-mongo2
+    tank/BACKUP/experience-mongo2@daily-201706031147        0      -   809M  -
+    tank/BACKUP/experience-mongo2@monthly-201706031147      0      -   809M  -
 
     # cd /srv/backups/experience-mongo2/.zfs/
     # ls -1
@@ -76,12 +76,6 @@ TODO
 
 * Fix logrotate sample.
 * Add uwsgi-uid==djangoq-uid check?
-* Re-add some form of "list-stale-mounts" (!).
-  # contrib/list-stale-mounts | mail -E -s "[$HOSTNAME] Stale ZFS mounts?"
-  ^-- document this in FAQ below..
-* Re-add non-INFO output from planb_custom.daily...
-  # run_backupinfo | grep -vFB1 INFO/ /var/log/osso-backup/billing.log |
-  # mail -E -s "[$HOSTNAME] Backup billing push"
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
@@ -94,8 +88,6 @@ TODO
   instead: daily summary of backup successes and failures.
 * Fix admin "Planb" name as "PlanB".
 * Split off the subparts of the Fileset to separate configs:
-  - include-config
-  - transport-config
   - retention-config
   - host-status (use this as main enqueue-view?)
 * Use hostgroup+hostname in more places. Right now the friendly_name is
@@ -136,7 +128,34 @@ to change that consistently of course.
 Setting up a ZFS pool
 ~~~~~~~~~~~~~~~~~~~~~
 
-TODO: Document this briefly.
+You should really do your own research on this. If you're lucky, your OS
+has native support for ZFS, and then this is relatively easy.
+
+We've decided to go with a striped raidz2 configuration, giving us 2x
+disk speed due to the striping, and 2 disks are allowed to fail
+simulteaneously (raidz2).
+
+Basic setup::
+
+    zpool create tank raidz2 sdc sdd sde ...
+    zpool add tank raidz2 sdm sdn sdo ...
+    zpool add tank spare sdw sdx
+
+Now your ``zpool status`` would look somewhat like this::
+
+    NAME         STATE     READ WRITE CKSUM
+    tank         ONLINE       0     0     0
+      raidz2-0   ONLINE       0     0     0
+        sdc      ONLINE       0     0     0
+        sdd      ONLINE       0     0     0
+        ...
+      raidz2-1   ONLINE       0     0     0
+        sdm      ONLINE       0     0     0
+        sdn      ONLINE       0     0     0
+        ...
+    spares
+      sdw        AVAIL
+      sdx        AVAIL
 
 
 Setting up the project
@@ -258,7 +277,7 @@ Giving *PlanB* access to ZFS tools and paths::
     planb ALL=NOPASSWD: /sbin/zfs, /bin/chown
     EOF
 
-    zfs create rpool/BACKUP -o mountpoint=/srv/backups
+    zfs create tank/BACKUP -o mountpoint=/srv/backups
     chown planb /srv/backups
     chmod 700 /srv/backups
 
@@ -278,6 +297,22 @@ Setting up ``qcluster`` for scheduled tasks::
 Installing automatic jobs::
 
     planb loaddata planb_jobs
+
+Don't forget a logrotate config::
+
+    cat >/etc/logrotate.d/planb <<EOF
+    /var/log/planb/*.log {
+            weekly
+            missingok
+            rotate 52
+            compress
+            delaycompress
+            notifempty
+            create 0644 planb www-data
+            sharedscripts
+    }
+    EOF
+
 
 
 -------------------------
@@ -370,21 +405,30 @@ Can I use the software and customize it to my own needs?
     share any changes you make. But you were going to do that anyway, right?
 
 
-The ``uwsgi`` log complains about *"No module named site"*.
-    If your uwsgi fails to start, and the log looks like this::
 
-        Python version: 2.7.12 (default, Nov 19 2016, 06:48:10)
-        Set PythonHome to /srv/virtualenvs/planb
-        ImportError: No module named site
-
-    Then your uWSGI is missing the Python 3 module. Go install
-    ``uwsgi-plugin-python3``.
+Mails for backup success are sent, but mails for failure are not.
+    Check the ``DEBUG`` setting. At the moment, error-mails are sent
+    through the logging subsystem and that is disabled when running in
+    debug-mode.
 
 
-The ``mkvirtualenv`` said ``locale.Error: unsupported locale setting``.
-    You need to install the right locales until ``perl -e setlocale`` is
-    silent. How depends on your system and your config. See ``locale`` and
-    e.g. ``locale-gen en_US.UTF-8``.
+Removing a fileset does not wipe the filesystem from disk, what should I do?
+    This is done intentionally. You should periodically use ``planb slist
+    --stale`` to check for *stale* filesystems.
+
+    You can them remove them manually using ``zfs destroy [-r] FILESYSTEM``.
+
+Rsync complains about ``failed to stat`` or ``mkdir failed``.
+    If rsync returns these messages::
+
+        rsync: recv_generator: failed to stat "...": Permission denied (13)
+        rsync: recv_generator: mkdir "..." failed: Permission denied (13)
+
+    Then you may be looking at parent directories with crooked
+    permissions, like 077. Fix the permissions on the remote end.
+
+    However, many of these problems have likely been fixed by the
+    addition of the ``--chmod=Du+rwx`` rsync option.
 
 
 Rsync complains about ``Invalid or incomplete multibyte or wide character``.
@@ -408,23 +452,21 @@ Rsync complains about ``Invalid or incomplete multibyte or wide character``.
     on your remote filesystem.
 
 
-Rsync complains about ``failed to stat`` or ``mkdir failed``.
-    If rsync returns these messages::
-
-        rsync: recv_generator: failed to stat "...": Permission denied (13)
-        rsync: recv_generator: mkdir "..." failed: Permission denied (13)
-
-    Then you may be looking at parent directories with crooked
-    permissions, like 077. Fix the permissions on the remote end.
-
-    However, many of these problems have likely been fixed by the
-    addition of the --chmod=Du+rwx rsync option.
+The ``mkvirtualenv`` said ``locale.Error: unsupported locale setting``.
+    You need to install the right locales until ``perl -e setlocale`` is
+    silent. How depends on your system and your config. See ``locale`` and
+    e.g. ``locale-gen en_US.UTF-8``.
 
 
-Backup success mail are sent, but failure mails are not.
-    Check the ``DEBUG`` setting. At the moment, error-mails are sent
-    through the logging subsystem and that is disabled when running in
-    debug-mode.
+The ``uwsgi`` log complains about *"No module named site"*.
+    If your uwsgi fails to start, and the log looks like this::
+
+        Python version: 2.7.12 (default, Nov 19 2016, 06:48:10)
+        Set PythonHome to /srv/virtualenvs/planb
+        ImportError: No module named site
+
+    Then your uWSGI is missing the Python 3 module. Go install
+    ``uwsgi-plugin-python3``.
 
 
 -------

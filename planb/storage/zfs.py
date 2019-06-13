@@ -117,9 +117,9 @@ class Zfs(OldStyleStorage):
     def zfs_mount(self, identifier):
         # Even if we have user-powers on /dev/zfs, we still cannot call
         # all commands.
-        # $ /sbin/zfs mount rpool/BACKUP/example-example
+        # $ /sbin/zfs mount tank/BACKUP/example-example
         # mount: only root can use "--options" option
-        # cannot mount 'rpool/BACKUP/example-example': Invalid argument
+        # cannot mount 'tank/BACKUP/example-example': Invalid argument
         # Might as well use sudo everywhere then.
         dataset_name = self._identifier_to_dataset_name(identifier)
         self._perform_binary_command(('mount', dataset_name))

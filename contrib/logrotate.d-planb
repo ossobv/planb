@@ -1,0 +1,10 @@
+/var/log/planb/*.log {
+        weekly
+        missingok
+        rotate 52
+        compress
+        delaycompress
+        notifempty
+        create 0644 planb www-data
+        sharedscripts
+}

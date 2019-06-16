@@ -19,7 +19,6 @@ except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
 
-# TODO: add lockfile to ensure no two jobs are working on the same?
 # TODO: allow all containers to be backed up inside a single tree
 # TODO: check timestamp of planb-swiftsync.new, esp. now that we exit(1) on any
 # error
@@ -239,6 +238,7 @@ class SwiftSync:
 
         # Get metadata path where we store listings.
         metadata_path = config.metadata_path
+        self._filelock = os.path.join(metadata_path, 'planb-swiftsync.lock')
         self._path_cur = os.path.join(metadata_path, 'planb-swiftsync.cur')
         # ^-- this contains the local truth
         self._path_new = os.path.join(metadata_path, 'planb-swiftsync.new')
@@ -247,10 +247,26 @@ class SwiftSync:
         self._path_add = os.path.join(metadata_path, 'planb-swiftsync.add')
 
     def sync(self):
-        self.make_lists()
-        self.delete_from_list()
-        self.add_from_list()
-        self.clean_lists()
+        lock_fd = None
+        try:
+            # Get lock.
+            lock_fd = os.open(
+                self._filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            # Failed to get lock.
+            sys.stderr.write('ERROR: Failed to get lock: {!r}\n'.format(
+                self._filelock))
+            sys.exit(1)
+        else:
+            # Do work.
+            self.make_lists()
+            self.delete_from_list()
+            self.add_from_list()
+            self.clean_lists()
+        finally:
+            if lock_fd is not None:
+                os.close(lock_fd)
+                os.unlink(self._filelock)
 
     def make_lists(self):
         """

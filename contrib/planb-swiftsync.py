@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse
+import logging
 import os
 import re
 import signal
@@ -8,6 +8,7 @@ import threading
 import traceback
 import warnings
 
+from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
@@ -21,7 +22,6 @@ except ImportError:
         'apt-get install python3-swiftclient --no-install-recommends'))
 
 # TODO: allow all containers to be backed up inside a single tree
-# TODO: add timestamps to logs
 # BUGS: getting the filelist from swiftclient is done in-memory, which may take
 # up to several GBs
 
@@ -47,6 +47,14 @@ planb_translate = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
 ; is not likely to happen.)
 planb_translate = *=/$=%2F
 """
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=(
+        '%(asctime)s [%(threadName)-10.10s] [%(levelname)-5.5s] %(message)s'),
+    handlers=[logging.StreamHandler()])
+log = logging.getLogger()
 
 
 def _signal_handler(signo, _stack_frame):
@@ -256,8 +264,7 @@ class SwiftSync:
                 self._filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         except FileExistsError:
             # Failed to get lock.
-            sys.stderr.write('ERROR: Failed to get lock: {!r}\n'.format(
-                self._filelock))
+            log.error('Failed to get %r lock', self._filelock)
             sys.exit(1)
         else:
             # Do work.
@@ -274,7 +281,7 @@ class SwiftSync:
         """
         Build planb-swiftsync.add, planb-swiftsync.del.
         """
-        sys.stderr.write('INFO: Building lists\n')
+        log.info('Building lists')
 
         # Only create new list if it didn't exist yet (because we completed
         # successfully the last time) or if it's rather old.
@@ -293,7 +300,7 @@ class SwiftSync:
         Delete from planb-swiftsync.del.
         """
         if os.path.getsize(self._path_del):
-            sys.stderr.write('INFO: Removing old\n')
+            log.info('Removing old files')
             deleter = SwiftSyncDeleter(self, self._path_del)
             deleter.work()
 
@@ -302,7 +309,7 @@ class SwiftSync:
         Add from planb-swiftsync.del.
         """
         if os.path.getsize(self._path_add):
-            sys.stderr.write('INFO: Adding new\n')
+            log.info('Adding new files')
             adder = SwiftSyncAdder(self, self._path_add)
             adder.work()
 
@@ -310,8 +317,8 @@ class SwiftSync:
         """
         Remove planb-swiftsync.new so we'll fetch a fresh one on the next run.
         """
-        sys.stderr.write('INFO: Done\n')
         os.unlink(self._path_new)
+        log.info('Sync done')
 
     def _make_new_list(self):
         """
@@ -319,7 +326,7 @@ class SwiftSync:
 
         This can be slow as we may need to fetch many lines from swift.
         """
-        sys.stderr.write('INFO: Fetching new list\n')
+        log.info('Fetching new list')
         # full_listing:
         #     if True, return a full listing, else returns a max of
         #     10000 listings
@@ -433,8 +440,7 @@ class SwiftSyncAdder:
     def work(self):
         global _MT_ABORT, _MT_HAS_THREADS
 
-        sys.stderr.write('INFO: Starting {} threads\n'.format(
-            self._thread_count))
+        log.info('Starting %d downloader threads', self._thread_count)
 
         thread_lock = threading.Lock()
         threads = [
@@ -478,16 +484,13 @@ class SwiftSyncMultiAdder(threading.Thread):
             finally:
                 success_fp.flush()
                 success_fp.seek(0)
-                sys.stderr.write(
-                    'WARNING: Shutting down {}, please be '
-                    'patient...\n'.format(self._offset))
+                log.info('Stopping thread, updating lists')
                 self._lock.acquire()
                 try:
                     self._swiftsync.update_cur_list_from_added(success_fp)
                 finally:
                     self._lock.release()
-                    sys.stderr.write(
-                        'WARNING: Shut down {}\n'.format(self._offset))
+                    log.info('Stopped thread, job done')
 
         self.run_success = True
 
@@ -524,9 +527,7 @@ class SwiftSyncMultiAdder(threading.Thread):
 
         # If there were one or more failures, finish with an exception.
         if failures:
-            sys.stderr.write(
-                'WARNING: Raising error at EOF to report {} failures\n'.format(
-                    failures))
+            log.warning('Raising error at end to report %d failures', failures)
             raise ValueError('abort at EOF with {} failures'.format(failures))
 
     def _add_new_record(self, swiftconn, container, translator, record,
@@ -536,9 +537,9 @@ class SwiftSyncMultiAdder(threading.Thread):
         """
         path = translator(record.path)
         if path.endswith('/'):
-            sys.stderr.write(
-                'WARNING: Skipping {!r} => {!r}; '
-                'because of trailing slash\n'.format(record.path, path))
+            log.warning(
+                'Skipping record %r (from %r) because of trailing slash',
+                path, record.path)
             return 1
 
         try:
@@ -559,9 +560,8 @@ class SwiftSyncMultiAdder(threading.Thread):
                             'early abort during {}'.format(record.path))
                     out_fp.write(data)
         except Exception as e:
-            sys.stderr.write(
-                'WARNING: Failure {!r} => {!r}; {}\n'.format(
-                    record.path, path, e))
+            log.warning(
+                'Download failure for %r (from %r): %s', path, record.path, e)
             try:
                 # FIXME: also remove directories we just created?
                 os.unlink(path)
@@ -572,9 +572,9 @@ class SwiftSyncMultiAdder(threading.Thread):
         os.utime(path, ns=(record.modified, record.modified))
         local_size = os.stat(path).st_size
         if local_size != record.size:
-            sys.stderr.write(
-                'WARNING: Filesize mismatch {} => {}; {} != {}\n'.format(
-                    record.path, path, local_size, record.size))
+            log.error(
+                'Filesize mismatch for %r (from %r): %d != %d',
+                path, record.path, record.size, local_size)
             try:
                 # FIXME: also remove directories we just created?
                 os.unlink(path)
@@ -669,7 +669,7 @@ def _comm(left_fp, right_fp, do_both, do_leftonly, do_rightonly):
 
 class Cli:
     def __init__(self):
-        parser = argparse.ArgumentParser()
+        parser = ArgumentParser()
         parser.add_argument(
             '-c', '--config', metavar='configpath', default='~/.rclone.conf',
             help='inifile location')

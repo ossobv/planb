@@ -78,8 +78,6 @@ class PathTranslator:
     Test using:
 
         planb_storage_destination=$(pwd)/data \
-        planb_fileset_friendly_name=planb/contrib \
-        planb_fileset_id=123 \
         ./planb-swiftsync -c planb-swiftsync.conf SECTION \
             --test-path-translate wsdl
 

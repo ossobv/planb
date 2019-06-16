@@ -20,9 +20,9 @@ except ImportError:
         'apt-get install python3-swiftclient --no-install-recommends'))
 
 # TODO: add lockfile to ensure no two jobs are working on the same?
-# TODO: rename 'list.*' to something more meaningful
 # TODO: allow all containers to be backed up inside a single tree
-# TODO: check timestamp of list.new, esp. now that we exit(1) on any error
+# TODO: check timestamp of planb-swiftsync.new, esp. now that we exit(1) on any
+# error
 # TODO: add timestamps to logs
 # BUGS: getting the filelist from swiftclient is done in-memory, which may take
 # up to several GBs
@@ -239,12 +239,12 @@ class SwiftSync:
 
         # Get metadata path where we store listings.
         metadata_path = config.metadata_path
-        self._path_cur = os.path.join(metadata_path, 'list.cur')
+        self._path_cur = os.path.join(metadata_path, 'planb-swiftsync.cur')
         # ^-- this contains the local truth
-        self._path_new = os.path.join(metadata_path, 'list.new')
+        self._path_new = os.path.join(metadata_path, 'planb-swiftsync.new')
         # ^-- the unreached goal
-        self._path_del = os.path.join(metadata_path, 'list.del')
-        self._path_add = os.path.join(metadata_path, 'list.add')
+        self._path_del = os.path.join(metadata_path, 'planb-swiftsync.del')
+        self._path_add = os.path.join(metadata_path, 'planb-swiftsync.add')
 
     def sync(self):
         self.make_lists()
@@ -254,7 +254,7 @@ class SwiftSync:
 
     def make_lists(self):
         """
-        Build list.add, list.del.
+        Build planb-swiftsync.add, planb-swiftsync.del.
         """
         sys.stderr.write('INFO: Building list\n')
 
@@ -268,7 +268,7 @@ class SwiftSync:
 
     def delete_from_list(self):
         """
-        Delete from list.del.
+        Delete from planb-swiftsync.del.
         """
         if os.path.getsize(self._path_del):
             sys.stderr.write('INFO: Removing old\n')
@@ -277,7 +277,7 @@ class SwiftSync:
 
     def add_from_list(self):
         """
-        Add from list.del.
+        Add from planb-swiftsync.del.
         """
         if os.path.getsize(self._path_add):
             sys.stderr.write('INFO: Adding new\n')
@@ -286,14 +286,14 @@ class SwiftSync:
 
     def clean_lists(self):
         """
-        Remove list.new so we'll fetch a fresh one on the next run.
+        Remove planb-swiftsync.new so we'll fetch a fresh one on the next run.
         """
         sys.stderr.write('INFO: Done\n')
         os.unlink(self._path_new)
 
     def _make_new_list(self):
         """
-        Create list.new with the files we want to have.
+        Create planb-swiftsync.new with the files we want to have.
 
         This can be slow as we may need to fetch many lines from swift.
         """
@@ -314,7 +314,8 @@ class SwiftSync:
 
     def _make_diff_lists(self):
         """
-        Create list.add and list.del based on list.new and list.cur.
+        Create planb-swiftsync.add and planb-swiftsync.del based on
+        planb-swiftsync.new and planb-swiftsync.cur.
         """
         try:
             cur_fp = open(self._path_cur, 'r')
@@ -340,7 +341,7 @@ class SwiftSync:
 
     def update_cur_list_from_added(self, added_fp):
         """
-        Update list.cur by adding all from added_fp.
+        Update planb-swiftsync.cur by adding all from added_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp:
@@ -357,7 +358,7 @@ class SwiftSync:
 
     def update_cur_list_from_deleted(self, deleted_fp):
         """
-        Update list.cur by removing all from deleted_fp.
+        Update planb-swiftsync.cur by removing all from deleted_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp:
@@ -389,7 +390,7 @@ class SwiftSyncDeleter:
 
     def _delete_old(self, success_fp):
         """
-        Delete old files (from list.del) and store which files we
+        Delete old files (from planb-swiftsync.del) and store which files we
         deleted in the success_fp.
         """
         translator = self._swiftsync.config.get_translator()
@@ -469,8 +470,8 @@ class SwiftSyncMultiAdder(threading.Thread):
 
     def _add_new(self, success_fp):
         """
-        Add new files (from list.add) and store which files we added in
-        the success_fp.
+        Add new files (from planb-swiftsync.add) and store which files we added
+        in the success_fp.
         """
         # Create this swift connection first in this thread on purpose. That
         # should minimise swiftclient library MT issues.
@@ -481,7 +482,7 @@ class SwiftSyncMultiAdder(threading.Thread):
         threads = self._threads
         failures = 0
 
-        # Loop over the list.add file, but only do our own files.
+        # Loop over the planb-swiftsync.add file, but only do our own files.
         with open(self._source, 'r') as add_fp:
             for idx, record in enumerate(_comm_lineiter(add_fp)):
                 # When running with multiple threads, we don't use a

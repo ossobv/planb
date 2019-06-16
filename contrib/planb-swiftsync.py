@@ -52,7 +52,8 @@ planb_translate = *=/$=%2F
 logging.basicConfig(
     level=logging.INFO,
     format=(
-        '%(asctime)s [%(threadName)-10.10s] [%(levelname)-5.5s] %(message)s'),
+        '%(asctime)s [planb-swiftsync:%(threadName)-10.10s] '
+        '[%(levelname)-5.5s] %(message)s'),
     handlers=[logging.StreamHandler()])
 log = logging.getLogger()
 

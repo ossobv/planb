@@ -199,9 +199,9 @@ class SwiftLine:
         #  'content_type': 'text/xml'}]
         self.obj = obj
         self.size = obj['bytes']
-        # FIXME: round last_modified upwards, like rclone does?
-        self.modified = '{} {}'.format(
-            obj['last_modified'][0:10], obj['last_modified'][11:19])
+        assert len(obj['last_modified']) == 26, obj
+        assert obj['last_modified'][10] == 'T', obj
+        self.modified = obj['last_modified']
         self.path = obj['name']
         assert not self.path.startswith(('\\', '/', '.')), self.path
 
@@ -211,20 +211,23 @@ class ListLine:
         if '||' in line:
             raise NotImplementedError('FIXME, escapes not implemented')
         self.line = line
-        self.path, self._size, self._modified = line.split('|')
+        self.path, self._modified, self._size = line.split('|')
 
     @property
     def size(self):
+        # NOTE: _size has a trailing LF, but int() silently eats it for us.
         return int(self._size)
 
     @property
     def modified(self):
         # The time is zone agnostic, so let's assume UTC.
         if not hasattr(self, '_modified_cache'):
-            self._modified_cache = int(
-                # modified has trailing LF, drop it here..
-                datetime.strptime(self._modified[0:-1], '%Y-%m-%d %H:%M:%S')
+            dates, us = self._modified.split('.', 1)
+            dates = int(
+                datetime.strptime(dates, '%Y-%m-%dT%H:%M:%S')
                 .replace(tzinfo=timezone.utc).timestamp())
+            assert len(us) == 6
+            self._modified_cache = 1000000000 * dates + 1000 * int(us)
         return self._modified_cache
 
 
@@ -324,8 +327,8 @@ class SwiftSync:
                 record = SwiftLine(line)
                 dest.write('{}|{}|{}\n'.format(
                     record.path.replace('|', '||'),
-                    record.size,
-                    record.modified))
+                    record.modified,
+                    record.size))
         os.rename(path_tmp, self._path_new)
 
     def _make_diff_lists(self):
@@ -562,7 +565,7 @@ class SwiftSyncMultiAdder(threading.Thread):
                 pass
             return 1
 
-        os.utime(path, (record.modified, record.modified))
+        os.utime(path, ns=(record.modified, record.modified))
         local_size = os.stat(path).st_size
         if local_size != record.size:
             sys.stderr.write(

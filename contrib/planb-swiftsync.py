@@ -12,6 +12,7 @@ from collections import OrderedDict
 from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
+from time import time
 
 try:
     from swiftclient import Connection
@@ -20,8 +21,6 @@ except ImportError:
         'apt-get install python3-swiftclient --no-install-recommends'))
 
 # TODO: allow all containers to be backed up inside a single tree
-# TODO: check timestamp of planb-swiftsync.new, esp. now that we exit(1) on any
-# error
 # TODO: add timestamps to logs
 # BUGS: getting the filelist from swiftclient is done in-memory, which may take
 # up to several GBs
@@ -275,14 +274,18 @@ class SwiftSync:
         """
         Build planb-swiftsync.add, planb-swiftsync.del.
         """
-        sys.stderr.write('INFO: Building list\n')
+        sys.stderr.write('INFO: Building lists\n')
 
-        # Only create new list if it didn't exist yet. We'll move it
-        # aside when we're done. Or perhaps we should check the date as
-        # well (FIXME).
-        if not os.path.exists(self._path_new):
+        # Only create new list if it didn't exist yet (because we completed
+        # successfully the last time) or if it's rather old.
+        try:
+            last_modified = os.path.getmtime(self._path_new)
+        except FileNotFoundError:
+            last_modified = 0
+        if not last_modified or (time() - last_modified) > (18 * 3600.0):
             self._make_new_list()
 
+        # Make the add/del lists based off cur/new.
         self._make_diff_lists()
 
     def delete_from_list(self):
@@ -316,6 +319,7 @@ class SwiftSync:
 
         This can be slow as we may need to fetch many lines from swift.
         """
+        sys.stderr.write('INFO: Fetching new list\n')
         # full_listing:
         #     if True, return a full listing, else returns a max of
         #     10000 listings

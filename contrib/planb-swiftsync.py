@@ -9,11 +9,10 @@ import traceback
 import warnings
 
 from collections import OrderedDict
-from configparser import SectionProxy, RawConfigParser
+from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
 
-# apt-get install python3-swiftclient --no-install-recommends
 try:
     from swiftclient import Connection
 except ImportError:
@@ -21,10 +20,8 @@ except ImportError:
         'apt-get install python3-swiftclient --no-install-recommends'))
 
 # TODO: add lockfile to ensure no two jobs are working on the same?
-# TODO: clean up hacked-in multithreading support
 # TODO: rename 'list.*' to something more meaningful
-# TODO: take container name from argv2, and allow all containers to be backed
-# up inside a single tree
+# TODO: allow all containers to be backed up inside a single tree
 # TODO: check timestamp of list.new, esp. now that we exit(1) on any error
 # TODO: add timestamps to logs
 # BUGS: getting the filelist from swiftclient is done in-memory, which may take
@@ -128,12 +125,8 @@ class ConfigParserMultiValues(OrderedDict):
 
 class SwiftSyncConfig:
     def __init__(self, inifile, section):
-        self.swift_container = None
         self.read_inifile(inifile, section)
         self.read_environment()
-
-        self.metadata_path = self._local_root
-        self.data_path = self._local_data
 
     def read_inifile(self, inifile, section):
         config = RawConfigParser(
@@ -146,29 +139,27 @@ class SwiftSyncConfig:
         self.swift_key = config.get(section, 'key')[-1]
         self.swift_auth = config.get(section, 'auth')[-1]
         self.swift_user = config.get(section, 'user')[-1]
+        self.swift_container = None
+        self.swift_containers = []
         self.planb_translations = config.get(section, 'planb_translate')
 
     def read_environment(self):
         # /tank/customer-friendly_name/data
         storage = os.environ['planb_storage_destination']
-        # friendly_name
-        friendly_name = os.environ['planb_fileset_friendly_name']
-        # unused fileset_id (123)
-        fileset_id = os.environ['planb_fileset_id']
-        assert fileset_id, os.environ
+        # friendly_name = os.environ['planb_fileset_friendly_name']
+        # fileset_id = os.environ['planb_fileset_id']
 
-        assert storage.endswith('/data'), os.environ
-        assert storage[0:-5].endswith(friendly_name)
+        if not storage.endswith('/data'):
+            raise ValueError(
+                'expected storage path to end in /data, got {!r}'.format(
+                    storage))
+        if not os.path.exists(storage):
+            raise ValueError(
+                'data_path does not exist: {!r}'.format(storage))
 
-        prefix = storage[0:-(5 + len(friendly_name))]
-        pool, customer = prefix.rsplit('/', 1)
-        self._local_pool = pool
-        self._local_root = '{}/{}{}'.format(pool, customer, friendly_name)
-        self._local_data = storage
-
-        assert '/' in friendly_name, 'expected "/CONTAINER" in friendly_name'
-        self.swift_container = friendly_name.rsplit('/', 1)[1]
-        assert self.swift_container, friendly_name
+        self.data_path = storage
+        self.metadata_path = storage.rsplit('/', 1)[0]
+        assert self.metadata_path.startswith('/'), self.metadata_path
 
     def set_container(self, container):
         self.swift_container = container
@@ -183,11 +174,16 @@ class SwiftSyncConfig:
             key=self.swift_key,
             tenant_name='UNUSED',
             auth_version='1')
+
         resp_headers, containers = conn.get_account()
         # containers = [
-        #  {'count': 350182, 'bytes': 78285833087, 'name': 'decursus'}]
-        assert any(i['name'] == self.get_container() for i in containers), (
-            containers)
+        #   {'count': 350182, 'bytes': 78285833087, 'name': 'document'}]
+        self.swift_containers = [i['name'] for i in containers]
+        self.swift_containers.sort()
+        if self.swift_container:
+            assert self.swift_container in self.swift_containers, (
+                self.swift_container, containers)
+
         return conn
 
     def get_translator(self):
@@ -476,6 +472,8 @@ class SwiftSyncMultiAdder(threading.Thread):
         Add new files (from list.add) and store which files we added in
         the success_fp.
         """
+        # Create this swift connection first in this thread on purpose. That
+        # should minimise swiftclient library MT issues.
         swiftconn = self._swiftsync.config.get_swift()
         container = self._swiftsync.config.get_container()
         translator = self._swiftsync.config.get_translator()

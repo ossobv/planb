@@ -10,6 +10,10 @@ PLANB_SUDO_BIN = '/usr/bin/sudo'
 PLANB_ZFS_BIN = '/sbin/zfs'
 PLANB_RSYNC_BIN = '/usr/bin/rsync'
 
+# Disable during dev?
+# PLANB_SUDO_BIN = '/bin/true'
+# PLANB_ZFS_BIN = '/bin/true'
+
 # Provide filesystem name + internal name. For ZFS that is "name", and "zfs
 # path". The first one will be the default.
 PLANB_STORAGE_POOLS = (

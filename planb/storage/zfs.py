@@ -247,6 +247,9 @@ class ZfsDataset(Dataset):
     # base
 
     def ensure_exists(self):
+        if settings.PLANB_ZFS_BIN == '/bin/true':
+            return
+
         # Common case is the unmounted yet existing path. If the mount point
         # exists, everything in it should be fine too.
         if self._backend.zfs_get_local_path(self.identifier):

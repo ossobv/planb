@@ -21,11 +21,11 @@ except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
 
-# BUG: metadata files are not 0600, but should be
-# FIX: should remove .add and .del after work. they serve no purpose, but take
-# up megabytes
-# FIX: when stopping mid-add, we get lots of "ValueError: early abort"
+# TODO: when stopping mid-add, we get lots of "ValueError: early abort"
 # backtraces polluting the log; should do without error
+# TODO: merging the 7 theaded succcess_fp's into the .cur list is inefficient
+# (but perhaps we should just use fewer threads when there are only a handful
+# changes)
 
 SAMPLE_INIFILE = r"""\
 [SECTION]
@@ -342,6 +342,10 @@ class SwiftSync:
         Remove planb-swiftsync.new so we'll fetch a fresh one on the next run.
         """
         os.unlink(self._path_new)
+        # Also remove add/del files; we don't need them anymore, and they take
+        # up space.
+        os.unlink(self._path_add)
+        os.unlink(self._path_del)
         log.info('Sync done')
 
     def _make_new_list(self):
@@ -353,6 +357,7 @@ class SwiftSync:
         path_tmp = '{}.tmp'.format(self._path_new)
         swiftconn = self.config.get_swift()
         with open(path_tmp, 'w') as dest:
+            os.chmod(path_tmp, 0o600)
             for container in self.get_containers():
                 assert '|' not in container, container
                 assert '{' not in container, container
@@ -391,13 +396,15 @@ class SwiftSync:
             cur_fp = open(self._path_cur, 'r')
         except FileNotFoundError:
             with open(self._path_cur, 'w'):
-                pass
+                os.chmod(self._path_cur, 0o600)
             cur_fp = open(self._path_cur, 'r')
 
         try:
             with open(self._path_new, 'r') as new_fp:
                 with open(self._path_del, 'w') as del_fp:
+                    os.chmod(self._path_del, 0o600)
                     with open(self._path_add, 'w') as add_fp:
+                        os.chmod(self._path_add, 0o600)
                         _comm(
                             left_fp=cur_fp, right_fp=new_fp,
                             # We already have it if in both:
@@ -416,6 +423,7 @@ class SwiftSync:
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp:
             with open(path_tmp, 'w') as tmp_fp:
+                os.chmod(path_tmp, 0o600)
                 _comm(
                     left_fp=cur_fp, right_fp=added_fp,
                     # Keep it if in both:
@@ -433,6 +441,7 @@ class SwiftSync:
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp:
             with open(path_tmp, 'w') as tmp_fp:
+                os.chmod(path_tmp, 0o600)
                 _comm(
                     left_fp=cur_fp, right_fp=deleted_fp,
                     # Drop it if in both (we deleted it now):

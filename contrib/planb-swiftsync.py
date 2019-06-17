@@ -10,7 +10,7 @@ import warnings
 
 from argparse import ArgumentParser
 from collections import OrderedDict
-from configparser import RawConfigParser, SectionProxy
+from configparser import NoOptionError, RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
 from time import time
@@ -21,7 +21,6 @@ except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
 
-# TODO: allow all containers to be backed up inside a single tree
 # BUGS: getting the filelist from swiftclient is done in-memory, which may take
 # up to several GBs
 
@@ -84,8 +83,11 @@ class PathTranslator:
 
         (provide remote paths on stdin)
     """
-    def __init__(self, data_path, container, translations):
+    def __init__(self, data_path, container, translations, single_container):
         self.data_path = data_path
+        self.container = container
+        assert '/' not in container, container
+        self.single_container = single_container
         self.replacements = []
         for translation in translations:
             container_match, needle, replacement = translation.split('=')
@@ -101,7 +103,9 @@ class PathTranslator:
         else:
             local_path = remote_path
 
-        return os.path.join(self.data_path, local_path)
+        if self.single_container:
+            return os.path.join(self.data_path, local_path)
+        return os.path.join(self.data_path, self.container, local_path)
 
 
 class ConfigParserMultiValues(OrderedDict):
@@ -144,9 +148,11 @@ class SwiftSyncConfig:
         self.swift_key = config.get(section, 'key')[-1]
         self.swift_auth = config.get(section, 'auth')[-1]
         self.swift_user = config.get(section, 'user')[-1]
-        self.swift_container = None
         self.swift_containers = []
-        self.planb_translations = config.get(section, 'planb_translate')
+        try:
+            self.planb_translations = config.get(section, 'planb_translate')
+        except NoOptionError:
+            self.planb_translations = []
 
     def read_environment(self):
         # /tank/customer-friendly_name/data
@@ -166,34 +172,18 @@ class SwiftSyncConfig:
         self.metadata_path = storage.rsplit('/', 1)[0]
         assert self.metadata_path.startswith('/'), self.metadata_path
 
-    def set_container(self, container):
-        self.swift_container = container
-
-    def get_container(self):
-        return self.swift_container
-
     def get_swift(self):
-        conn = Connection(
+        return Connection(
             authurl=self.swift_auth,
             user=self.swift_user,
             key=self.swift_key,
             tenant_name='UNUSED',
             auth_version='1')
 
-        resp_headers, containers = conn.get_account()
-        # containers = [
-        #   {'count': 350182, 'bytes': 78285833087, 'name': 'document'}]
-        self.swift_containers = [i['name'] for i in containers]
-        self.swift_containers.sort()
-        if self.swift_container:
-            assert self.swift_container in self.swift_containers, (
-                self.swift_container, containers)
-
-        return conn
-
-    def get_translator(self):
+    def get_translator(self, container, single_container):
         return PathTranslator(
-            self.data_path, self.get_container(), self.planb_translations)
+            self.data_path, container, self.planb_translations,
+            single_container)
 
 
 class SwiftLine:
@@ -217,7 +207,13 @@ class ListLine:
         if '||' in line:
             raise NotImplementedError('FIXME, escapes not implemented')
         self.line = line
-        self.path, self._modified, self._size = line.split('|')
+        # Path may include 'container|'.
+        self.path, self._modified, self._size = line.rsplit('|', 2)
+        if '|' in self.path:
+            self.container, self.path = self.path.split('|')
+        else:
+            self.container = None
+        self.container_path = (self.container, self.path)
 
     @property
     def size(self):
@@ -238,8 +234,9 @@ class ListLine:
 
 
 class SwiftSync:
-    def __init__(self, config):
+    def __init__(self, config, container=None):
         self.config = config
+        self.container = container
 
         # Get data path. Chdir into it so no unmounting can take place.
         data_path = config.data_path
@@ -254,6 +251,31 @@ class SwiftSync:
         # ^-- the unreached goal
         self._path_del = os.path.join(metadata_path, 'planb-swiftsync.del')
         self._path_add = os.path.join(metadata_path, 'planb-swiftsync.add')
+
+    def get_containers(self):
+        if not hasattr(self, '_get_containers'):
+            if self.container:
+                self._get_containers = [self.container]
+            else:
+                resp_headers, containers = (
+                    self.config.get_swift().get_account())
+                # containers = [
+                #   {'count': 350182, 'bytes': 78285833087,
+                #    'name': 'document'}]
+                self._get_containers = [i['name'] for i in containers]
+                self._get_containers.sort()
+        return self._get_containers
+
+    def get_translators(self):
+        if self.container:
+            translators = {None: self.config.get_translator(
+                self.container, single_container=True)}
+        else:
+            translators = dict(
+                (container, self.config.get_translator(
+                    container, single_container=False))
+                for container in self.get_containers())
+        return translators
 
     def sync(self):
         lock_fd = None
@@ -325,20 +347,27 @@ class SwiftSync:
 
         This can be slow as we may need to fetch many lines from swift.
         """
-        log.info('Fetching new list')
-        # full_listing:
-        #     if True, return a full listing, else returns a max of
-        #     10000 listings
-        resp_headers, lines = self.config.get_swift().get_container(
-            self.config.get_container(), full_listing=True)
         path_tmp = '{}.tmp'.format(self._path_new)
         with open(path_tmp, 'w') as dest:
-            for line in lines:
-                record = SwiftLine(line)
-                dest.write('{}|{}|{}\n'.format(
-                    record.path.replace('|', '||'),
-                    record.modified,
-                    record.size))
+            for container in self.get_containers():
+                assert '|' not in container, container
+                assert '{' not in container, container
+                fmt = '{}|{}|{}\n'
+                if not self.container:  # multiple containers
+                    fmt = '{}|{}'.format(container, fmt)
+
+                log.info('Fetching new list for %r', container)
+                # full_listing:
+                #     if True, return a full listing, else returns a max of
+                #     10000 listings
+                resp_headers, lines = self.config.get_swift().get_container(
+                    container, full_listing=True)
+                for line in lines:
+                    record = SwiftLine(line)
+                    dest.write(fmt.format(
+                        record.path.replace('|', '||'),
+                        record.modified,
+                        record.size))
         os.rename(path_tmp, self._path_new)
 
     def _make_diff_lists(self):
@@ -422,10 +451,10 @@ class SwiftSyncDeleter:
         Delete old files (from planb-swiftsync.del) and store which files we
         deleted in the success_fp.
         """
-        translator = self._swiftsync.config.get_translator()
+        translators = self._swiftsync.get_translators()
         with open(self._source, 'r') as del_fp:
             for record in _comm_lineiter(del_fp):
-                path = translator(record.path)
+                path = translators[record.container](record.path)
                 os.unlink(path)
                 success_fp.write(record.line)
 
@@ -448,12 +477,15 @@ class SwiftSyncAdder:
                 offset=idx, threads=self._thread_count, lock=thread_lock)
             for idx in range(self._thread_count)]
 
-        _MT_HAS_THREADS = True
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-        _MT_HAS_THREADS = False
+        if self._thread_count == 1:
+            threads[0].run()
+        else:
+            _MT_HAS_THREADS = True
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            _MT_HAS_THREADS = False
 
         if _MT_ABORT:
             raise SystemExit(_MT_ABORT)
@@ -501,8 +533,8 @@ class SwiftSyncMultiAdder(threading.Thread):
         # Create this swift connection first in this thread on purpose. That
         # should minimise swiftclient library MT issues.
         swiftconn = self._swiftsync.config.get_swift()
-        container = self._swiftsync.config.get_container()
-        translator = self._swiftsync.config.get_translator()
+        only_container = self._swiftsync.container
+        translators = self._swiftsync.get_translators()
         offset = self._offset
         threads = self._threads
         failures = 0
@@ -522,7 +554,9 @@ class SwiftSyncMultiAdder(threading.Thread):
 
                 # Download the file into the appropriate directory.
                 failures += self._add_new_record(
-                    swiftconn, container, translator, record, success_fp)
+                    swiftconn, record.container or only_container,
+                    translators[record.container],
+                    record, success_fp)
 
         # If there were one or more failures, finish with an exception.
         if failures:
@@ -538,7 +572,7 @@ class SwiftSyncMultiAdder(threading.Thread):
         if path.endswith('/'):
             log.warning(
                 'Skipping record %r (from %r) because of trailing slash',
-                path, record.path)
+                path, record.container_path)
             return 1
 
         try:
@@ -549,18 +583,19 @@ class SwiftSyncMultiAdder(threading.Thread):
         try:
             with open(path, 'wb') as out_fp:
                 # resp_chunk_size - if defined, chunk size of data to read.
-                # NOTE: If you specify a resp_chunk_size you must fully
-                # read the object's contents before making another request.
+                # > If you specify a resp_chunk_size you must fully read
+                # > the object's contents before making another request.
                 resp_headers, obj = swiftconn.get_object(
                     container, record.path, resp_chunk_size=(16 * 1024 * 1024))
                 for data in obj:
                     if _MT_ABORT:
-                        raise ValueError(
-                            'early abort during {}'.format(record.path))
+                        raise ValueError('early abort during {}'.format(
+                            record.container_path))
                     out_fp.write(data)
         except Exception as e:
             log.warning(
-                'Download failure for %r (from %r): %s', path, record.path, e)
+                'Download failure for %r (from %r): %s',
+                path, record.container_path, e)
             try:
                 # FIXME: also remove directories we just created?
                 os.unlink(path)
@@ -573,7 +608,7 @@ class SwiftSyncMultiAdder(threading.Thread):
         if local_size != record.size:
             log.error(
                 'Filesize mismatch for %r (from %r): %d != %d',
-                path, record.path, record.size, local_size)
+                path, record.container_path, record.size, local_size)
             try:
                 # FIXME: also remove directories we just created?
                 os.unlink(path)
@@ -595,16 +630,16 @@ def _comm_lineiter(fp):
     line = next(it)
     record = ListLine(line)
     yield record
-    prev_path = record.path
+    prev_record = record
 
     # Do the rest through normal iteration.
     for line in it:
         record = ListLine(line)
-        if prev_path >= record.path:
+        if prev_record.container_path >= record.container_path:
             raise ValueError('data (sorting?) error: {!r} vs. {!r}'.format(
-                prev_path, record.path))
+                prev_record.container_path, record.container_path))
         yield record
-        prev_path = record.path
+        prev_record = record
 
 
 def _comm(left_fp, right_fp, do_both, do_leftonly, do_rightonly):
@@ -625,14 +660,14 @@ def _comm(left_fp, right_fp, do_both, do_leftonly, do_rightonly):
         right = new_iter = None
 
     while left_iter and new_iter:
-        if left.path < right.path:
+        if left.container_path < right.container_path:
             # Current is lower, remove and seek current.
             do_leftonly(left.line)
             try:
                 left = next(left_iter)
             except StopIteration:
                 left = left_iter = None
-        elif right.path < left.path:
+        elif right.container_path < left.container_path:
             # New is lower, add and seek right.
             do_rightonly(right.line)
             try:
@@ -677,7 +712,13 @@ class Cli:
             '--test-path-translate', metavar='testcontainer',
             help='test path translation with paths from stdin')
         parser.add_argument('container', nargs='?')
+        parser.add_argument('--all-containers', action='store_true')
         self.args = parser.parse_args()
+
+        if not self.args.test_path_translate:
+            if not (bool(self.args.container) ^
+                    bool(self.args.all_containers)):
+                parser.error('either specify a container or --all-containers')
 
     @property
     def config(self):
@@ -692,19 +733,21 @@ class Cli:
             self.test_path_translate(self.args.test_path_translate)
         elif self.args.container:
             self.sync_container(self.args.container)
-        else:
+        elif self.args.all_containers:
             self.sync_all_containers()
+        else:
+            raise NotImplementedError()
 
     def sync_container(self, container_name):
-        self.config.set_container(container_name)
-        swiftsync = SwiftSync(self.config)
+        swiftsync = SwiftSync(self.config, container_name)
         swiftsync.sync()
 
     def sync_all_containers(self):
-        raise NotImplementedError()
+        swiftsync = SwiftSync(self.config)
+        swiftsync.sync()
 
     def test_path_translate(self, container):
-        translator = self.config.get_translator()
+        translator = self.config.get_translator(container)
         try:
             while True:
                 rpath = input()

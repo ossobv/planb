@@ -21,9 +21,11 @@ except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
 
-# BUG: getting the filelist from swiftclient is done in-memory, which
-# may take up to several GBs.
 # BUG: metadata files are not 0600, but should be
+# FIX: should remove .add and .del after work. they serve no purpose, but take
+# up megabytes
+# FIX: when stopping mid-add, we get lots of "ValueError: early abort"
+# backtraces polluting the log; should do without error
 
 SAMPLE_INIFILE = r"""\
 [SECTION]
@@ -349,6 +351,7 @@ class SwiftSync:
         This can be slow as we may need to fetch many lines from swift.
         """
         path_tmp = '{}.tmp'.format(self._path_new)
+        swiftconn = self.config.get_swift()
         with open(path_tmp, 'w') as dest:
             for container in self.get_containers():
                 assert '|' not in container, container
@@ -360,15 +363,23 @@ class SwiftSync:
                 log.info('Fetching new list for %r', container)
                 # full_listing:
                 #     if True, return a full listing, else returns a max of
-                #     10000 listings
-                resp_headers, lines = self.config.get_swift().get_container(
-                    container, full_listing=True)
-                for line in lines:
-                    record = SwiftLine(line)
-                    dest.write(fmt.format(
-                        record.path.replace('|', '||'),
-                        record.modified,
-                        record.size))
+                #     10000 listings; but that will eat memory, which we don't
+                #     want.
+                marker = ''  # "start _after_ marker"
+                limit = 10000
+                while True:
+                    resp_headers, lines = swiftconn.get_container(
+                        container, full_listing=False, limit=limit,
+                        marker=marker)
+                    for idx, line in enumerate(lines):
+                        record = SwiftLine(line)
+                        dest.write(fmt.format(
+                            record.path.replace('|', '||'),
+                            record.modified,
+                            record.size))
+                        marker = line['name']
+                    if idx + 1 < limit:
+                        break
         os.rename(path_tmp, self._path_new)
 
     def _make_diff_lists(self):
@@ -455,6 +466,7 @@ class SwiftSyncDeleter:
         translators = self._swiftsync.get_translators()
         with open(self._source, 'r') as del_fp:
             for record in _comm_lineiter(del_fp):
+                # FIXME: should also try to delete unused directories?
                 path = translators[record.container](record.path)
                 os.unlink(path)
                 success_fp.write(record.line)

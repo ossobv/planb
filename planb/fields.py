@@ -53,7 +53,9 @@ class CommandField(models.CharField):
         super().__init__(**kwargs)
 
     def formfield(self, **kwargs):
-        return super().formfield(form_class=CommandFormField)
+        return super().formfield(
+            form_class=CommandFormField,
+            widget=forms.TextInput(attrs={'size': '100'}))
 
 
 class MultiEmailField(models.Field):

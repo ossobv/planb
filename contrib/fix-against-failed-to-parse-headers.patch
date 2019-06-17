@@ -1,0 +1,97 @@
+From 5c0f06c164c655e254c1b19fda18ac678fbf35c9 Mon Sep 17 00:00:00 2001
+From: Tim Bell <timothybell@gmail.com>
+Date: Thu, 13 Sep 2018 10:29:23 +1000
+Subject: [PATCH] Rename header parsing test and fix so it passes; fixes #1438
+
+(description/readme by wdoekes, 2019-06-17)
+
+Fixes the following "warning" problem in planb-swiftsync:
+
+    2019-06-16 17:25:42,805 [Thread-7  ] [WARNI] Failed to parse headers
+      (url=../document/01cbd089-1fd6-xxxx-xxxx-f2cdcbafxxxx):
+      Unknown, unparsed data: [
+      <http.client.HTTPMessage object at 0x7fda43c3a710>]
+    Traceback (most recent call last):
+      File "urllib3/connectionpool.py", line 399, in _make_request
+        assert_header_parsing(httplib_response.msg)
+      File "urllib3/util/response.py", line 66, in assert_header_parsing
+        raise HeaderParsingError(defects=defects, unparsed_data=unparsed_data)
+    urllib3.exceptions.HeaderParsingError: Unknown, unparsed data: [
+      <http.client.HTTPMessage object at 0x7fda43c3a710>]
+
+Apparently, for downloads with rfc822 content-type, we get warnings from
+urllib3:
+
+    # file -b 01cbd089-1fd6-xxxx-xxxx-f2cdcbafxxxx
+    news or mail, ASCII text, with CRLF line terminators
+
+It starts with:
+
+    From: "xxx"
+    Subject: 
+    Date: Mon, 29 Apr 2019 08:09:50 +0200
+    MIME-Version: 1.0
+    Content-Type: multipart/related;
+            type="text/html";
+            boundary="----=_NextPart_000_0000_xxxxFE62.EB57xxxx"
+    X-MimeOLE: Produced By Microsoft MimeOLE V6.1.7601.2xxxx
+
+    This is a multi-part message in MIME format.
+
+    ------=_NextPart_000_0000_xxxxFE62.EB57xxxx
+    Content-Type: text/html;
+            charset="utf-8"
+    Content-Transfer-Encoding: quoted-printable
+    ...
+
+And apparently it causes the above non-fatal warning.
+
+The change below fixes it for these versions:
+
+- python3 3.6.7-1~18.04
+- python3-urllib3 1.22-1ubuntu0.18.04.1
+
+NOTE, a similar (but less often seen problem is):
+
+    2019-06-16 22:33:33,699 [Thread-3  ] [WARNI] Failed to parse headers
+      (url=../111/plain-document-1524): [
+      NoBoundaryInMultipartDefect(), MultipartInvariantViolationDefect()],
+      unparsed data: ''
+    Traceback (most recent call last):
+      File "urllib3/connectionpool.py", line 399, in _make_request
+        assert_header_parsing(httplib_response.msg)
+      File "urllib3/util/response.py", line 72, in assert_header_parsing
+        raise HeaderParsingError(defects=defects, unparsed_data=unparsed_data)
+    urllib3.exceptions.HeaderParsingError: [
+      NoBoundaryInMultipartDefect(), MultipartInvariantViolationDefect()],
+      unparsed data: ''
+
+Caused by:
+
+    --=_13e7xxxxc5efe1c45ebf1a395f67xxxx
+    Content-Type: text/html; charset="UTF-8"
+    Content-Transfer-Encoding: quoted-printable
+    Content-Disposition: inline
+
+    <html><head>
+    ...
+
+That is NOT fixed by this patch.
+
+--- /usr/lib/python3/dist-packages/urllib3/util/response.py
++++ /usr/lib/python3/dist-packages/urllib3/util/response.py
+@@ -60,7 +60,13 @@ def assert_header_parsing(headers):
+ 
+     unparsed_data = None
+     if get_payload:  # Platform-specific: Python 3.
+-        unparsed_data = get_payload()
++        # get_payload is actually email.message.Message.get_payload;
++        # we're only interested in the result if it's not a multipart message
++        if not headers.is_multipart():
++            payload = get_payload()
++
++            if isinstance(payload, (bytes, str)):
++                unparsed_data = payload
+ 
+     if defects or unparsed_data:
+         raise HeaderParsingError(defects=defects, unparsed_data=unparsed_data)

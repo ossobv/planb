@@ -81,12 +81,13 @@ TODO
   planb-swiftsync.* files.)
 * RFE: Standardize stdout/stderr output from Rsync/Exec success (and
   prepend "> " to output) to be more in line with failure.
-* RFE: Fix log format to look more like planb-swiftsync.
 * RFE: Split off retention config into reusable config. Add "default"
   config to hostgroup so the fileset can use that unless it is
   overridden.
+* RFE: Add possibility to feed back snapshot size from the individual
+  Transport instead of using dutree. Parsing the swiftsync listings is
+  fast after all.
 * FIX: Add uwsgi-uid==djangoq-uid check?
-* FIX: Fix admin "Planb" name as "PlanB".
 
 * Alter HostGroup:
   - use fs-name and human-name

@@ -125,8 +125,8 @@ LOGGING = {
     'formatters': {
         'simple': {
             'format': (
-                '%(asctime)s - %(name)s - %(levelname)s/%(process)s - '
-                '%(message)s'),
+                '%(asctime)s [planb/%(process)5d] '
+                '[%(levelname)-3.3s] %(message)s (%(name)s)'),
         },
         'notime': {
             'format': '%(name)s - %(levelname)s/%(process)s - %(message)s',

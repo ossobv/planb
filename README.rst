@@ -74,8 +74,20 @@ For more detailed steps, see `Setting it all up`_ below.
 TODO
 ----
 
-* Fix logrotate sample.
-* Add uwsgi-uid==djangoq-uid check?
+* BUG: Items added to /exclude list are not deleted from destination if
+  they have already been backed up once. The rsync job would need some
+  way to keep track of changes in include/exclude settings, and run a
+  cleanup in case they are changed. (See metadata storage like
+  planb-swiftsync.* files.)
+* RFE: Standardize stdout/stderr output from Rsync/Exec success (and
+  prepend "> " to output) to be more in line with failure.
+* RFE: Fix log format to look more like planb-swiftsync.
+* RFE: Split off retention config into reusable config. Add "default"
+  config to hostgroup so the fileset can use that unless it is
+  overridden.
+* FIX: Add uwsgi-uid==djangoq-uid check?
+* FIX: Fix admin "Planb" name as "PlanB".
+
 * Alter HostGroup:
   - use fs-name and human-name
   - use asciifield for fs-name?
@@ -86,15 +98,13 @@ TODO
   use mail_admins style mail.
 * After using mail_admins style mail, we can start introducing mail digests
   instead: daily summary of backup successes and failures.
-* Fix admin "Planb" name as "PlanB".
 * Split off the subparts of the Fileset to separate configs:
   - retention-config
   - host-status (use this as main enqueue-view?)
 * Use hostgroup+hostname in more places. Right now the friendly_name is
   too short. Also, use unique_together, so the friendlyname can be reused.
-* BUG: Items added to /exclude list are not deleted from destination if
-  they have already been backed up once.
 * Replace the "daily report" hack with a signal-receiver.
+* Clarify why there's a /contrib/ and a /planb/contrib/ directory.
 
 
 -------

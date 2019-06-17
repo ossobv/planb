@@ -21,8 +21,9 @@ except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
 
-# BUGS: getting the filelist from swiftclient is done in-memory, which may take
-# up to several GBs
+# BUG: getting the filelist from swiftclient is done in-memory, which
+# may take up to several GBs.
+# BUG: metadata files are not 0600, but should be
 
 SAMPLE_INIFILE = r"""\
 [SECTION]
@@ -52,7 +53,7 @@ logging.basicConfig(
     level=logging.INFO,
     format=(
         '%(asctime)s [planb-swiftsync:%(threadName)-10.10s] '
-        '[%(levelname)-5.5s] %(message)s'),
+        '[%(levelname)-3.3s] %(message)s'),
     handlers=[logging.StreamHandler()])
 log = logging.getLogger()
 

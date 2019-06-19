@@ -284,6 +284,7 @@ class Fileset(models.Model):
             self.dest_pool, self.hostgroup, self.friendly_name)
 
         snaplist = []
+        # FIXME: should use UTC dates here!
         if not snapshots:
             snaplist.append(datetime.now().strftime('daily-%Y%m%d%H%M'))
             if self.weekly_retention:

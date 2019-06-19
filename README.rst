@@ -88,6 +88,8 @@ TODO
   Transport instead of using dutree. Parsing the swiftsync listings is
   fast after all.
 * FIX: Add uwsgi-uid==djangoq-uid check?
+* FIX: try django_q>0.1 and fix the async() and await() keywords which won't
+  work in python3.7 anymore
 
 * Alter HostGroup:
   - use fs-name and human-name

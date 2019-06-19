@@ -23,9 +23,13 @@ except ImportError:
 
 # TODO: when stopping mid-add, we get lots of "ValueError: early abort"
 # backtraces polluting the log; should do without error
+# TODO: if we completed a run, we should drop the .new always (even if there
+# are failures); since right now it fails on filesize!=filesize problems, which
+# won't be fixed until we get a new .new list.
 # TODO: merging the 7 theaded succcess_fp's into the .cur list is inefficient
 # (but perhaps we should just use fewer threads when there are only a handful
-# changes)
+# changes). doing this from the Main thread after joining sounds like a better
+# plan; also removes the need for the thread_lock.
 
 SAMPLE_INIFILE = r"""\
 [SECTION]
@@ -536,14 +540,18 @@ class SwiftSyncMultiAdder(threading.Thread):
                 self._add_new(success_fp)
             finally:
                 success_fp.flush()
-                success_fp.seek(0)
-                log.info('Stopping thread, updating lists')
-                self._lock.acquire()
-                try:
-                    self._swiftsync.update_cur_list_from_added(success_fp)
-                finally:
-                    self._lock.release()
-                    log.info('Stopped thread, job done')
+                size = success_fp.tell()
+                if size:
+                    success_fp.seek(0)
+                    log.info('Stopping thread, updating lists')
+                    self._lock.acquire()
+                    try:
+                        self._swiftsync.update_cur_list_from_added(success_fp)
+                    finally:
+                        self._lock.release()
+                        log.info('Stopped thread, job done')
+                else:
+                    log.info('Stopping thread, nothing to do')
 
         self.run_success = True
 

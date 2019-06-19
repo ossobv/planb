@@ -79,6 +79,8 @@ if __name__ == '__main__':
             'planb.static': ['planb/js/jquery-postlink.js'],
             'planb.templates': [
                 'admin/planb/fileset/change_form.html',
+                'monkeypatch/technical_500.txt',
+                'monkeypatch/technical_500_altered.txt',
                 'planb/report_email_body.txt'],
             'planb.transport_exec': [
                 'templates/admin/transport_exec/config/change_form.html'],

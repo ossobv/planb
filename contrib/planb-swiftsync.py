@@ -539,8 +539,9 @@ class SwiftSyncMultiAdder(threading.Thread):
 
     def run(self):
         with NamedTemporaryFile(delete=True, mode='w+') as success_fp:
+            self._success_fp = success_fp
             try:
-                self._add_new(success_fp)
+                self._add_new()
             finally:
                 success_fp.flush()
                 size = success_fp.tell()
@@ -558,16 +559,16 @@ class SwiftSyncMultiAdder(threading.Thread):
 
         self.run_success = True
 
-    def _add_new(self, success_fp):
+    def _add_new(self):
         """
-        Add new files (from planb-swiftsync.add) and store which files we added
-        in the success_fp.
+        Add new files (from planb-swiftsync.add) and call _set_success.
         """
         # Create this swift connection first in this thread on purpose. That
         # should minimise swiftclient library MT issues.
-        swiftconn = self._swiftsync.config.get_swift()
-        only_container = self._swiftsync.container
+        self._swiftconn = self._swiftsync.config.get_swift()
+
         translators = self._swiftsync.get_translators()
+        only_container = self._swiftsync.container
         offset = self._offset
         threads = self._threads
         failures = 0
@@ -587,19 +588,17 @@ class SwiftSyncMultiAdder(threading.Thread):
 
                 # Download the file into the appropriate directory.
                 failures += self._add_new_record(
-                    swiftconn, record.container or only_container,
-                    translators[record.container],
-                    record, success_fp)
+                    record, record.container or only_container,
+                    translators[record.container])
 
         # If there were one or more failures, finish with an exception.
         if failures:
             log.warning('Raising error at end to report %d failures', failures)
             raise ValueError('abort at EOF with {} failures'.format(failures))
 
-    def _add_new_record(self, swiftconn, container, translator, record,
-                        success_fp):
+    def _add_new_record(self, record, container, translator):
         """
-        Download record, add to success_fp if success, return 1 if failed.
+        Download record, call _set_success() or return 1 if failed.
         """
         path = translator(record.path)
         if path.endswith('/'):
@@ -618,7 +617,7 @@ class SwiftSyncMultiAdder(threading.Thread):
                 # resp_chunk_size - if defined, chunk size of data to read.
                 # > If you specify a resp_chunk_size you must fully read
                 # > the object's contents before making another request.
-                resp_headers, obj = swiftconn.get_object(
+                resp_headers, obj = self._swiftconn.get_object(
                     container, record.path, resp_chunk_size=(16 * 1024 * 1024))
                 for data in obj:
                     if _MT_ABORT:
@@ -649,8 +648,11 @@ class SwiftSyncMultiAdder(threading.Thread):
                 pass
             return 1
 
-        success_fp.write(record.line)
+        self._set_success(record)
         return 0
+
+    def _set_success(self, record):
+        self._success_fp.write(record.line)
 
 
 def _comm_lineiter(fp):

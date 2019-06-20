@@ -3,7 +3,7 @@ from django.db.models import Q
 
 from django_q.brokers import get_broker
 
-from planb.models import Fileset
+from planb.core.models import Fileset
 
 
 class Command(BaseCommand):

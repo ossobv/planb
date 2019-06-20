@@ -6,7 +6,7 @@ import datetime
 from django.db import migrations, models
 from django.utils import timezone
 import django.db.models.deletion
-import planb.fields
+import planb.common.fields
 
 
 class Migration(migrations.Migration):
@@ -31,8 +31,8 @@ class Migration(migrations.Migration):
                 ('rsync_path', models.CharField(default='/usr/bin/rsync', max_length=31)),
                 ('ionice_path', models.CharField(blank=True, default='/usr/bin/ionice', max_length=31)),
                 ('flags', models.CharField(default='-az --numeric-ids --stats --delete', help_text='Default "-az --delete", add "--no-perms --chmod=D0700,F600" for (windows) hosts without permission bits.', max_length=511)),
-                ('includes', planb.fields.FilelistField(default='etc home root srv usr/local/bin var/backups var/lib/dpkg/status* var/lib/psdiff.db* var/spool/cron', max_length=1023)),
-                ('excludes', planb.fields.FilelistField(blank=True, max_length=1023)),
+                ('includes', planb.common.fields.FilelistField(default='etc home root srv usr/local/bin var/backups var/lib/dpkg/status* var/lib/psdiff.db* var/spool/cron', max_length=1023)),
+                ('excludes', planb.common.fields.FilelistField(blank=True, max_length=1023)),
                 ('running', models.BooleanField(default=False)),
                 ('priority', models.IntegerField(default=0)),
                 ('date_complete', models.DateTimeField(default=datetime.datetime(1970, 1, 2, 0, 0, tzinfo=timezone.utc), verbose_name='Complete date')),
@@ -57,7 +57,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(max_length=63, unique=True)),
-                ('notify_email', planb.fields.MultiEmailField(blank=True, help_text='Use a newline per emailaddress', null=True)),
+                ('notify_email', planb.common.fields.MultiEmailField(blank=True, help_text='Use a newline per emailaddress', null=True)),
             ],
         ),
         migrations.AddField(

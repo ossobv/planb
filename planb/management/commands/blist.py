@@ -2,8 +2,8 @@ import json
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from planb.core.models import Fileset
 from planb.management.base import BaseCommandWithZabbix
-from planb.models import Fileset
 
 
 class Command(BaseCommandWithZabbix):

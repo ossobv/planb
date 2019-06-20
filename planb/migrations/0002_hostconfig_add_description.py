@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 from django.db import migrations, models
-import planb.fields
+import planb.common.fields
 
 
 class Migration(migrations.Migration):
@@ -27,6 +27,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='hostconfig',
             name='includes',
-            field=planb.fields.FilelistField(default='data etc home root srv usr/local/bin var/backups var/lib/dpkg/status* var/lib/psdiff.db* var/spool/cron var/www', max_length=1023),
+            field=planb.common.fields.FilelistField(default='data etc home root srv usr/local/bin var/backups var/lib/dpkg/status* var/lib/psdiff.db* var/spool/cron var/www', max_length=1023),
         ),
     ]

@@ -11,7 +11,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.translation import ugettext as _
 
-from planb.models import Fileset, HostGroup
+from planb.core.models import Fileset, HostGroup
 
 
 class Command(BaseCommand):

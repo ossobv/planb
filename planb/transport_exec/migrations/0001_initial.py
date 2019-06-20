@@ -2,7 +2,7 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
-import planb.fields
+import planb.common.fields
 
 
 class Migration(migrations.Migration):
@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
             name='Config',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('transport_command', planb.fields.CommandField(help_text='Program to run to do the transport (data import). It is split by spaces and fed to execve(). Useful variables are available in the environment.', max_length=254)),
+                ('transport_command', planb.common.fields.CommandField(help_text='Program to run to do the transport (data import). It is split by spaces and fed to execve(). Useful variables are available in the environment.', max_length=254)),
                 ('fileset', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='+', to='planb.Fileset')),
             ],
             options={

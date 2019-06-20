@@ -5,8 +5,8 @@ import re
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from planb.core.models import Fileset, HostGroup
 from planb.management.base import BaseCommand
-from planb.models import Fileset, HostGroup
 
 
 class CustomYaml(object):

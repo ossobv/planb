@@ -5,8 +5,8 @@ from django.db import connections, models
 from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
+from planb.common.fields import CommandField
 from planb.common.subprocess2 import CalledProcessError, check_output
-from planb.fields import CommandField
 
 from .apps import TABLE_PREFIX
 

@@ -6,9 +6,9 @@ from django.db import connections, models
 from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
+from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (
     CalledProcessError, check_output)
-from planb.fields import FilelistField
 
 from .apps import TABLE_PREFIX
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES

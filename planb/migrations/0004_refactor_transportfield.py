@@ -3,7 +3,7 @@
 from __future__ import unicode_literals
 
 from django.db import migrations
-import planb.models
+import planb.core.models
 
 
 class Migration(migrations.Migration):
@@ -16,6 +16,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='hostconfig',
             name='transport',
-            field=planb.models.TransportChoices(choices=[(0, 'ssh (default)'), (1, 'rsync (port 873)')], default=0),
+            field=planb.core.models.TransportChoices(choices=[(0, 'ssh (default)'), (1, 'rsync (port 873)')], default=0),
         ),
     ]

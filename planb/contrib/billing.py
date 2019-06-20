@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import requests
 
-from planb.models import HostGroup
+from planb.core.models import HostGroup
 
 logger = logging.getLogger(__name__)
 

@@ -24,7 +24,7 @@ class Datasets(list):
     """
     @staticmethod
     def get_database_class():
-        from planb.models import Fileset
+        from planb.core.models import Fileset
         return Fileset
 
     def sort(self, key=None, reverse=False):

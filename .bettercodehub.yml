@@ -13,4 +13,4 @@ languages:
         - /example_settings.py
         - /setup.py
         - /planb/default_settings.py
-        - /planb/migrations/.*
+        - .*/migrations/.*

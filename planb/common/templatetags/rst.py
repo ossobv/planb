@@ -1,6 +1,6 @@
 from django.template.library import Library
 
-from planb.utils import human
+from planb.common import human
 
 register = Library()
 

@@ -6,7 +6,7 @@ from django.utils.html import format_html_join, escape as htmlesc
 from django.utils.safestring import mark_safe
 from django.utils.translation import ugettext as _
 
-from planb.utils import human
+from planb.common import human
 
 from .forms import FilesetAdminForm
 from .models import BOGODATE, BackupRun, HostGroup, Fileset

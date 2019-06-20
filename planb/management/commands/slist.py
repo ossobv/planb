@@ -1,8 +1,8 @@
 from fnmatch import fnmatch
 
+from planb.common import human
 from planb.core.models import bfs
 from planb.management.base import BaseCommand
-from planb.utils import human
 from planb.storage.base import Datasets
 
 

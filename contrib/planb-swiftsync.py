@@ -9,7 +9,7 @@ import traceback
 import warnings
 
 from argparse import ArgumentParser
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 from configparser import NoOptionError, RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
@@ -410,13 +410,14 @@ class SwiftSync:
                     with open(self._path_add, 'w') as add_fp:
                         os.chmod(self._path_add, 0o600)
                         _comm(
-                            left_fp=cur_fp, right_fp=new_fp,
-                            # We already have it if in both:
-                            do_both=(lambda e: None),
-                            # Remove when only in cur_fp:
-                            do_leftonly=(lambda d: del_fp.write(d)),
-                            # Add when only in new_fp:
-                            do_rightonly=(lambda a: add_fp.write(a)))
+                            _comm_input(cur_fp, new_fp),
+                            _comm_actions(
+                                # We already have it if in both:
+                                both=(lambda e: None),
+                                # Remove when only in cur_fp:
+                                leftonly=(lambda d: del_fp.write(d)),
+                                # Add when only in new_fp:
+                                rightonly=(lambda a: add_fp.write(a))))
         finally:
             cur_fp.close()
 
@@ -429,13 +430,14 @@ class SwiftSync:
             with open(path_tmp, 'w') as tmp_fp:
                 os.chmod(path_tmp, 0o600)
                 _comm(
-                    left_fp=cur_fp, right_fp=added_fp,
-                    # Keep it if in both:
-                    do_both=(lambda e: tmp_fp.write(e)),
-                    # Keep it if we already had it:
-                    do_leftonly=(lambda d: tmp_fp.write(d)),
-                    # Keep it if we added it now:
-                    do_rightonly=(lambda a: tmp_fp.write(a)))
+                    _comm_input(cur_fp, added_fp),
+                    _comm_actions(
+                        # Keep it if in both:
+                        both=(lambda e: tmp_fp.write(e)),
+                        # Keep it if we already had it:
+                        leftonly=(lambda d: tmp_fp.write(d)),
+                        # Keep it if we added it now:
+                        rightonly=(lambda a: tmp_fp.write(a))))
         os.rename(path_tmp, self._path_cur)
 
     def update_cur_list_from_deleted(self, deleted_fp):
@@ -447,13 +449,14 @@ class SwiftSync:
             with open(path_tmp, 'w') as tmp_fp:
                 os.chmod(path_tmp, 0o600)
                 _comm(
-                    left_fp=cur_fp, right_fp=deleted_fp,
-                    # Drop it if in both (we deleted it now):
-                    do_both=(lambda e: None),
-                    # Keep it if we didn't touch it:
-                    do_leftonly=(lambda d: tmp_fp.write(d)),
-                    # This should not happen:
-                    do_rightonly=None)
+                    _comm_input(cur_fp, deleted_fp),
+                    _comm_actions(
+                        # Drop it if in both (we deleted it now):
+                        both=(lambda e: None),
+                        # Keep it if we didn't touch it:
+                        leftonly=(lambda d: tmp_fp.write(d)),
+                        # This should not happen:
+                        rightonly=None))
         os.rename(path_tmp, self._path_cur)
 
 
@@ -672,63 +675,67 @@ def _comm_lineiter(fp):
         prev_record = record
 
 
-def _comm(left_fp, right_fp, do_both, do_leftonly, do_rightonly):
+_comm_input = namedtuple('_comm_input', 'left right')
+_comm_actions = namedtuple('_comm_actions', 'both leftonly rightonly')
+
+
+def _comm(input_, actions):
     """
     Like comm(1) - compare two sorted files line by line - using the
     listing_iter iterator.
     """
-    left_iter = _comm_lineiter(left_fp)
-    new_iter = _comm_lineiter(right_fp)
+    left_iter = _comm_lineiter(input_.left)
+    right_iter = _comm_lineiter(input_.right)
 
     try:
         left = next(left_iter)
     except StopIteration:
         left = left_iter = None
     try:
-        right = next(new_iter)
+        right = next(right_iter)
     except StopIteration:
-        right = new_iter = None
+        right = right_iter = None
 
-    while left_iter and new_iter:
+    while left_iter and right_iter:
         if left.container_path < right.container_path:
             # Current is lower, remove and seek current.
-            do_leftonly(left.line)
+            actions.leftonly(left.line)
             try:
                 left = next(left_iter)
             except StopIteration:
                 left = left_iter = None
         elif right.container_path < left.container_path:
             # New is lower, add and seek right.
-            do_rightonly(right.line)
+            actions.rightonly(right.line)
             try:
-                right = next(new_iter)
+                right = next(right_iter)
             except StopIteration:
-                right = new_iter = None
+                right = right_iter = None
         else:
             # They must be equal, remove/add if line is different and seek
             # both.
             if left.line == right.line:
-                do_both(right.line)
+                actions.both(right.line)
             else:
-                do_leftonly(left.line)
-                do_rightonly(right.line)
+                actions.leftonly(left.line)
+                actions.rightonly(right.line)
             try:
                 left = next(left_iter)
             except StopIteration:
                 left = left_iter = None
             try:
-                right = next(new_iter)
+                right = next(right_iter)
             except StopIteration:
-                right = new_iter = None
+                right = right_iter = None
 
     if left_iter:
-        do_leftonly(left.line)
+        actions.leftonly(left.line)
         for left in left_iter:
-            do_leftonly(left.line)
-    if new_iter:
-        do_rightonly(right.line)
-        for right in new_iter:
-            do_rightonly(right.line)
+            actions.leftonly(left.line)
+    if right_iter:
+        actions.rightonly(right.line)
+        for right in right_iter:
+            actions.rightonly(right.line)
 
 
 class Cli:

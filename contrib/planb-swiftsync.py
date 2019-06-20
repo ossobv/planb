@@ -23,9 +23,6 @@ except ImportError:
 
 # TODO: when stopping mid-add, we get lots of "ValueError: early abort"
 # backtraces polluting the log; should do without error
-# TODO: if we completed a run, we should drop the .new always (even if there
-# are failures); since right now it fails on filesize!=filesize problems, which
-# won't be fixed until we get a new .new list.
 
 SAMPLE_INIFILE = r"""\
 [SECTION]
@@ -293,9 +290,16 @@ class SwiftSync:
         else:
             # Do work.
             self.make_lists()
-            self.delete_from_list()
-            self.add_from_list()
+            failures = 0
+            failures += self.delete_from_list()
+            failures += self.add_from_list()
+            # If we bailed out with failures, but without an exception, we'll
+            # still clear out the list. Perhaps the list was bad and we simply
+            # need to fetch a clean new one (on the next run, that is).
             self.clean_lists()
+
+            if failures:
+                raise SystemExit(1)
         finally:
             if lock_fd is not None:
                 os.close(lock_fd)
@@ -328,6 +332,8 @@ class SwiftSync:
             deleter = SwiftSyncDeleter(self, self._path_del)
             deleter.work()
 
+        return 0  # no (recoverable) failures
+
     def add_from_list(self):
         """
         Add from planb-swiftsync.del.
@@ -336,6 +342,9 @@ class SwiftSync:
             log.info('Adding new files')
             adder = SwiftSyncAdder(self, self._path_add)
             adder.work()
+            return adder.failures  # possibly (recoverable) failures
+
+        return 0  # no (recoverable) failures
 
     def clean_lists(self):
         """
@@ -521,10 +530,11 @@ class SwiftSyncAdder:
 
         if _MT_ABORT:
             raise SystemExit(_MT_ABORT)
-        if not all(thread.run_success for thread in threads):
-            # One or more threads had a problem. Abort to signify that not
-            # everything is fine, even though we did our best.
-            raise SystemExit(1)
+
+        # Collect and sum failure count to signify when not everything is fine,
+        # even though we did our best. If we're here, all threads ended
+        # succesfully, so they all have a valid failures count.
+        self.failures = sum(th.failures for th in threads)
 
     def _create_combined_success(self, success_fps):
         """
@@ -628,7 +638,6 @@ class SwiftSyncMultiAdder(threading.Thread):
         self._threads = threads
 
         self._success_fp = None
-        self.run_success = False
 
     def take_success_file(self):
         """
@@ -645,8 +654,6 @@ class SwiftSyncMultiAdder(threading.Thread):
         finally:
             self._success_fp.flush()
             log.info('Stopping thread')
-
-        self.run_success = True
 
     def _add_new(self):
         """
@@ -680,10 +687,11 @@ class SwiftSyncMultiAdder(threading.Thread):
                     record, record.container or only_container,
                     translators[record.container])
 
-        # If there were one or more failures, finish with an exception.
+        # If there were one or more failures, store them so they can be used by
+        # the caller.
         if failures:
-            log.warning('Raising error at end to report %d failures', failures)
-            raise ValueError('abort at EOF with {} failures'.format(failures))
+            log.warning('At list EOF, got %d failures', failures)
+        self.failures = failures
 
     def _add_new_record(self, record, container, translator):
         """

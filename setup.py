@@ -108,9 +108,9 @@ if __name__ == '__main__':
             'Topic :: System :: Archiving :: Backup',
         ],
         install_requires=[
-            'Django>=2.0,<2.1',
-            'django-q>=0.9,<0.10',
-            'django-multi-email-field>=0.4,<0.5',
+            'Django>=2.1.9,<2.2',
+            'django-q>=1.0.1,<2',
+            'django-multi-email-field>=0.5,<0.6',
             'dutree>=1.5',
             'mysqlclient>=1.3.7,<2',   # APT: python3-mysqldb
             'redis>=2.10.5,<3',        # APT: python3-redis

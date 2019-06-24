@@ -12,7 +12,7 @@ from django.db import connection
 from django.db.models import Q
 from django.utils import timezone
 
-from django_q.tasks import async
+from django_q.tasks import async_task
 
 from .models import BOGODATE, BackupRun, Fileset
 
@@ -118,7 +118,7 @@ def async_backup_job(fileset):
     """
     Schedule the specified fileset to backup at once.
     """
-    return async(
+    return async_task(
         'planb.tasks.manual_run', fileset.pk,
         q_options=SINGLE_JOB_OPTS)
 
@@ -155,7 +155,7 @@ def finalize_run(task):
 class JobSpawner:
     def spawn_eligible(self):
         for fileset in self._enum_eligible_filesets():
-            async(
+            async_task(
                 'planb.tasks.conditional_run', fileset.pk,
                 q_options=SINGLE_JOB_OPTS)
             logger.info('[%s] Scheduled backup', fileset)

@@ -291,13 +291,12 @@ class FilesetRunner:
         dataset = fileset.get_dataset()
         dataset.begin_work()
         try:
-            # Create log.
-            run = BackupRun.objects.create(fileset_id=fileset.pk)
-
-            # Rsync fileset.
-            setproctitle('[backing up %d: %s]: rsync' % (
+            # Set title, create log, get transport config.
+            setproctitle('[backing up %d: %s]: transporting' % (
                 fileset.pk, fileset.friendly_name))
-            fileset.get_transport().run_transport()
+            run = BackupRun.objects.create(fileset_id=fileset.pk)
+            transport = fileset.get_transport()
+            transport.run_transport()
 
             # Get snapshot_size_listing.
             dutree = self.get_dutree_listing(fileset, dataset)

@@ -73,7 +73,6 @@ INSTALLED_APPS = (
     'kleides_dssoclient',
 
     'planb',
-    'planb.core',
     'planb.common',  # for loading templatetags
     'planb.transport_exec',
     'planb.transport_rsync',

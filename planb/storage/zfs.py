@@ -3,6 +3,7 @@ import os.path
 import re
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from functools import lru_cache
 
 from django.conf import settings
 
@@ -35,6 +36,11 @@ SNAPSHOT_SPECIAL_MAPPING = {
 
 class Zfs(OldStyleStorage):
     name = 'zfs'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Create LRU cache for this instance of Zfs.
+        self.zfs_get_property = lru_cache(maxsize=32)(self.zfs_get_property)
 
     def get_datasets(self):
         output = self._perform_binary_command(('list', '-Hpo', 'name,used'))
@@ -70,10 +76,13 @@ class Zfs(OldStyleStorage):
             out = None
         return out
 
-    def zfs_get_used_size(self, identifier):
+    def zfs_get_property(
+            self, identifier, prop, output='value', snapname=None):
         dataset_name = self._identifier_to_dataset_name(identifier)
+        if snapname is not None:
+            dataset_name = '{}@{}'.format(dataset_name, snapname)
         cmd = (
-            'get', '-o', 'value', '-Hp', 'used', dataset_name)
+            'get', '-o', output, '-Hp', prop, dataset_name)
         try:
             out = self._perform_binary_command(cmd)
         except CalledProcessError as e:
@@ -83,7 +92,14 @@ class Zfs(OldStyleStorage):
         else:
             size = out.strip()
 
-        return int(size)
+        return size
+
+    def zfs_get_used_size(self, identifier):
+        return int(self.zfs_get_property(identifier, 'used'))
+
+    def zfs_get_referenced_size(self, identifier, snapname=None):
+        return int(self.zfs_get_property(
+            identifier, 'referenced', snapname=snapname))
 
     def zfs_create(self, identifier):
         dataset_name = self._identifier_to_dataset_name(identifier)
@@ -306,7 +322,8 @@ class ZfsDataset(Dataset):
         return self._zfs_data_path
 
     def get_used_size(self):
-        if not hasattr(self, '_zfs_get_used_size'):
-            self._zfs_get_used_size = self._backend.zfs_get_used_size(
-                self.identifier)
-        return self._zfs_get_used_size
+        return self._backend.zfs_get_used_size(self.identifier)
+
+    def get_referenced_size(self, snapname=None):
+        return self._backend.zfs_get_referenced_size_size(
+            self.identifier, snapname)

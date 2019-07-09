@@ -1,3 +1,5 @@
+import os
+
 _DEFAULT_DIRS = tuple(
     'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
     .split(' '))
@@ -95,15 +97,22 @@ PLANB_TRANSPORTS = [
     'transport_exec.Config',    # rare
 ]
 
+# Q_CLUSTER_QUEUE is the queue the qcluster worker should process.
+Q_CLUSTER_QUEUE = os.environ.get('Q_CLUSTER_QUEUE', 'PlanB')
+# The worker queue for dutree tasks, limited to 1 worker below.
+Q_DUTREE_QUEUE = 'dutree'
+Q_DUTREE_WORKERS = 1
+
 Q_CLUSTER = {
-    'name': 'PlanB',
-    'workers': 7,
+    'name': 'PlanB',  # The default queue for all workers, leave hardcoded.
+    'workers': Q_DUTREE_WORKERS if Q_CLUSTER_QUEUE != 'PlanB' else 7,
     'timeout': 86300,   # almost a day
     'retry': 86400,     # an entire day (needed??)
     'catch_up': False,  # no catching up of missed scheduled tasks
     'compress': False,  # don't care about payload size
-    'save_limit': 250,  # store 250 successful jobs, drop older..
+    'save_limit': 250,  # store 250 successful jobs, drop older
     'label': 'Task Queue',  # seen in Django Admin
+    'scheduler': bool(Q_CLUSTER_QUEUE == 'PlanB'),  # Schedule on default queue
     'redis': {
         'host': '127.0.0.1',
         'port': 6379,

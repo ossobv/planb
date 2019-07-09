@@ -71,7 +71,8 @@ if __name__ == '__main__':
                 'LICENSE', 'README.rst', 'CHANGES.rst']),
             ('share/planb', [
                 'example_settings.py', 'wsgi.py',
-                'rc.d/planb-queue.service'])],
+                'rc.d/planb-queue.service',
+                'rc.d/planb-queue-dutree.service'])],
         packages=find_packages() + [
             'planb.fixtures', 'planb.static', 'planb.templates'],
         package_data={
@@ -112,6 +113,7 @@ if __name__ == '__main__':
             'django-q>=1.0.1,<2',
             'django-multi-email-field>=0.5,<0.6',
             'dutree>=1.5',
+            'PyYAML>=5.1.1',
             'mysqlclient>=1.3.7,<2',   # APT: python3-mysqldb
             'redis>=2.10.5,<3',        # APT: python3-redis
             'setproctitle>=1.1.8,<2',  # APT: python3-setproctitle

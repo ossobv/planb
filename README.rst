@@ -307,6 +307,20 @@ Setting up ``qcluster`` for scheduled tasks::
       systemctl start planb-queue &&
       systemctl status planb-queue
 
+Setting up the ``qcluster`` for dutree tasks. If you do not use dutree
+or if you want to run dutree on the default qcluster you can set
+``Q_DUTREE_QUEUE='PlanB'`` in ``/etc/planb/settings.py``.::
+
+    cp ${VIRTUAL_ENV:-/usr/local}/share/planb/planb-queue-dutree.service \
+      /etc/systemd/system/
+
+    ${EDITOR:-vi} /etc/systemd/system/planb-queue-dutree.service
+
+    systemctl daemon-reload &&
+      systemctl enable planb-queue-dutree &&
+      systemctl start planb-queue-dutree &&
+      systemctl status planb-queue-dutree
+
 Installing automatic jobs::
 
     planb loaddata planb_jobs

@@ -1,7 +1,5 @@
 import logging
-import os
 import re
-import redis
 import time
 
 from dutree import Scanner
@@ -9,10 +7,12 @@ from dutree import Scanner
 from django.conf import settings
 from django.core.mail import mail_admins
 from django.db import connection
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
+from django_q.brokers import get_broker
 from django_q.tasks import async_task
+from yaml import safe_dump, safe_load
 
 from .models import BOGODATE, BackupRun, Fileset
 
@@ -26,73 +26,33 @@ logger = logging.getLogger(__name__)
 
 _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9*/_.-]*$')
 
+'''
+Backups are run asynchronous with entry points:
+ - planb.core.tasks.conditional_run
+ - planb.core.tasks.manual_run
+
+manual_run:
+ - Start a unconditional_run if none are running.
+
+conditional_run:
+ - Check the schedule and start a unconditional_run if needed.
+
+unconditional_run:
+ - Mount the dataset if needed.
+ - Run the transport to transfer the backup.
+ - Store administrative data on the FileSet and BackupRun.
+ - Start the task dutree_run if needed.
+ - Email backup status to admins.
+ - finalize_run is invoked as a hook after unconditional_run completes.
+
+finalize_run:
+ - sends the planb.signals.backup_done signal.
+'''
 
 SINGLE_JOB_OPTS = {
     'hook': 'planb.core.tasks.finalize_run',
     'group': 'Single backup job',
 }
-
-
-class FairButUnsafeRedisLock:
-    """
-    It's a fair lock -- first come first serve -- but if the redis DB is
-    flushed, we don't mind handing out a second simultaneous access.
-    """
-    @staticmethod
-    def get_connection():
-        return redis.StrictRedis(**settings.Q_CLUSTER['redis'])
-
-    def __init__(self, redisconn, key, uniqueid):
-        self._conn = redisconn
-        self._key = key
-        self._value = str(uniqueid).encode('utf-8')
-        self._needs_pop = False
-
-    def wait_for_turn(self):
-        t0 = time.time()
-        self._enqueue()
-        while self._peek() != self._value:
-            time.sleep(1)
-        return (time.time() - t0)
-
-    def i_am_done(self):
-        self._dequeue()
-
-    def __enter__(self):
-        return self.wait_for_turn()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
-            self.i_am_done()
-        except Exception:
-            pass
-
-    def _enqueue(self):
-        assert not self._needs_pop
-        self._conn.rpush(self._key, self._value)
-        self._needs_pop = True
-
-    def _peek(self):
-        assert self._needs_pop
-        ret = self._conn.lindex(self._key, 0)
-        if ret is None:
-            # Did someone flush the redis DB? Reschedule self.
-            self._needs_pop = False
-            self._enqueue()
-        return ret
-
-    def _dequeue(self):
-        assert self._needs_pop
-        ret = self._conn.lpop(self._key)
-        assert ret in (self._value, None)  # allow flushed redis
-        self._needs_pop = False
-
-
-def only_one_dutree_at_a_time(disk_pool):
-    return FairButUnsafeRedisLock(
-        FairButUnsafeRedisLock.get_connection(),
-        'dutree:{}'.format(disk_pool),
-        os.getpid())
 
 
 def yaml_safe_str(value):
@@ -144,6 +104,11 @@ def manual_run(fileset_id):
 # Async called task:
 def unconditional_run(fileset_id):
     FilesetRunner(fileset_id).unconditional_run()
+
+
+# Async called task:
+def dutree_run(fileset_id, run_id):
+    FilesetRunner(fileset_id).dutree_run(run_id)
 
 
 # Async called task:
@@ -211,41 +176,6 @@ class FilesetRunner:
             return 0  # impossible.. we should have backupruns if we call this
         return sum(durations) // len(durations)
 
-    def get_dutree_listing(self, fileset, dataset):
-        if fileset.do_snapshot_size_listing:
-            # Only one dutree at a time.
-            logger.info('[%s] Waiting for dutree lock', fileset)
-            setproctitle('[backing up %d: %s]: dutree (waiting for lock)' % (
-                fileset.pk, fileset.friendly_name))
-
-            with only_one_dutree_at_a_time(fileset.dest_pool) as \
-                    waited_seconds:
-                # Yes, got lock.
-                logger.info('[%s] Got dutree lock', fileset)
-                setproctitle('[backing up %d: %s]: dutree' % (
-                    fileset.pk, fileset.friendly_name))
-                path = dataset.get_data_path()
-                dutree = Scanner(path).scan(use_apparent_size=False)
-
-                # Get snapshot size and tree.
-                snapshot_size_mb = (
-                    dutree.use_size() + 524288) >> 20  # bytes to MiB
-                snapshot_size_yaml = '\n'.join(
-                    '{}: {}'.format(
-                        yaml_safe_str(i.name()[len(path):]),
-                        yaml_digits(i.use_size()))
-                    for i in dutree.get_leaves())
-        else:
-            # Set the values to empty.
-            waited_seconds = 0
-            snapshot_size_mb = 0  # FIXME: get from elsewhere?
-            snapshot_size_yaml = 'summary_disabled: 0'
-
-        return {
-            'lock_wait_time': waited_seconds,
-            'snapshot_size_mb': snapshot_size_mb,
-            'snapshot_size_yaml': snapshot_size_yaml}
-
     def conditional_run(self):
         now = timezone.now()
         if 9 <= now.hour < 17:
@@ -298,14 +228,11 @@ class FilesetRunner:
             transport = fileset.get_transport()
             transport.run_transport()
 
-            # Get snapshot_size_listing.
-            dutree = self.get_dutree_listing(fileset, dataset)
-
             # Update snapshots.
             setproctitle('[backing up %d: %s]: snapshots' % (
                 fileset.pk, fileset.friendly_name))
             fileset.snapshot_rotate()
-            fileset.snapshot_create()
+            snapshots = fileset.snapshot_create()
 
             # Close the DB connection because it may be stale.
             connection.close()
@@ -313,17 +240,36 @@ class FilesetRunner:
             # Yay, we're done.
             fileset.refresh_from_db()
 
-            # Get total size.
+            # Get total size, snapshot size and listing.
             total_size = dataset.get_used_size()
             total_size_mb = (total_size + 524288) >> 20  # bytes to MiB
+            snapshot_size = dataset.get_referenced_size()
+            snapshot_size_mb = (snapshot_size + 524288) >> 20  # bytes to MiB
+            if fileset.do_snapshot_size_listing:
+                snapshot_size_listing = 'summary_pending: 0'
+            else:
+                snapshot_size_listing = 'summary_disabled: 0'
+            # XXX Include transport export in attributes.
+            attributes = safe_dump(dict(
+                snapshots=snapshots,
+                snapshot_size_listing=snapshot_size_listing),
+                default_flow_style=False)
 
             # Store run info.
             BackupRun.objects.filter(pk=run.pk).update(
-                duration=(time.time() - t0 - dutree['lock_wait_time']),
+                attributes=attributes,
+                duration=(time.time() - t0),
                 success=True,
                 total_size_mb=total_size_mb,
-                snapshot_size_mb=dutree['snapshot_size_mb'],
-                snapshot_size_listing=dutree['snapshot_size_yaml'])
+                snapshot_size_mb=snapshot_size_mb,
+                snapshot_size_listing=snapshot_size_listing)
+
+            if fileset.do_snapshot_size_listing:
+                # Start task after BackupRun update so the listing cannot be
+                # overwritten.
+                async_task(
+                    'planb.tasks.dutree_run', fileset.pk, run.pk,
+                    broker=get_broker(settings.Q_DUTREE_QUEUE))
 
             # Cache values on the fileset.
             now = timezone.now()
@@ -377,6 +323,54 @@ class FilesetRunner:
         else:
             logger.info('[%s] Completed successfully', fileset)
 
+        finally:
+            dataset.end_work()
+
+            if getproctitle:
+                setproctitle(oldproctitle)
+
+    def dutree_run(self, run_id):
+        fileset = Fileset.objects.get(pk=self._fileset_id)
+        logger.info('[%s] Starting dutree scan', fileset)
+        run = BackupRun.objects.get(pk=run_id)
+        assert run.fileset_id == fileset.id
+
+        if getproctitle:
+            oldproctitle = getproctitle()
+
+        # Lock and open dataset for work.
+        dataset = fileset.get_dataset()
+        dataset.begin_work()
+        try:
+            setproctitle('[backing up %d: %s]: dutree' % (
+                fileset.pk, fileset.friendly_name))
+            attributes = safe_load(run.attributes)
+            # All snapshots point to the same data and there is always one.
+            snapshot = attributes['snapshots'][0]
+            path = dataset.get_snapshot_path(snapshot)
+            dutree = Scanner(path).scan(use_apparent_size=False)
+
+            # Get snapshot size and tree.
+            snapshot_size_mb = (
+                dutree.use_size() + 524288) >> 20  # bytes to MiB
+            snapshot_size_yaml = '\n'.join(
+                '{}: {}'.format(
+                    yaml_safe_str(i.name()[len(path):]),
+                    yaml_digits(i.use_size()))
+                for i in dutree.get_leaves())
+            BackupRun.objects.filter(pk=run.pk).update(
+                snapshot_size_mb=snapshot_size_mb,
+                snapshot_size_listing=snapshot_size_yaml,
+            )
+        except Exception as e:
+            logger.exception('[%s] Failed dutree scan', fileset)
+            # Append dutree error to error_text, leave success flag as is.
+            BackupRun.objects.filter(pk=run.pk).update(
+                snapshot_size_listing='summary_error: 0',
+                error_text=F('error_text') + '\n' + str(e),
+            )
+        else:
+            logger.info('[%s] Completed dutree scan', fileset)
         finally:
             dataset.end_work()
 

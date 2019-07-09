@@ -77,6 +77,7 @@ class HostGroup(models.Model):
         return self.name
 
     class Meta:
+        app_label = 'planb'
         ordering = ('name',)
 
 
@@ -352,6 +353,7 @@ class Fileset(models.Model):
             logger.info("Created: %s" % bfs.snapshot_create(
                 self.dest_pool, self.hostgroup, self.friendly_name,
                 snapname=snapname))
+        return snaplist
 
     def signal_done(self, success):
         instance = Fileset.objects.get(pk=self.pk)
@@ -374,6 +376,9 @@ class Fileset(models.Model):
 
         return super().save(*args, **kwargs)
 
+    class Meta:
+        app_label = 'planb'
+
 
 class BackupRun(models.Model):
     """
@@ -386,6 +391,9 @@ class BackupRun(models.Model):
     """
     fileset = models.ForeignKey(Fileset, on_delete=models.CASCADE)
 
+    attributes = models.TextField(
+        blank=True,
+        help_text=_('YAML-safe dictionary of backup run attributes.'))
     started = models.DateTimeField(
         auto_now_add=True, db_index=True,
         help_text=_('When the backup run started.'))
@@ -412,9 +420,6 @@ class BackupRun(models.Model):
         # This will be populated by dutree-output.
         help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'))
 
-    # TODO: do we want to store (a json blob of) the fileset config
-    # (including transport?) as well?
-
     @property
     def total_size(self):
         return self.total_size_mb << 20
@@ -440,6 +445,9 @@ class BackupRun(models.Model):
         return '<BackupRun({} #{}-{}{})>'.format(
             self.started.strftime('%Y-%m-%d'), self.fileset_id, self.pk,
             '' if self.success else ' failed')
+
+    class Meta:
+        app_label = 'planb'
 
 
 @receiver(post_save, sender=Fileset)

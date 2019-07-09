@@ -332,5 +332,5 @@ class ZfsDataset(Dataset):
         return self._backend.zfs_get_used_size(self.identifier)
 
     def get_referenced_size(self, snapname=None):
-        return self._backend.zfs_get_referenced_size_size(
+        return self._backend.zfs_get_referenced_size(
             self.identifier, snapname)

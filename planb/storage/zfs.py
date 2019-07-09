@@ -326,7 +326,7 @@ class ZfsDataset(Dataset):
         Return the path to the hidden snapshot directory.
         '''
         return os.path.abspath(os.path.join(
-            self.get_data_path(), '../.zfs/snapshot', snapshot))
+            self.get_data_path(), '../.zfs/snapshot', snapshot, 'data'))
 
     def get_used_size(self):
         return self._backend.zfs_get_used_size(self.identifier)

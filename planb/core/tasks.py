@@ -252,7 +252,7 @@ class FilesetRunner:
             # XXX Include transport export in attributes.
             attributes = safe_dump(dict(
                 snapshots=snapshots,
-                snapshot_size_listing=snapshot_size_listing),
+                do_snapshot_size_listing=fileset.do_snapshot_size_listing),
                 default_flow_style=False)
 
             # Store run info.

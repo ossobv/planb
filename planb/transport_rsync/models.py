@@ -1,5 +1,6 @@
 import logging
 import os
+import shlex
 
 from django.conf import settings
 from django.db import connections, models
@@ -120,13 +121,23 @@ class Config(models.Model):
             flag.append(self.ionice_path)
             flag.append(' -c2 -n7 ')
         flag.append(self.rsync_path)
-        return (''.join(flag),)
+        return ''.join(flag)
 
-    def get_transport_ssh_options(self):
+    def get_transport_ssh_known_hosts_d(self):
+        # FIXME: assert that there is no nastiness in $HOME? This value
+        # is placed in the rsync ssh options call later on.
+        known_hosts_d = (
+            os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
+        try:
+            os.makedirs(known_hosts_d, 0o755)
+        except FileExistsError:
+            pass
+        return known_hosts_d
+
+    def get_transport_ssh_known_hosts_args(self):
         """
-        Get rsync '-e' option which specifies ssh binary and arguments,
-        used to set a per-host known_hosts file, and ignore host checking
-        on the first run.
+        Get ssh options to set a per-host known_hosts file, and to
+        ignore host checking on the first run.
 
         For compatibility with this, you may want this function in your
         planb user .bashrc::
@@ -147,31 +158,12 @@ class Config(models.Model):
                 fi
             }
         """
-        option = '-e'
-        binary = 'ssh'
-        args = self.get_transport_ssh_known_hosts_args()
-        return (
-            '%(option)s%(binary)s %(args)s' % {
-                'option': option, 'binary': binary, 'args': ' '.join(args)},)
-
-    def get_transport_ssh_known_hosts_d(self):
-        # FIXME: assert that there is no nastiness in $HOME? This value
-        # is placed in the rsync ssh options call later on.
-        known_hosts_d = (
-            os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
-        try:
-            os.makedirs(known_hosts_d, 0o755)
-        except FileExistsError:
-            pass
-        return known_hosts_d
-
-    def get_transport_ssh_known_hosts_args(self):
         known_hosts_d = self.get_transport_ssh_known_hosts_d()
         known_hosts_file = os.path.join(known_hosts_d, self.host)
 
         args = [
             '-o HashKnownHosts=no',
-            '-o UserKnownHostsFile=%s' % (known_hosts_file,),
+            '-o UserKnownHostsFile={}'.format(known_hosts_file),
         ]
         if os.path.exists(os.path.join(known_hosts_d, self.host)):
             # If the file exists, check the keys.
@@ -184,46 +176,91 @@ class Config(models.Model):
         return args
 
     def get_transport_ssh_uri(self):
-        return ('%s@%s:%s' % (self.user, self.host, self.src_dir),)
+        return '{o.user}@{o.host}:{o.src_dir}'.format(o=self)
 
     def get_transport_rsync_uri(self):
-        return ('%s::%s' % (self.host, self.src_dir),)
+        return '{o.host}::{o.src_dir}'.format(o=self)
 
-    def get_transport_uri(self):
+    def get_transport_args(self, remote_shell=None):
         if self.transport == TransportChoices.SSH:
-            return (
-                self.get_transport_ssh_rsync_path() +
-                self.get_transport_ssh_options() +
+            if not remote_shell:
+                remote_shell = 'ssh'  # could also be 'ssh -l blah...'
+            remote_shell = '--rsh={} {}'.format(
+                remote_shell, self.get_transport_ssh_known_hosts_args())
+            retval = (
+                remote_shell,
+                self.get_transport_ssh_rsync_path(),
                 self.get_transport_ssh_uri())
+
         elif self.transport == TransportChoices.RSYNC:
-            return self.get_transport_rsync_uri()
+            if remote_shell:
+                raise NotImplementedError(remote_shell)
+            retval = (self.get_transport_rsync_uri(),)
+
         else:
             raise NotImplementedError(
                 'Unknown transport: %r' % (self.transport,))
 
+        return retval
+
+    def get_rsync_flags(self):
+        """
+        Take flags and split them. If there is a "-e ssh ...", we'll use
+        that as remote_shell.
+        """
+        flags = shlex.split(self.flags)
+        remote_shell = None
+
+        if self.transport == TransportChoices.SSH:
+            for idx, flag in enumerate(flags):
+                if flag == '-e':
+                    if (len(flags) > (idx + 1) and
+                            flags[idx + 1].startswith('ssh ')):
+                        remote_shell = flags[idx + 1]
+                        flags = flags[0:idx] + flags[idx + 2:]
+                        break
+                    else:
+                        raise NotImplementedError(
+                            'parsing -e failed: {!r}'.format(flags))
+                elif flag.startswith('--rsh='):
+                    if flag.startswith('--rsh=ssh '):
+                        remote_shell = flag[6:]
+                        flags = flags[0:idx] + flags[idx + 1:]
+                        break
+                    else:
+                        raise NotImplementedError(
+                            'parsing --rsh= failed: {!r}'.format(flags))
+
+        flags = tuple(flags)
+        return flags, remote_shell
+
     def generate_rsync_command(self):
-        flags = tuple(self.flags.split())
+        rsync_flags, remote_shell = self.get_rsync_flags()
         data_dir = self.fileset.get_dataset().get_data_path()
 
-        args = (
-            (settings.PLANB_RSYNC_BIN,) +
+        simple_args = (
+            settings.PLANB_RSYNC_BIN,
             # Work around rsync bug in 3.1.0. Possibly not needed when
             # we (also) use --whole-file.
             # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
-            ('--block-size=131072',) +  # 128k == MAX_BLOCK_SIZE (1 << 17)
+            '--block-size=131072',  # 128k == MAX_BLOCK_SIZE (1 << 17)
             # We rarely update files and we have fast link everywhere.
             # Don't spend time on checking/transferring partial files.
-            ('--whole-file',) +
+            '--whole-file',
             # Fix problems when we're not root, but we can download dirs
             # with improper perms because we're root remotely. Rsync
             # could set up dir structures where files inside cannot be
             # accessible anymore. Make sure our user has rwx access.
-            ('--chmod=Du+rwx',) +
-            flags +
+            '--chmod=Du+rwx',
+            # Limit bandwidth a bit.
+            '--bwlimit=10000')
+        args = (
+            simple_args +
+            rsync_flags +
             self.create_exclude_string() +
             self.create_include_string() +
-            ('--exclude=*', '--bwlimit=10000') +
-            self.get_transport_uri() +
+            ('--exclude=*',) +
+            self.get_transport_args(remote_shell=remote_shell) +
             (data_dir,))
 
         return args

@@ -1,5 +1,6 @@
 import logging
 import os
+import shlex
 
 from django.db import connections, models
 from django.urls import reverse
@@ -32,7 +33,7 @@ class Config(models.Model):
         return reverse('admin:transport_exec_config_change', args=(self.pk,))
 
     def generate_cmd(self):
-        return self.transport_command.strip().split()
+        return shlex.split(self.transport_command.strip())
 
     def generate_env(self):
         env = {}

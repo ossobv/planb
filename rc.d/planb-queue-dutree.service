@@ -5,8 +5,7 @@ After=network.target mysql.service redis-server.service
 [Service]
 Type=simple
 EnvironmentFile=/etc/planb/envvars
-Environment=Q_CLUSTER_QUEUE=dutree
-ExecStart=/srv/virtualenvs/planb/bin/planb bqcluster
+ExecStart=/srv/virtualenvs/planb/bin/planb bqcluster --queue=dutree
 User=planb
 Group=nogroup
 

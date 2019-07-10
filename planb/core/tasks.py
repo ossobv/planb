@@ -49,12 +49,6 @@ finalize_run:
  - sends the planb.signals.backup_done signal.
 '''
 
-SINGLE_JOB_OPTS = {
-    'hook': 'planb.core.tasks.finalize_run',
-    'group': 'Single backup job',
-}
-
-
 def yaml_safe_str(value):
     if _yaml_safe_re.match(value):
         return value
@@ -80,7 +74,8 @@ def async_backup_job(fileset):
     """
     return async_task(
         'planb.tasks.manual_run', fileset.pk,
-        q_options=SINGLE_JOB_OPTS)
+        broker=get_broker(settings.Q_MAIN_QUEUE),
+        q_options={'hook': 'planb.core.tasks.finalize_run'})
 
 
 # Sync called task; spawns async.
@@ -122,7 +117,8 @@ class JobSpawner:
         for fileset in self._enum_eligible_filesets():
             async_task(
                 'planb.tasks.conditional_run', fileset.pk,
-                q_options=SINGLE_JOB_OPTS)
+                broker=get_broker(settings.Q_MAIN_QUEUE),
+                q_options={'hook': 'planb.core.tasks.finalize_run'})
             logger.info('[%s] Scheduled backup', fileset)
 
     def _enum_eligible_filesets(self):
@@ -264,13 +260,6 @@ class FilesetRunner:
                 snapshot_size_mb=snapshot_size_mb,
                 snapshot_size_listing=snapshot_size_listing)
 
-            if fileset.do_snapshot_size_listing:
-                # Start task after BackupRun update so the listing cannot be
-                # overwritten.
-                async_task(
-                    'planb.tasks.dutree_run', fileset.pk, run.pk,
-                    broker=get_broker(settings.Q_DUTREE_QUEUE))
-
             # Cache values on the fileset.
             now = timezone.now()
             Fileset.objects.filter(pk=fileset.pk).update(
@@ -328,6 +317,13 @@ class FilesetRunner:
 
             if getproctitle:
                 setproctitle(oldproctitle)
+
+        # And now, spawn the dutree listing when all previous work is done and
+        # finalized.
+        if fileset.do_snapshot_size_listing:
+            async_task(
+                'planb.tasks.dutree_run', fileset.pk, run.pk,
+                broker=get_broker(settings.Q_DUTREE_QUEUE))
 
     def dutree_run(self, run_id):
         fileset = Fileset.objects.get(pk=self._fileset_id)

@@ -28,7 +28,9 @@ backup service.
 {% endcomment %} {% if not fileset.is_enabled %}{{ _('**off**') }}{% comment %}
 {% endcomment %}{% elif fileset.first_fail %}{{ _('**err**') }}{% else %}       {% endif %} |
 +----------------------------------+------------+--------------------+
-{% endfor %}
+{% endfor %}{% comment %}
+{% endcomment %}+ {{ _('**Total**')|ljust:32 }} | {{ total_size|filesizeformat|rjust:10 }} | {{ ''|ljust:18 }} |
++----------------------------------+------------+--------------------+
 
 ----------------------
 Reports per host below

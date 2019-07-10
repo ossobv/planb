@@ -101,6 +101,7 @@ class Command(BaseCommand):
             'filesets': filesets,
             'company_name': settings.COMPANY_NAME,
             'company_email': settings.COMPANY_EMAIL,
+            'total_size': sum(i.total_size for i in filesets),
         }
 
         return render_to_string('planb/report_email_body.txt', context)

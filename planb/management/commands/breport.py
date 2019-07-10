@@ -3,6 +3,7 @@ from fnmatch import fnmatch
 from subprocess import check_output
 
 from django.conf import settings
+from django.contrib.staticfiles import finders
 from django.core.mail import get_connection
 from django.core.mail.message import EmailMultiAlternatives
 from django.core.management.base import BaseCommand
@@ -105,9 +106,15 @@ class Command(BaseCommand):
         return render_to_string('planb/report_email_body.txt', context)
 
     def generate_html(self, text):
+        cmd = ['rst2html']
+        report_css = finders.find('planb/css/report.css')
+        if report_css:
+            # Embed our report.css after the default html4css1.css
+            cmd.append(
+                '--stylesheet-path="html4css1.css,{}"'.format(report_css))
         try:
             # Run rst2html binary and hope that it exists.
-            html = check_output(['rst2html'], input=text.encode('utf-8'))
+            html = check_output(cmd, input=text.encode('utf-8'))
         except OSError:
             html = None
         else:

@@ -69,8 +69,9 @@ class CalledProcessError(OrigCalledProcessError):
             ret.append('STDOUT:\n{}'.format(stdout))
 
         if not isinstance(self.cmd, str):
-            ret.append('COMMAND:\n{}'.format(argsjoin(self.cmd)))
+            ret.append('COMMAND: {}'.format(argsjoin(self.cmd)))
 
+        ret.append('')
         return '\n\n'.join(ret)
 
 

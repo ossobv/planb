@@ -8,7 +8,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (
-    CalledProcessError, check_output)
+    CalledProcessError, argsjoin, check_output)
 
 from .apps import TABLE_PREFIX
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
@@ -230,12 +230,8 @@ class Config(models.Model):
 
     def run_transport(self):
         cmd = self.generate_rsync_command()
-        try:
-            logger.info(
-                'Running %s: %s', self.fileset.friendly_name, ' '.join(cmd))
-        except Exception:
-            logger.error('[%s]', repr(cmd))
-            raise
+        logger.info(
+            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
 
         # Close all DB connections before continuing with the rsync
         # command. Since it may take a while, the connection could get

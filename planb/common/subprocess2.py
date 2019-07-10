@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 from re import compile as re_compile
+from shlex import quote as shell_quote
 from subprocess import (
     CalledProcessError as OrigCalledProcessError,
     PIPE, Popen)
@@ -68,7 +69,7 @@ class CalledProcessError(OrigCalledProcessError):
             ret.append('STDOUT:\n{}'.format(stdout))
 
         if not isinstance(self.cmd, str):
-            ret.append('COMMAND:\n{!r}'.format(self.cmd))
+            ret.append('COMMAND:\n{}'.format(argsjoin(self.cmd)))
 
         return '\n\n'.join(ret)
 
@@ -114,3 +115,21 @@ def check_output(cmd, *, env=None, return_stderr=None, shell=False,
     if stderr and return_stderr:
         return_stderr.append(stderr)
     return stdout
+
+
+def argsjoin(cmd):
+    """
+    Return cmd-tuple as a quoted string, safe to pass to a shell.
+    """
+    def is_safe(arg):
+        return all(i in (
+            'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+            '09123456789_=-+.,/~') for i in arg)
+
+    args = []
+    for arg in cmd:
+        if is_safe(arg):
+            args.append(arg)
+        else:
+            args.append(shell_quote(arg))
+    return ' '.join(args)

@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils.translation import ugettext_lazy as _
 
 from planb.common.fields import CommandField
-from planb.common.subprocess2 import CalledProcessError, check_output
+from planb.common.subprocess2 import CalledProcessError, argsjoin, check_output
 
 from .apps import TABLE_PREFIX
 
@@ -65,12 +65,8 @@ class Config(models.Model):
         # FIXME: duplicate code with transport_rsync.Config.run_transport()
         cmd = self.generate_cmd()
         env = self.generate_env()
-        try:
-            logger.info(
-                'Running %s: %s', self.fileset.friendly_name, ' '.join(cmd))
-        except Exception:
-            logger.error('[%s]', repr(cmd))
-            raise
+        logger.info(
+            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
 
         # Close all DB connections before continuing with the rsync
         # command. Since it may take a while, the connection could get
@@ -84,7 +80,7 @@ class Config(models.Model):
                 cmd, env=env, return_stderr=stderr).decode('utf-8')
         except CalledProcessError as e:
             logging.warning(
-                'Failure during exec %r: %s', ' '.join(cmd), str(e))
+                'Failure during exec %r: %s', argsjoin(cmd), str(e))
             raise
 
         logger.info(

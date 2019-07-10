@@ -307,7 +307,7 @@ class FilesetRunner:
 
             # Don't re-raise exception. We'll handle it.
             # As far as the workers are concerned, this job is done.
-            # #raise
+            return
 
         else:
             logger.info('[%s] Completed successfully', fileset)

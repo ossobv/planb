@@ -134,7 +134,7 @@ class Config(models.Model):
             pass
         return known_hosts_d
 
-    def get_transport_ssh_known_hosts_args(self):
+    def get_transport_ssh_options(self):
         """
         Get ssh options to set a per-host known_hosts file, and to
         ignore host checking on the first run.
@@ -173,7 +173,7 @@ class Config(models.Model):
             # about the fingerprint.
             args.append('-o StrictHostKeyChecking=no')
 
-        return args
+        return ' '.join(args)
 
     def get_transport_ssh_uri(self):
         return '{o.user}@{o.host}:{o.src_dir}'.format(o=self)
@@ -186,7 +186,7 @@ class Config(models.Model):
             if not remote_shell:
                 remote_shell = 'ssh'  # could also be 'ssh -l blah...'
             remote_shell = '--rsh={} {}'.format(
-                remote_shell, self.get_transport_ssh_known_hosts_args())
+                remote_shell, self.get_transport_ssh_options())
             retval = (
                 remote_shell,
                 self.get_transport_ssh_rsync_path(),

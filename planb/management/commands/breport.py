@@ -191,6 +191,6 @@ class Command(BaseCommand):
             subject, text_message, from_email, recipient_list,
             bcc=bcc_list, connection=connection)
         if html_message:
-            mail.attach_alternative(html_message, 'text/html')
+            mail.attach('open_me_in_web_browser.html', html_message, 'text/html')
 
         return mail.send()

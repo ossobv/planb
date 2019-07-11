@@ -1,4 +1,4 @@
-{% load rst %}{% autoescape off %}Plan B backup report for "{{ hostgroup.name }}"
+{% load rst i18n %}{% autoescape off %}Plan B backup report for "{{ hostgroup.name }}"
 =========================={{ hostgroup.name|replaceany:'=' }}=
 
 The following report contains a listing of all Plan B based backups made
@@ -39,9 +39,9 @@ Reports per host below
 +--------------------------------------------------------------+
 | {{ fileset.friendly_name|bold|ljust:60 }} |
 +=======================+======================================+
-| Total size            | {{ fileset.last_successful_backuprun.total_size|filesizeformat|ljust:36 }} |
+| Total size            | {% blocktrans asvar fileset_total with size=fileset.last_successful_backuprun.total_size|filesizeformat snapshots=fileset.snapshot_count %}{{ size }} ({{ snapshots }} snapshots){% endblocktrans %}{{ fileset_total|ljust:36 }} |
 +-----------------------+--------------------------------------+
-| Last snapshot size    | {{ fileset.last_successful_backuprun.snapshot_size|filesizeformat|ljust:36 }} |
+| Last snapshot size    | {% blocktrans asvar fileset_snapshot with size=fileset.last_successful_backuprun.snapshot_size|filesizeformat efficiency=fileset.snapshot_efficiency %}{{ size }} ({{ efficiency }} efficiency){% endblocktrans %}{{ fileset_snapshot|ljust:36 }} |
 +-----------------------+--------------------------------------+
 | Last succesful backup | {{ fileset.last_ok|date:'Y-m-d H:i:s'|ljust:36 }} |
 +-----------------------+--------------------------------------+

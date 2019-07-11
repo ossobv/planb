@@ -184,6 +184,20 @@ class Fileset(models.Model):
     def total_size(self):
         return self.total_size_mb << 20
 
+    @property
+    def snapshot_size(self):
+        return self.last_successful_backuprun.snapshot_size
+
+    @cached_property
+    def snapshot_count(self):
+        return len(self.snapshot_list())
+
+    def snapshot_efficiency(self):
+        try:
+            return '{:d}%'.format(int(100 * self.snapshot_size / self.total_size))
+        except ValueError:
+            return _('N/A')
+
     @cached_property
     def last_backuprun(self):
         return self.backuprun_set.latest('started')

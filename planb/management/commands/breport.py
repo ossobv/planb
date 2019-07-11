@@ -110,9 +110,9 @@ class Command(BaseCommand):
                 else:
                     rank = chr(8304 + i)
             else:
-                rank = ''
+                rank = ' '
             fileset.total_size_display = '{}{}'.format(
-                rank, filesizeformat(fileset.total_size))
+                filesizeformat(fileset.total_size), rank)
 
         context = {
             'hostgroup': hostgroup,

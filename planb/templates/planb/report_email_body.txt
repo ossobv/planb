@@ -23,7 +23,7 @@ backup service.
 | {{ _('name')|ljust:32 }} | {{ _('disk use')|ljust:10 }} | {{ _('last backup')|ljust:18 }} |
 +==================================+============+====================+
 {% for fileset in filesets %}| {{ fileset.friendly_name|ljust:32|truncatechars:32 }} |{% comment %}
-{% endcomment %} {{ fileset.total_size|filesizeformat|rjust:10 }} |{% comment %}
+{% endcomment %} {{ fileset.total_size_display|rjust:10 }} |{% comment %}
 {% endcomment %} {{ fileset.last_ok|date:'Y-m-d'|ljust:10 }}{% comment %}
 {% endcomment %} {% if not fileset.is_enabled %}{{ _('**off**') }}{% comment %}
 {% endcomment %}{% elif fileset.first_fail %}{{ _('**err**') }}{% else %}       {% endif %} |

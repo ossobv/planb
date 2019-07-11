@@ -1,5 +1,6 @@
 from datetime import timedelta
 from fnmatch import fnmatch
+from operator import attrgetter
 from subprocess import check_output
 
 from django.conf import settings
@@ -8,6 +9,7 @@ from django.core.mail import get_connection
 from django.core.mail.message import EmailMultiAlternatives
 from django.core.management.base import BaseCommand
 from django.template.loader import render_to_string
+from django.template.defaultfilters import filesizeformat
 
 from django.utils import timezone
 from django.utils.translation import ugettext as _
@@ -96,6 +98,22 @@ class Command(BaseCommand):
         return subject
 
     def generate_text(self, hostgroup, filesets):
+        # Add a display size property for the summary that includes the
+        # fileset rank when ordered by total size.
+        for i, fileset in enumerate(
+                sorted(filesets, key=attrgetter('total_size'),
+                       reverse=True), 1):
+            if i < 4:
+                # Add a rank to the first 3 filesets.
+                if i in (2, 3):
+                    rank = chr(176 + i)
+                else:
+                    rank = chr(8304 + i)
+            else:
+                rank = ''
+            fileset.total_size_display = '{}{}'.format(
+                rank, filesizeformat(fileset.total_size))
+
         context = {
             'hostgroup': hostgroup,
             'filesets': filesets,

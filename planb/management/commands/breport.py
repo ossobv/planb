@@ -44,23 +44,23 @@ class Command(BaseCommand):
             assert False, options
 
         filesets = self.get_filesets(
-            options['groups'], options['filesets'])
+            options['groups'], options['filesets'], options['with_disabled'])
 
         self.run_per_group(func, filesets, options['force'])
 
     def get_filesets(self, groups_glob, filesets_glob, with_disabled=False):
         groups = HostGroup.objects.all()
         filesets = Fileset.objects.all()
+        if not with_disabled:
+            filesets = filesets.filter(is_enabled=True)
 
         groups = [
             group for group in groups if fnmatch(group.name, groups_glob)]
         filesets = Fileset.objects.filter(id__in=(
-            fs.id for fs in (
-                filesets.filter(hostgroup__in=groups)
-                .prefetch_related('hostgroup'))
+            fs.id for fs in filesets.filter(hostgroup__in=groups)
             if fnmatch(fs.friendly_name, filesets_glob)))
 
-        return filesets
+        return filesets.prefetch_related('hostgroup')
 
     def run_per_group(self, func, qs, force_send):
         # Fix so we can aggregate by group below.

@@ -130,7 +130,7 @@ class Command(BaseCommand):
         if report_css:
             # Embed our report.css after the default html4css1.css
             cmd.append(
-                '--stylesheet-path="html4css1.css,{}"'.format(report_css))
+                '--stylesheet-path=html4css1.css,{}'.format(report_css))
         try:
             # Run rst2html binary and hope that it exists.
             html = check_output(cmd, input=text.encode('utf-8'))

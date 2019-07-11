@@ -194,7 +194,11 @@ class Fileset(models.Model):
 
     def snapshot_efficiency(self):
         try:
-            return '{:d}%'.format(int(100 * self.snapshot_size / self.total_size))
+            worst_case = self.total_size / self.snapshot_count
+            efficiency = (100 * (self.snapshot_size - worst_case) /
+                          (self.total_size - worst_case))
+            efficiency = int(max(0, min(100, efficiency)))
+            return '{:d}%'.format(efficiency)
         except ValueError:
             return _('N/A')
 

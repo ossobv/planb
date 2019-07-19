@@ -75,18 +75,22 @@ class PathTranslator:
     """
     Translates path from remote_path to local_path.
 
+    When single_container=True, the container name is not added into the
+    local_path.
+
     Test using:
 
         planb_storage_destination=$(pwd)/data \
         ./planb-swiftsync -c planb-swiftsync.conf SECTION \
-            --test-path-translate wsdl
+            --test-path-translate CONTAINERNAME
 
         (provide remote paths on stdin)
     """
     def __init__(self, data_path, container, translations, single_container):
+        assert '/' not in container, container
+        assert isinstance(single_container, bool)
         self.data_path = data_path
         self.container = container
-        assert '/' not in container, container
         self.single_container = single_container
         self.replacements = []
         for translation in translations:
@@ -103,8 +107,11 @@ class PathTranslator:
         else:
             local_path = remote_path
 
+        # Single container: LOCAL_BASE + TRANSLATED_REMOTE_PATH
         if self.single_container:
             return os.path.join(self.data_path, local_path)
+
+        # Multiple containers: LOCAL_BASE + CONTAINER + TRANSLATED_REMOTE_PATH
         return os.path.join(self.data_path, self.container, local_path)
 
 
@@ -186,6 +193,26 @@ class SwiftSyncConfig:
             single_container)
 
 
+class SwiftSyncConfigPathTranslators(dict):
+    def __init__(self, config, single_container):
+        assert isinstance(single_container, bool)
+        super().__init__()
+        self._config = config
+        self._single_container = single_container
+
+    def get(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    def __getitem__(self, container):
+        try:
+            translator = super().__getitem__(container)
+        except KeyError:
+            translator = self._config.get_translator(
+                container, single_container=self._single_container)
+            super().__setitem__(container, translator)
+        return translator
+
+
 class SwiftLine:
     def __init__(self, obj):
         # {'bytes': 107713,
@@ -238,6 +265,11 @@ class SwiftSync:
         self.config = config
         self.container = container
 
+        # Init translators. They're done lazily, so we don't need to know which
+        # containers exist yet.
+        self._translators = SwiftSyncConfigPathTranslators(
+            self.config, single_container=bool(container))
+
         # Get data path. Chdir into it so no unmounting can take place.
         data_path = config.data_path
         os.chdir(data_path)
@@ -267,15 +299,7 @@ class SwiftSync:
         return self._get_containers
 
     def get_translators(self):
-        if self.container:
-            translators = {None: self.config.get_translator(
-                self.container, single_container=True)}
-        else:
-            translators = dict(
-                (container, self.config.get_translator(
-                    container, single_container=False))
-                for container in self.get_containers())
-        return translators
+        return self._translators
 
     def sync(self):
         lock_fd = None
@@ -485,11 +509,18 @@ class SwiftSyncDeleter:
         deleted in the success_fp.
         """
         translators = self._swiftsync.get_translators()
+        only_container = self._swiftsync.container
+
         with open(self._source, 'r') as del_fp:
             for record in _comm_lineiter(del_fp):
-                # FIXME: should also try to delete unused directories?
-                path = translators[record.container](record.path)
+                # record.container is None for single_container syncs.
+                container = record.container or only_container
+
+                # Locate local path and remove.
+                path = translators[container](record.path)
                 os.unlink(path)
+                # FIXME: should also try to delete unused directories?
+
                 success_fp.write(record.line)
 
 
@@ -682,10 +713,12 @@ class SwiftSyncMultiAdder(threading.Thread):
                 if _MT_ABORT:
                     raise ValueError('early abort')
 
+                # record.container is None for single_container syncs.
+                container = record.container or only_container
+
                 # Download the file into the appropriate directory.
                 failures += self._add_new_record(
-                    record, record.container or only_container,
-                    translators[record.container])
+                    record, container, translators[container])
 
         # If there were one or more failures, store them so they can be used by
         # the caller.

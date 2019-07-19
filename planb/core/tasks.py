@@ -49,6 +49,7 @@ finalize_run:
  - sends the planb.signals.backup_done signal.
 '''
 
+
 def yaml_safe_str(value):
     if _yaml_safe_re.match(value):
         return value
@@ -334,16 +335,17 @@ class FilesetRunner:
         if getproctitle:
             oldproctitle = getproctitle()
 
+        # All snapshots point to the same data and there is always one.
+        attributes = safe_load(run.attributes)
+        snapshot = attributes['snapshots'][0]
+
         # Lock and open dataset for work.
         dataset = fileset.get_dataset()
-        dataset.begin_work()
+        path = dataset.get_snapshot_path(snapshot)
+        dataset.begin_work(path)
         try:
             setproctitle('[backing up %d: %s]: dutree' % (
                 fileset.pk, fileset.friendly_name))
-            attributes = safe_load(run.attributes)
-            # All snapshots point to the same data and there is always one.
-            snapshot = attributes['snapshots'][0]
-            path = dataset.get_snapshot_path(snapshot)
             dutree = Scanner(path).scan(use_apparent_size=False)
 
             # Get snapshot size and tree.

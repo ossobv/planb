@@ -63,6 +63,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS(
             'Starting qcluster for queue {!r}'.format(options['queue'])))
+        os.chdir('/')
         q = Cluster(get_broker(options['queue']))
         q.start()
         if options.get('run_once', False):

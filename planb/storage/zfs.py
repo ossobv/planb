@@ -1,6 +1,8 @@
 import logging
 import os.path
 import re
+import time
+
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from functools import lru_cache
@@ -268,15 +270,18 @@ class ZfsDataset(Dataset):
 
         # Common case is the unmounted yet existing path. If the mount point
         # exists, everything in it should be fine too.
-        if self._backend.zfs_get_local_path(self.identifier):
+        if self.get_mount_path():
             return
 
         # Try creating it. (Creation also mounts it.)
         self._backend.zfs_create(self.identifier)
 
         # Now it should exist. Create the 'data' subdirectory as well.
-        if hasattr(self, '_zfs_data_path'):
-            del self._zfs_data_path
+        if hasattr(self, '_get_mount_path'):
+            del self._get_mount_path
+        if hasattr(self, '_get_data_path'):
+            del self._get_data_path
+
         path = self.get_data_path()
         os.makedirs(path, 0o700)
 
@@ -286,18 +291,38 @@ class ZfsDataset(Dataset):
         except CalledProcessError:
             pass
 
-    def begin_work(self):
-        path = self.get_data_path()  # mount point
-        try:
-            self._backend.zfs_mount(self.identifier)  # zfs dataset
-        except CalledProcessError:
-            # Maybe it was already mounted?
-            if not os.path.exists(path):
-                raise ValueError('Failed to mount {} => {}'.format(
-                    self.identifier, path))
+    def begin_work(self, data_path=None):
+        assert os.getcwd() == '/', os.getcwd()
 
-        # Jump into 'data' directory, so it cannot be unmounted while we work.
-        os.chdir(path)
+        # The path we want to be in should be a subdirectory of the mount
+        # point. Otherwise we cannot be sure that we have it locked.
+        path = data_path or self.get_data_path()
+        assert path.startswith(self.get_mount_path() + '/'), path
+
+        # Try mounting a few times. There could be someone unmounting it just
+        # now.
+        for attempt in (1, 2, 3):
+            try:
+                # Attempt mount.
+                self._backend.zfs_mount(self.identifier)  # zfs dataset
+            except CalledProcessError:
+                # Maybe it was already mounted?
+                pass
+
+            try:
+                # Quickly jump into it. If it was already mounted, or we
+                # mounted it just now, this should succeed.
+                os.chdir(path)
+            except FileNotFoundError:
+                # Wait a bit before retrying.
+                time.sleep(5)
+            else:
+                # Success!
+                break
+        else:
+            # No luck after the Nth attempt. Fail.
+            raise ValueError('Failed to work on {!r} ({})'.format(
+                path, self.identifier))  # FIXME: better exception
 
     def end_work(self):
         # Leave directory, so it can be unmounted.
@@ -310,16 +335,26 @@ class ZfsDataset(Dataset):
 
         # Note that the mount point directory stays, but it will be
         # empty/unmounted (and owned by root) at this point.
+        assert os.getcwd() == '/', os.getcwd()
+
+    def get_mount_path(self):
+        if not hasattr(self, '_get_mount_path'):
+            ret = self._backend.zfs_get_local_path(self.identifier)
+            if not ret:
+                return None  # no negative cache
+
+            self._get_mount_path = ret
+        return self._get_mount_path
 
     def get_data_path(self):
-        if not hasattr(self, '_zfs_data_path'):
-            local_path = self._backend.zfs_get_local_path(self.identifier)
+        if not hasattr(self, '_get_data_path'):
+            local_path = self.get_mount_path()
             if not local_path:
                 raise ValueError(
                     'path {!r} for {!r} does not exist'.format(
                         local_path, self.identifier))
-            self._zfs_data_path = os.path.join(local_path, 'data')
-        return self._zfs_data_path
+            self._get_data_path = os.path.join(local_path, 'data')
+        return self._get_data_path
 
     def get_snapshot_path(self, snapshot):
         '''

@@ -253,7 +253,7 @@ class Config(models.Model):
             # accessible anymore. Make sure our user has rwx access.
             '--chmod=Du+rwx',
             # Limit bandwidth a bit.
-            '--bwlimit=10000')
+            '--bwlimit=10M')
         args = (
             simple_args +
             rsync_flags +

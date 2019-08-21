@@ -89,6 +89,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 PLANB_USER_GROUP = 'PlanB user'
+KLEIDES_DSSO_ENDPOINT = None    # None if not using kleides_dssoclient auth
 
 # FIXME: can we populate this automatically through INSTALLED_APPS?
 # ... or we might want to use this to "order"/sort the preferred transports

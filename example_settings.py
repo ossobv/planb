@@ -62,7 +62,12 @@ SECRET_KEY = r'''pwgen -ys 58'''
 
 STATIC_ROOT = '/srv/http/planb.example.com/static'
 
-# AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
-AUTHENTICATION_BACKENDS = ['planb.backends.PlanbDssoLoginBackend']
-KLEIDES_DSSO_ENDPOINT = 'https://SSO_SERVER/sso/'
-KLEIDES_DSSO_SHARED_KEY = 'oh-sso-very-very-secret'
+if True:
+    # Regular auth.
+    AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
+else:
+    # Auth using a Discourse Single-Sign-On (DSSO) server:
+    # https://github.com/ossobv/kleides-dssoclient
+    AUTHENTICATION_BACKENDS = ['planb.backends.PlanbDssoLoginBackend']
+    KLEIDES_DSSO_ENDPOINT = 'https://SSO_SERVER/sso/'
+    KLEIDES_DSSO_SHARED_KEY = 'oh-sso-very-very-secret'

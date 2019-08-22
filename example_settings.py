@@ -51,9 +51,12 @@ DATABASES = {
     }
 }
 
-for key, handler in LOGGING['handlers'].items():
-    if handler.get('filename', '').startswith('/var/log/planb/'):
-        handler['filename'] = 'logs/{}'.format(handler['filename'][15:])
+# If you want to log to a local directory instead of the default
+# /var/log/planb/ then enable this:
+if False:
+    for key, handler in LOGGING['handlers'].items():
+        if handler.get('filename', '').startswith('/var/log/planb/'):
+            handler['filename'] = 'logs/{}'.format(handler['filename'][15:])
 
 ALLOWED_HOSTS = ('planb', 'planb.example.com')
 

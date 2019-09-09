@@ -213,6 +213,22 @@ class SwiftSyncConfigPathTranslators(dict):
         return translator
 
 
+class SwiftContainer(str):
+    # The OpenStack Swift canonical method for handling large objects,
+    # is using Dynamic Large Objects (DLO) or Static Large Objects
+    # (SLO).
+    #
+    # In both (DLO and SLO) cases, the CONTAINER file segments are
+    # uploaded to a separate container called CONTAINER_segments.
+    # When doing a listing over CONTAINER, the segmented files are
+    # reported as having 0 size. When that happens, we have to do a HEAD
+    # on those files to retreive the actual concatenated file size.
+    #
+    # This boolean allows us to skip those expensive lookups for all
+    # containers X that do not have an X_segments helper container.
+    has_segments = False
+
+
 class SwiftLine:
     def __init__(self, obj):
         # {'bytes': 107713,
@@ -286,16 +302,49 @@ class SwiftSync:
 
     def get_containers(self):
         if not hasattr(self, '_get_containers'):
-            if self.container:
-                self._get_containers = [self.container]
-            else:
-                resp_headers, containers = (
-                    self.config.get_swift().get_account())
-                # containers = [
-                #   {'count': 350182, 'bytes': 78285833087,
-                #    'name': 'document'}]
-                self._get_containers = [i['name'] for i in containers]
-                self._get_containers.sort()
+            resp_headers, containers = (
+                self.config.get_swift().get_account())
+            # containers == [
+            #   {'count': 350182, 'bytes': 78285833087,
+            #    'name': 'containerA'}]
+            container_names = set(i['name'] for i in containers)
+
+            # Translate container set into containers with and without
+            # segments. For example:
+            # - containerA (has_segments=False)
+            # - containerB (has_segments=True)
+            # - containerB_segments (skipped, belongs with containerB)
+            # - containerC_segments (has_segments=False)
+            selected_containers = []
+            for name in sorted(container_names):
+                # We're looking for a specific container. Only check whether a
+                # X_segments exists. (Because of DLO/SLO we must do the
+                # get_accounts() lookup even though we already know
+                # which container to process.)
+                if self.container:
+                    if self.container == name:
+                        new = SwiftContainer(name)
+                        if '{}_segments'.format(name) in container_names:
+                            new.has_segments = True
+                        selected_containers.append(new)
+                        break
+                # We're getting all containers. Check if X_segments exists for
+                # it. And only add X_segments containers if there is no X
+                # container.
+                else:
+                    if (name.endswith('_segments') and
+                            name.rsplit('_', 1)[0] in container_names):
+                        # Don't add X_segments, because X exists.
+                        pass
+                    else:
+                        new = SwiftContainer(name)
+                        if '{}_segments'.format(name) in container_names:
+                            new.has_segments = True
+                        selected_containers.append(new)
+
+            # It's already sorted because we sort the container_names
+            # before inserting.
+            self._get_containers = selected_containers
         return self._get_containers
 
     def get_translators(self):
@@ -411,6 +460,17 @@ class SwiftSync:
                         marker=marker)
                     for idx, line in enumerate(lines):
                         record = SwiftLine(line)
+
+                        if record.size == 0 and container.has_segments:
+                            # Do a head to get DLO/SLO stats. This is
+                            # only needed if this container has segments,
+                            # and if the apparent file size is 0.
+                            obj_stat = swiftconn.head_object(
+                                container, line['name'])
+                            # If this is still 0, then it an empty file
+                            # anyway.
+                            record.size = int(obj_stat['content-length'])
+
                         dest.write(fmt.format(
                             record.path.replace('|', '||'),
                             record.modified,

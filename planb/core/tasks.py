@@ -7,7 +7,7 @@ from dutree import Scanner
 from django.conf import settings
 from django.core.mail import mail_admins
 from django.db import connection
-from django.db.models import F, Q
+from django.db.models import Q
 from django.utils import timezone
 
 from django_q.brokers import get_broker
@@ -363,9 +363,12 @@ class FilesetRunner:
         except Exception as e:
             logger.exception('[%s] Failed dutree scan', fileset)
             # Append dutree error to error_text, leave success flag as is.
+            error_text = (
+                BackupRun.objects.filter(pk=run.pk)
+                .values_list('error_text', flat=True)[0])
             BackupRun.objects.filter(pk=run.pk).update(
                 snapshot_size_listing='summary_error: 0',
-                error_text=F('error_text') + '\n' + str(e),
+                error_text=('{}\n{}'.format(error_text, e).strip())
             )
         else:
             logger.info('[%s] Completed dutree scan', fileset)

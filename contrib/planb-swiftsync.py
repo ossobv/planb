@@ -10,7 +10,7 @@ import warnings
 
 from argparse import ArgumentParser
 from collections import OrderedDict, namedtuple
-from configparser import NoOptionError, RawConfigParser, SectionProxy
+from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
 from time import time
@@ -25,26 +25,38 @@ except ImportError:
 # backtraces polluting the log; should do without error
 
 SAMPLE_INIFILE = r"""\
-[SECTION]
-; See which containers there are using: rclone lsd SECTION:
+[acme_swift_v1_config]
+
+; Use rclonse(1) to see the containers: `rclone lsd acme_swift_v1_config:`
 type = swift
-user = USER:USER
-key = SOMEKEY
+user = NAMESPACE:USER
+key = KEY
 auth = https://AUTHSERVER/auth/v1.0
-tenant =
-region =
-storage_url =
+
 ; Translate in the 'document' container all paths that are (lowercase)
 ; GUID-style (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) to "FU/LL/FULLGUID".
 planb_translate = document=^(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{4}-){4}\
 [0-9a-f]{12})$=\2/\3/\1
+
 ; Translate in the 'wsdl' container all paths that start with "YYYYMMDD"
 ; to "YYYY/MM/DD/"
 planb_translate = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
+
 ; Translate in all containers all paths (files) that end with a slash to %2F.
 ; (This will conflict with files actually having a %2F there, but that
 ; is not likely to happen.)
 planb_translate = *=/$=%2F
+
+[acme_swift_v3_config]
+
+type = swift
+domain = USER_DOMAIN
+user = USER
+key = KEY
+auth = https://AUTHSERVER/v3/
+tenant = PROJECT
+tenant_domain = PROJECT_DOMAIN
+auth_version = 3
 """
 
 
@@ -145,20 +157,33 @@ class SwiftSyncConfig:
         self.read_environment()
 
     def read_inifile(self, inifile, section):
-        config = RawConfigParser(
+        configparser = RawConfigParser(
             strict=False, empty_lines_in_values=False,
             dict_type=ConfigParserMultiValues)
-        config.read([inifile])
-        type_ = config.get(section, 'type')
-        assert type_ == ['swift'], type_
-        self.swift_user = config.get(section, 'user')[-1]
-        self.swift_key = config.get(section, 'key')[-1]
-        self.swift_auth = config.get(section, 'auth')[-1]
-        self.swift_user = config.get(section, 'user')[-1]
-        self.swift_containers = []
+        configparser.read([inifile])
         try:
-            self.planb_translations = config.get(section, 'planb_translate')
-        except NoOptionError:
+            config = configparser[section]
+        except KeyError:
+            raise ValueError(
+                'no section {!r} found in {!r}'.format(section, inifile))
+
+        type_ = config.get('type', None)
+        assert type_ == ['swift'], type_
+        self.swift_authver = config.get('auth_version', ['1'])[-1]
+        self.swift_auth = config['auth'][-1]   # authurl
+        self.swift_user = config['user'][-1]
+        self.swift_key = config['key'][-1]
+        # auth_version v3:
+        self.swift_project = config.get('tenant', [None])[-1]  # project
+        self.swift_pdomain = (
+            config.get('tenant_domain', [None])[-1])    # project-domain
+        self.swift_udomain = (
+            config.get('domain', [None])[-1])           # user-domain
+        self.swift_containers = []
+
+        try:
+            self.planb_translations = config['planb_translate']
+        except KeyError:
             self.planb_translations = []
 
     def read_environment(self):
@@ -180,12 +205,28 @@ class SwiftSyncConfig:
         assert self.metadata_path.startswith('/'), self.metadata_path
 
     def get_swift(self):
-        return Connection(
-            authurl=self.swift_auth,
-            user=self.swift_user,
-            key=self.swift_key,
-            tenant_name='UNUSED',
-            auth_version='1')
+        if self.swift_authver == '3':
+            os_options = {
+                'project_name': self.swift_project,
+                'project_domain_name': self.swift_pdomain,
+                'user_domain_name': self.swift_udomain,
+            }
+            connection = Connection(
+                auth_version='3', authurl=self.swift_auth,
+                user=self.swift_user, key=self.swift_key,
+                os_options=os_options)
+
+        elif self.swift_authver == '1':
+            connection = Connection(
+                auth_version='1', authurl=self.swift_auth,
+                user=self.swift_user, key=self.swift_key,
+                tenant_name='UNUSED')
+
+        else:
+            raise NotImplementedError(
+                'auth_version? {!r}'.format(self.swift_authver))
+
+        return connection
 
     def get_translator(self, container, single_container):
         return PathTranslator(

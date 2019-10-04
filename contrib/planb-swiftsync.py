@@ -33,10 +33,11 @@ user = NAMESPACE:USER
 key = KEY
 auth = https://AUTHSERVER/auth/v1.0
 
-; Translate in the 'document' container all paths that are (lowercase)
-; GUID-style (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) to "FU/LL/FULLGUID".
-planb_translate = document=^(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{4}-){4}\
-[0-9a-f]{12})$=\2/\3/\1
+; GUID-style (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) to "ID/GU/FULLGUID".
+planb_translate = document=
+    ^([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{8}([0-9a-f]{2})([0-9a-f]{2}))$=
+    \4/\3/\1
+; BEWARE ^^ remove excess linefeeds and indentation before use ^^
 
 ; Translate in the 'wsdl' container all paths that start with "YYYYMMDD"
 ; to "YYYY/MM/DD/"

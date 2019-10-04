@@ -34,14 +34,14 @@ key = KEY
 auth = https://AUTHSERVER/auth/v1.0
 
 ; GUID-style (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) to "ID/GU/FULLGUID".
-planb_translate = document=
+planb_translate_0 = document=
     ^([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{8}([0-9a-f]{2})([0-9a-f]{2}))$=
     \4/\3/\1
 ; BEWARE ^^ remove excess linefeeds and indentation before use ^^
 
 ; Translate in the 'wsdl' container all paths that start with "YYYYMMDD"
 ; to "YYYY/MM/DD/"
-planb_translate = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
+planb_translate_1 = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
 
 ; Translate in all containers all paths (files) that end with a slash to %2F.
 ; (This will conflict with files actually having a %2F there, but that
@@ -182,10 +182,14 @@ class SwiftSyncConfig:
             config.get('domain', [None])[-1])           # user-domain
         self.swift_containers = []
 
-        try:
-            self.planb_translations = config['planb_translate']
-        except KeyError:
-            self.planb_translations = []
+        # Accept multiple planb_translate keys. But also accept
+        # planb_translate_<id> keys. If you use the rclone config tool,
+        # rewriting the file would destroy duplicate keys, so using a
+        # suffix is preferred.
+        self.planb_translations = []
+        for key in sorted(config.keys()):
+            if key == 'planb_translate' or key.startswith('planb_translate_'):
+                self.planb_translations.extend(config[key])
 
     def read_environment(self):
         # /tank/customer-friendly_name/data

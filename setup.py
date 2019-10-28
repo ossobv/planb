@@ -58,6 +58,7 @@ if __name__ == '__main__':
     with open('CHANGES.rst') as fp:
         changes = fp.read()
 
+    # TODO: perhaps check out https://github.com/pypa/setuptools_scm
     version = (
         version_from_git() or
         version_from_changelog(changes))
@@ -75,21 +76,10 @@ if __name__ == '__main__':
                 'rc.d/planb-queue-dutree.service'])],
         packages=find_packages() + [
             'planb.fixtures', 'planb.static', 'planb.templates'],
-        package_data={
-            'planb.fixtures': ['*.xml'],
-            'planb.static': ['planb/js/jquery-postlink.js'],
-            'planb.templates': [
-                'admin/planb/fileset/change_form.html',
-                'monkeypatch/technical_500.txt',
-                'monkeypatch/technical_500_altered.txt',
-                'planb/report_email_body.txt'],
-            'planb.transport_exec': [
-                'templates/admin/transport_exec/config/change_form.html'],
-            'planb.transport_rsync': [
-                'templates/admin/transport_rsync/config/change_form.html']},
+        include_package_data=True,  # see MANIFEST.in
         description='PlanB automates remote SSH+rsync backups',
         long_description=('\n\n\n'.join([readme, changes])),
-        author='Alex Boonstra, Walter Doekes, OSSO B.V.',
+        author='Alex Boonstra, Harm Geerts, Walter Doekes, OSSO B.V.',
         author_email='wjdoekes+planb@osso.nl',
         url='https://github.com/ossobv/planb',
         license='GPLv3+',

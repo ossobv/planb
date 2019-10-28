@@ -6,6 +6,7 @@ from .core.views import EnqueueJob
 from django.conf.urls import url
 
 admin.autodiscover()
+admin.site.site_title = 'PlanB'
 admin.site.site_header = 'PlanB management'
 
 urlpatterns = [

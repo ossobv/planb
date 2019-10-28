@@ -64,6 +64,12 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'planb.urls'
 
 INSTALLED_APPS = (
+    # Main app first, so it can override templates.
+    'planb',
+    'planb.common',  # for loading templatetags
+    'planb.transport_exec',
+    'planb.transport_rsync',
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -73,11 +79,6 @@ INSTALLED_APPS = (
 
     'django_q',
     'kleides_dssoclient',
-
-    'planb',
-    'planb.common',  # for loading templatetags
-    'planb.transport_exec',
-    'planb.transport_rsync',
 )
 
 AUTHENTICATION_BACKENDS = [

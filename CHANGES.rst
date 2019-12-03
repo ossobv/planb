@@ -5,7 +5,25 @@ Changes
 v1.7_dev - *XXXX-XX-XX*
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-- (Version after 1.6.)
+**Core**
+
+- Refactor ``Storage`` and ``Dataset`` classes.
+- Consolidate storage location in ``Fileset`` field ``dataset_name``.
+- Refactor ``Storage`` configuration.
+
+**Tasks**
+
+- Implement task to allow renaming of filesets in the Storage engine.
+- Enforce global ``Fileset`` locks to prevent race conditions.
+
+**Other**
+
+- Fix ``bclone`` to also clone transport.
+- Fix ``bqueueflush`` to default to the main queue.
+- Cleanup ZFS workdir switching.
+- Fix many bugs.
+- Add many tests.
+- Add tox and travis-ci configuration
 
 
 v1.6.post1 - *2019-03-20*

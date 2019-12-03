@@ -2,4 +2,6 @@
 here=$(cd "$(dirname "$0")"; pwd)
 admin=$(which django-admin django-admin.py | head -n1)
 test -z "$admin" && echo "No django-admin found. Missing env?" >&2 && exit 1
-PLANB_ENVFILE="$here/envvars" exec "$here/scripts/planb" "$@"
+# This manage script is only used in development.
+# If we define DJANGO_SETTINGS_MODULE we do not need a PLANB_ENVFILE.
+DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings}" exec "$here/scripts/planb" "$@"

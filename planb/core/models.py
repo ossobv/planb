@@ -14,44 +14,17 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 from django.utils.translation import ugettext_lazy as _, ngettext
 
+from django_q.brokers.redis_broker import Redis
+
 from planb.common.fields import MultiEmailField
-from planb.common.subprocess2 import (
-    CalledProcessError, check_output)
 from planb.signals import backup_done
-from planb.storage.base import DatasetNotFound, Storage
-from planb.storage.zfs import Zfs
+from planb.storage import pools
+from planb.storage.base import DatasetNotFound
 
 
 logger = logging.getLogger(__name__)
 
 BOGODATE = datetime(1970, 1, 2, tzinfo=timezone.utc)
-
-bfs = Zfs(binary=settings.PLANB_ZFS_BIN, sudobin=settings.PLANB_SUDO_BIN)
-
-
-def get_pools():
-    pools = []
-    for name, pool, bfs in settings.PLANB_STORAGE_POOLS:
-        assert bfs == 'zfs', bfs
-        try:
-            val1 = float(check_output(
-                [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
-                 'get', '-Hpo', 'value', 'used', pool]).strip())
-            val2 = float(check_output(
-                [settings.PLANB_SUDO_BIN, settings.PLANB_ZFS_BIN,
-                 'get', '-Hpo', 'value', 'available', pool]).strip())
-        except (CalledProcessError, ValueError):
-            # If the ZFS CLI binary is not found, or if you use a bogus
-            # binary (/bin/true) which returns no valid values, don't
-            # die, but let the get_pools() return something sensible.
-            available = pct = '???'
-        else:
-            pct = '{pct:.0f}%'.format(pct=(100 * (val1 / (val1 + val2))))
-            available = int(val2 / 1024 / 1024 / 1024)
-
-        pools.append((pool, '{}, {}G free ({} used)'.format(
-            name, available, pct)))
-    return tuple(pools)
 
 
 class TransportChoices(models.PositiveSmallIntegerField):
@@ -81,17 +54,60 @@ class HostGroup(models.Model):
         ordering = ('name',)
 
 
+class FilesetLock(object):
+    def __init__(self, fileset_id):
+        self._fileset_id = fileset_id
+        self._is_acquired = False
+
+    @cached_property
+    def lock(self):
+        return Redis.get_connection().lock(
+            'fileset:{}'.format(self._fileset_id), sleep=1)
+
+    def __enter__(self):
+        # Use blocking so the contained code is only executed when the lock is
+        # acquired.
+        self.acquire(blocking=True)
+        # Provide the current Fileset for the context.
+        try:
+            fileset = Fileset.objects.get(pk=self._fileset_id)
+        except Exception:
+            self.release()
+            raise
+        return fileset
+
+    def __exit__(self, type, value, traceback):
+        self.release()
+
+    def is_acquired(self):
+        return self._is_acquired
+
+    def acquire(self, blocking=None):
+        assert not self._is_acquired
+        self._is_acquired = self.lock.acquire(blocking=blocking)
+        return self._is_acquired
+
+    def release(self):
+        assert self._is_acquired
+        self.lock.release()
+        self._is_acquired = False
+
+
 class Fileset(models.Model):
     friendly_name = models.CharField(
-        # FIXME: should be unique with hostgroup?
-        verbose_name=_('Name'), max_length=63, unique=True,
+        verbose_name=_('Name'), max_length=63,
         help_text=_('Short name, should be unique per host group.'))
     hostgroup = models.ForeignKey(
         HostGroup, related_name='filesets', on_delete=models.PROTECT)
     notes = models.TextField(blank=True, help_text=_(
         'Quick description/tips. Use the first line for labels/tags.'))
 
-    dest_pool = models.CharField(max_length=254, choices=())  # set in forms.py
+    # The storage alias is selected when adding the Fileset. Available choices
+    # are selected from the storage pools in the FilesetForm.
+    storage_alias = models.CharField(_('Storage'), max_length=31, choices=())
+    dataset_name = models.CharField(
+        verbose_name=_('Dataset name'), editable=False, max_length=254,
+        help_text=_('The complete dataset name for the storage.'))
 
     last_ok = models.DateTimeField(
         _('Last backup success'), blank=True, null=True)
@@ -137,6 +153,14 @@ class Fileset(models.Model):
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
 
+    @property
+    def unique_name(self):
+        return '{}-{}'.format(self.hostgroup.name, self.friendly_name)
+
+    @staticmethod
+    def with_lock(fileset_id):
+        return FilesetLock(fileset_id)
+
     def get_transport(self):
         ret = []
         for transport_class_name in settings.PLANB_TRANSPORTS:
@@ -150,9 +174,9 @@ class Fileset(models.Model):
                     'multiple transports for {!r}'.format(self))
         return ret[0]
 
-    @property
-    def basename(self):
-        return '{}-{}'.format(self.hostgroup.name, self.friendly_name)
+    @cached_property
+    def storage(self):
+        return pools[self.storage_alias]
 
     @property
     def retention_display(self):
@@ -195,11 +219,11 @@ class Fileset(models.Model):
     def snapshot_efficiency(self):
         try:
             worst_case = self.total_size / self.snapshot_count
-            efficiency = (100 * (self.snapshot_size - worst_case) /
-                          (self.total_size - worst_case))
+            efficiency = (100 * (self.snapshot_size - worst_case)
+                          / (self.total_size - worst_case))
             efficiency = int(max(0, min(100, efficiency)))
             return '{:d}%'.format(efficiency)
-        except ValueError:
+        except (ValueError, ZeroDivisionError):
             return _('N/A')
 
     @cached_property
@@ -211,8 +235,13 @@ class Fileset(models.Model):
         return self.backuprun_set.filter(success=True).latest('started')
 
     def get_dataset(self):
-        storage = Storage(bfs, self.dest_pool)
-        return storage.get_dataset(str(self.hostgroup), self.friendly_name)
+        return self.storage.get_dataset(self.dataset_name)
+
+    def rename_dataset(self, new_dataset_name):
+        self.get_dataset().rename_dataset(new_dataset_name)
+        self.__class__.objects.filter(pk=self.pk).update(
+            dataset_name=new_dataset_name)
+        self.dataset_name = new_dataset_name
 
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8
@@ -224,12 +253,24 @@ class Fileset(models.Model):
         copy.is_queued = copy.is_running = False
         copy.average_duration = 0
         copy.total_size_mb = 0
+        copy.dataset_name = ''
 
+        transport_overrides = {}
         # Use the overrides.
         for key, value in override.items():
-            setattr(copy, key, value)
-
+            if key.startswith('transport__'):
+                transport_overrides[key.replace('transport__', '')] = value
+            else:
+                setattr(copy, key, value)
         copy.save()
+
+        try:
+            transport = self.get_transport()
+        except ObjectDoesNotExist:
+            pass
+        else:
+            transport.clone(fileset=copy, **transport_overrides)
+
         return copy
 
     def should_backup(self):
@@ -276,31 +317,28 @@ class Fileset(models.Model):
         return True
 
     def snapshot_rotate(self):
-        return bfs.snapshots_rotate(
-            self.dest_pool, self.hostgroup,
-            self.friendly_name,
+        return self.storage.snapshots_rotate(
+            self.dataset_name,
             daily_retention=self.daily_retention,
             weekly_retention=self.weekly_retention,
             monthly_retention=self.monthly_retention,
             yearly_retention=self.yearly_retention)
 
     def snapshot_list(self):
-        return bfs.snapshots_get(
-            self.dest_pool, self.hostgroup, self.friendly_name)
+        return self.storage.snapshot_list(self.dataset_name)
 
     def snapshot_list_display(self):
         try:
             snapshots = self.snapshot_list()
         except DatasetNotFound:
-            return ['(dataset not found in pool {!r})'.format(
-                self.dest_pool)]
+            return ['(dataset not found in storage {!r})'.format(
+                self.storage_alias)]
         return sorted([s.split('@')[-1] for s in snapshots])
 
     def snapshot_create(self):
         # Add logica what kind of snapshot
         # First we need to know what we have
-        snapshots = bfs.snapshots_get(
-            self.dest_pool, self.hostgroup, self.friendly_name)
+        snapshots = self.storage.snapshot_list(self.dataset_name)
 
         snaplist = []
         # FIXME: should use UTC dates here!
@@ -368,9 +406,8 @@ class Fileset(models.Model):
                         datetime.now().strftime('yearly-%Y%m%d%H%M'))
 
         for snapname in snaplist:
-            logger.info("Created: %s" % bfs.snapshot_create(
-                self.dest_pool, self.hostgroup, self.friendly_name,
-                snapname=snapname))
+            logger.info("Created: %s" % self.storage.snapshot_create(
+                self.dataset_name, snapname=snapname))
         return snaplist
 
     def signal_done(self, success):
@@ -392,10 +429,17 @@ class Fileset(models.Model):
                         'ENABLED' if self.is_enabled else 'DISABLED', self),
                     'Toggled is_enabled-flag on {}.\n'.format(self))
 
+        if not self.dataset_name:
+            self.dataset_name = self.storage.get_dataset_name(
+                self.hostgroup.name, self.friendly_name)
         return super().save(*args, **kwargs)
 
     class Meta:
         app_label = 'planb'
+        unique_together = (
+            ('hostgroup', 'friendly_name'),
+            ('storage_alias', 'dataset_name'),
+        )
 
 
 class BackupRun(models.Model):

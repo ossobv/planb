@@ -10,7 +10,7 @@ PLANB_DEFAULT_INCLUDES = ' '.join(sorted(_DEFAULT_DIRS + _DEFAULT_FILES))
 
 
 TIME_ZONE = 'Europe/Amsterdam'
-LANGUAGE_CODE = 'en_US'
+LANGUAGE_CODE = 'en-us'
 DATETIME_FORMAT = SHORT_DATETIME_FORMAT = 'Y-m-d H:i'  # for admin-forms
 
 
@@ -73,6 +73,7 @@ INSTALLED_APPS = (
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
+    'django.contrib.messages',
     'django.contrib.sessions',
     'django.contrib.sitemaps',
     'django.contrib.staticfiles',

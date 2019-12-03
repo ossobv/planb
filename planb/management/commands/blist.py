@@ -44,5 +44,5 @@ class Command(BaseCommandWithZabbix):
         self.stdout.write('\n'.join(ret) + '\n')
 
     def dump_zabbix_discovery(self, qs):
-        data = [{'{#BKNAME}': host.identifier} for host in qs]
+        data = [{'{#BKNAME}': fileset.unique_name} for fileset in qs]
         self.stdout.write(json.dumps({'data': data}) + '\n')

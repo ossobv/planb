@@ -29,6 +29,19 @@ class Config(models.Model):
     def __str__(self):
         return '{}: exec transport'.format(self.fileset)
 
+    def clone(self, **override):
+        # See: https://github.com/django/django/commit/a97ecfdea8
+        copy = self.__class__.objects.get(pk=self.pk)
+        copy.pk = None
+        copy.fileset = None
+
+        # Use the overrides.
+        for key, value in override.items():
+            setattr(copy, key, value)
+
+        copy.save()
+        return copy
+
     def get_change_url(self):
         return reverse('admin:transport_exec_config_change', args=(self.pk,))
 

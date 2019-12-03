@@ -1,0 +1,24 @@
+language: python
+
+services:
+  - redis-server
+
+addons:
+  apt:
+    packages:
+    - python-docutils
+
+python:
+  - "3.5"
+  - "3.6"
+  - "3.7"
+  - "3.8"
+
+matrix:
+  include:
+    - python: "3.8"
+      env: TOXENV=flake8
+
+install: pip install tox-travis
+
+script: tox -- -v

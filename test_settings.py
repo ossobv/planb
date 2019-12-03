@@ -1,5 +1,5 @@
 from planb.default_settings import *  # noqa
-from planb.default_settings import LOGGING  # fix flake warning
+from planb.default_settings import LOGGING, Q_CLUSTER
 
 # Remember that DEBUG=True causes error-mails to not get sent, while
 # successmails still get sent. This should probably be fixed. (FIXME)
@@ -11,8 +11,8 @@ PLANB_ZFS_BIN = '/sbin/zfs'
 PLANB_RSYNC_BIN = '/usr/bin/rsync'
 
 # Disable during dev?
-# PLANB_SUDO_BIN = '/bin/true'
-# PLANB_ZFS_BIN = '/bin/true'
+PLANB_SUDO_BIN = '/bin/echo'
+PLANB_ZFS_BIN = '/bin/echo'
 
 # Configure storage pools.
 # Name and engine are required.
@@ -30,7 +30,7 @@ PLANB_STORAGE_POOLS = {
         'NAME': 'ZFS Pool',
         'BINARY': PLANB_ZFS_BIN,
         'SUDOBIN': PLANB_SUDO_BIN,
-        'POOLNAME': 'tank/BACKUP',
+        'POOLNAME': 'tank',
     },
 }
 
@@ -54,38 +54,31 @@ COMPANY_EMAIL = 'support@example.com'
 DATABASES = {
     'default': {
         # Choose 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'FIXME',    # Or path to database file if using sqlite3.
-        'USER': 'FIXME',    # Not used with sqlite3.
-        'PASSWORD': 'FIXMEFIXMEFIXME',   # Not used with sqlite3.
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',    # Or path to database file if using sqlite3.
+        'USER': '',    # Not used with sqlite3.
+        'PASSWORD': '',   # Not used with sqlite3.
         'HOST': '',         # Empty for localhost. Not used with sqlite3.
         'PORT': '',         # Empty for default. Not used with sqlite3.
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
+        'OPTIONS': {},
     }
 }
 
-# If you want to log to a local directory instead of the default
-# /var/log/planb/ then enable this:
-if False:
-    for key, handler in LOGGING['handlers'].items():
-        if handler.get('filename', '').startswith('/var/log/planb/'):
-            handler['filename'] = 'logs/{}'.format(handler['filename'][15:])
+# Replace file logging with output to stderr.
+for key, handler in LOGGING['handlers'].items():
+    if handler['class'] == 'logging.handlers.WatchedFileHandler':
+        handler['class'] = 'logging.StreamHandler'
+        del handler['filename']
+        del handler['delay']
 
-ALLOWED_HOSTS = ('planb', 'planb.example.com')
+ALLOWED_HOSTS = ('testserver',)
 
-# Please replace this with the output of: pwgen -ys 58
-SECRET_KEY = r'''pwgen -ys 58'''
+SECRET_KEY = 'T3$TK3Y'
 
-STATIC_ROOT = '/srv/http/planb.example.com/static'
+#STATIC_ROOT = '/srv/http/planb.example.com/static'
 
-if True:
-    # Regular auth.
-    AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
-else:
-    # Auth using a Discourse Single-Sign-On (DSSO) server:
-    # https://github.com/ossobv/kleides-dssoclient
-    AUTHENTICATION_BACKENDS = ['planb.backends.PlanbDssoLoginBackend']
-    KLEIDES_DSSO_ENDPOINT = 'https://SSO_SERVER/sso/'
-    KLEIDES_DSSO_SHARED_KEY = 'oh-sso-very-very-secret'
+AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
+
+# XXX synchronous mode isn't fully supported by django-q and causes problems
+# with transactions in the calling context.
+#Q_CLUSTER['sync'] = True

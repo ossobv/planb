@@ -72,8 +72,8 @@ class HostAsConfig(object):
                     from random import choice
                     comment = choice(
                         ['Because this directory is\nawesome for the win!\n',
-                         "here's the p0rn"] +
-                        [None] * 8)
+                         "here's the p0rn"]
+                        + [None] * 8)
 
                 paths.append(
                     dict([(path, comment)]) if comment else path)
@@ -126,14 +126,20 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--minimal', action='store_true', help=(
             'Do not show retention/schedule'))
-        parser.add_argument('--yaml', action='store_true', help=(
-            'Output configuration as YAML instead of JSON'))
+        parser.add_argument(
+            '--json', action='store_const', const='json', dest='output',
+            help=('Output configuration as JSON'))
+        parser.add_argument(
+            '--yaml', action='store_const', const='yaml', dest='output',
+            help=('Output configuration as YAML'))
         parser.add_argument('--with-disabled', action='store_true', help=(
             'Also list disabled (inactive) hosts'))
         parser.add_argument('groups', nargs='?', default='*', help=(
             'Which hostgroups to operate on, allows globbing'))
         parser.add_argument('hosts', nargs='?', default='*', help=(
             'Which filesets to operate on, allows globbing'))
+
+        parser.set_defaults(json=True)
 
         return super().add_arguments(parser)
 
@@ -147,7 +153,7 @@ class Command(BaseCommand):
             listingconfig.with_retention = False
             listingconfig.with_schedule = False
 
-        if options['yaml']:
+        if options['output'] == 'yaml':
             self.hosts2yaml(filesets, listingconfig)
         else:
             self.hosts2json(filesets, listingconfig)
@@ -156,13 +162,13 @@ class Command(BaseCommand):
         for fileset in filesets:
             jsonblob = HostAsConfig(fileset, listingconfig).to_json()
             self.stdout.write('/* {} */\n\n{}\n\n'.format(
-                fileset.basename, jsonblob))
+                fileset.unique_name, jsonblob))
 
     def hosts2yaml(self, filesets, listingconfig):
         for fileset in filesets:
             yamlblob = HostAsConfig(fileset, listingconfig).to_yaml()
             self.stdout.write('---\n# {}\n\n{}\n\n'.format(
-                fileset.basename, yamlblob))
+                fileset.unique_name, yamlblob))
 
     def get_filesets(self, groups_glob, hosts_glob, with_disabled=False):
         groups = HostGroup.objects.all()

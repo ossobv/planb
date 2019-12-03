@@ -71,6 +71,19 @@ class Config(models.Model):
     def __str__(self):
         return '{}: rsync transport'.format(self.fileset)
 
+    def clone(self, **override):
+        # See: https://github.com/django/django/commit/a97ecfdea8
+        copy = self.__class__.objects.get(pk=self.pk)
+        copy.pk = None
+        copy.fileset = None
+
+        # Use the overrides.
+        for key, value in override.items():
+            setattr(copy, key, value)
+
+        copy.save()
+        return copy
+
     def get_change_url(self):
         return reverse('admin:transport_rsync_config_change', args=(self.pk,))
 
@@ -214,8 +227,8 @@ class Config(models.Model):
         if self.transport == TransportChoices.SSH:
             for idx, flag in enumerate(flags):
                 if flag == '-e':
-                    if (len(flags) > (idx + 1) and
-                            flags[idx + 1].startswith('ssh ')):
+                    if (len(flags) > (idx + 1)
+                            and flags[idx + 1].startswith('ssh ')):
                         remote_shell = flags[idx + 1]
                         flags = flags[0:idx] + flags[idx + 2:]
                         break
@@ -255,13 +268,13 @@ class Config(models.Model):
             # Limit bandwidth a bit.
             '--bwlimit=10M')
         args = (
-            simple_args +
-            rsync_flags +
-            self.create_exclude_string() +
-            self.create_include_string() +
-            ('--exclude=*',) +
-            self.get_transport_args(remote_shell=remote_shell) +
-            (data_dir,))
+            simple_args
+            + rsync_flags
+            + self.create_exclude_string()
+            + self.create_include_string()
+            + ('--exclude=*',)
+            + self.get_transport_args(remote_shell=remote_shell)
+            + (data_dir,))
 
         return args
 

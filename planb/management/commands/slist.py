@@ -1,8 +1,8 @@
 from fnmatch import fnmatch
 
 from planb.common import human
-from planb.core.models import bfs
 from planb.management.base import BaseCommand
+from planb.storage import pools
 from planb.storage.base import Datasets
 
 
@@ -20,11 +20,14 @@ class Command(BaseCommand):
         return super().add_arguments(parser)
 
     def handle(self, *args, **options):
-        datasets = bfs.get_datasets()
-        for exclude in set(options['exclude']):
-            datasets = Datasets([
-                i for i in datasets if not fnmatch(i.identifier, exclude)])
+        datasets = []
+        for pool in pools.values():
+            datasets.extend(pool.get_datasets())
 
+        for exclude in set(options['exclude']):
+            datasets = [i for i in datasets if not fnmatch(i.name, exclude)]
+
+        datasets = Datasets(datasets)
         datasets.load_database_config()
         if options['stale']:
             datasets = Datasets([
@@ -48,14 +51,14 @@ class Command(BaseCommand):
 
             if fileset:
                 ret.append(
-                    '{dataset.identifier:54s}  {disk_usage:>8s}  '
+                    '{dataset.name:54s}  {disk_usage:>8s}  '
                     'id={fileset.id}'.format(
                         dataset=dataset,
                         disk_usage=human.bytes(dataset.disk_usage),
                         fileset=fileset))
             else:
                 ret.append(
-                    '{dataset.identifier:54s}  {disk_usage:>8s}  '
+                    '{dataset.name:54s}  {disk_usage:>8s}  '
                     'id=NONE'.format(
                         dataset=dataset,
                         disk_usage=human.bytes(dataset.disk_usage)))

@@ -1,3 +1,6 @@
+import os
+
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
@@ -9,8 +12,21 @@ from planb.core.models import Fileset
 class Command(BaseCommand):
     help = 'Drops all enqueued tasks'
 
+    def add_arguments(self, parser):
+        default_queue = (
+            os.environ.get('Q_CLUSTER_QUEUE', settings.Q_MAIN_QUEUE)
+            or settings.Q_MAIN_QUEUE)
+        parser.add_argument(
+            '--queue',
+            action='store',
+            dest='queue',
+            default=default_queue,
+            help='Run qcluster for the given queue, defaults to {!r}.'.format(
+                default_queue),
+        )
+
     def handle(self, *args, **options):
-        broker = get_broker()
+        broker = get_broker(options['queue'])
         broker_queue = broker.queue_size()
 
         db_queue = (

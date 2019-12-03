@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import logging
 
 from planb.common.subprocess2 import CalledProcessError, check_output
@@ -10,12 +11,38 @@ class DatasetNotFound(Exception):
 
 
 class Storage(object):
-    def __init__(self, bfs, poolname):
-        self._bfs = bfs
-        self._poolname = poolname
+    def __init__(self, config, alias):
+        self.config = config
+        self.name = config['NAME']
+        self.alias = alias
 
-    def get_dataset(self, customer, friendly_name):
-        return self._bfs.get_dataset(self._poolname, customer, friendly_name)
+    def get_label(self):
+        return self.name
+
+    @classmethod
+    def ensure_defaults(cls, config):
+        config.setdefault('NAME', cls.__name__)
+
+    def get_dataset_name(self, namespace, name):
+        return '{}-{}'.format(namespace, name)
+
+    def get_datasets(self):
+        raise NotImplementedError()
+
+    def get_dataset(self, dataset_name):
+        raise NotImplementedError()
+
+    def snapshot_create(self, dataset_name, snapname):
+        raise NotImplementedError()
+
+    def snapshot_list(self, dataset_name):
+        raise NotImplementedError()
+
+    def snapshots_rotate(self, dataset_name, **kwargs):
+        '''
+        Rotate the snapshots according to the retention parameters in kwargs.
+        '''
+        raise NotImplementedError()
 
 
 class Datasets(list):
@@ -40,15 +67,14 @@ class Datasets(list):
         """
         Set reference to database instances (of type Fileset).
         """
-        configs_by_identifier = {}
+        configs_by_dataset = {}
         for config in self.get_database_class().objects.all():
-            identifier = config.get_dataset().identifier
-            configs_by_identifier[identifier] = config
+            configs_by_dataset[config.dataset_name] = config
 
         for dataset in self:
             # Set all database_object's to the corresponding object or False if
             # not found.
-            config = configs_by_identifier.get(dataset.identifier, False)
+            config = configs_by_dataset.get(dataset.name, False)
             dataset.set_database_object(config)  # of type Fileset
 
 
@@ -71,18 +97,18 @@ class Dataset(object):
         O(n^2) times.
         """
         return (
-            (instance._database_object and
-             instance._database_object.hostgroup.name or ''),
-            instance._backend.name, instance.identifier)
+            (instance._database_object
+                and instance._database_object.hostgroup.name or ''),
+            instance.backend.name, instance.name)
 
-    def __init__(self, backend, identifier):
-        self.identifier = identifier
-        self._backend = backend
+    def __init__(self, backend, name):
+        self.backend = backend
+        self.name = name
         self._disk_usage = None
         self._database_object = None  # of type Fileset
 
     def __repr__(self):
-        return '<{}:{}>'.format(self._backend.name, self.identifier)
+        return '<{}:{}>'.format(self.backend.name, self.name)
 
     @property
     def exists_in_database(self):
@@ -106,13 +132,42 @@ class Dataset(object):
         assert self._database_object is None
         self._database_object = database_object
 
+    def get_referenced_size(self):
+        raise NotImplementedError()
 
-class OldStyleStorage(object):
+    def get_used_size(self):
+        raise NotImplementedError()
+
+    def ensure_exists(self):
+        pass
+
+    def get_data_path(self):
+        raise NotImplementedError()
+
+    def get_snapshot_path(self, snapname):
+        raise NotImplementedError()
+
+    def rename_dataset(self, new_dataset_name):
+        raise NotImplementedError()
+
+    @contextmanager
+    def workon(self, data_path=None):
+        yield
+
+
+class OldStyleStorage(Storage):
     name = NotImplemented
 
-    def __init__(self, binary, sudobin):
-        self.binary = binary
-        self.sudobin = sudobin
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.binary = self.config['BINARY']
+        self.sudobin = self.config['SUDOBIN']
+
+    @classmethod
+    def ensure_defaults(cls, config):
+        super().ensure_defaults(config)
+        config.setdefault('BINARY', '/sbin/zfs')
+        config.setdefault('SUDOBIN', '/usr/bin/sudo')
 
     def __perform_system_command(self, cmd):
         """
@@ -152,12 +207,6 @@ class OldStyleStorage(object):
         """
         raise NotImplementedError()
 
-    def snapshot_create(self, rootdir, customer, friendly_name):
-        raise NotImplementedError()
-
-    def snapshot_delete(self, rootdir, snapshot):
-        raise NotImplementedError()
-
     def snapshot_retain_weekly(self, datetimestamp, retention):
         raise NotImplementedError()
 
@@ -165,10 +214,4 @@ class OldStyleStorage(object):
         raise NotImplementedError()
 
     def snapshot_retain_yearly(self, datetimestamp, retention):
-        raise NotImplementedError()
-
-    def snapshots_get(self, rootdir, customer, friendly_name):
-        raise NotImplementedError()
-
-    def snapshots_rotate(self, rootdir, customer, friendly_name, retention):
         raise NotImplementedError()

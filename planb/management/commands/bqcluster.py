@@ -22,8 +22,8 @@ class Command(BaseCommand):
             help='Run once and then stop.',
         )
         default_queue = (
-            os.environ.get('Q_CLUSTER_QUEUE', settings.Q_MAIN_QUEUE) or
-            settings.Q_MAIN_QUEUE)
+            os.environ.get('Q_CLUSTER_QUEUE', settings.Q_MAIN_QUEUE)
+            or settings.Q_MAIN_QUEUE)
         parser.add_argument(
             '--queue',
             action='store',
@@ -63,7 +63,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS(
             'Starting qcluster for queue {!r}'.format(options['queue'])))
-        os.chdir('/')
         q = Cluster(get_broker(options['queue']))
         q.start()
         if options.get('run_once', False):

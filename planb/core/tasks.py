@@ -14,7 +14,7 @@ from django_q.brokers import get_broker
 from django_q.tasks import async_task
 from yaml import safe_dump, safe_load
 
-from .models import BOGODATE, BackupRun, Fileset
+from .models import BOGODATE, BackupRun, Fileset, FilesetLock
 
 try:
     from setproctitle import getproctitle, setproctitle
@@ -80,6 +80,18 @@ def async_backup_job(fileset):
 
 
 # Sync called task; spawns async.
+def async_rename_job(fileset, new_namespace, new_name):
+    """
+    Spawn a task to rename the fileset.
+    """
+    new_dataset_name = fileset.storage.get_dataset_name(
+        new_namespace, new_name)
+    return async_task(
+        'planb.tasks.rename_run', fileset.pk, fileset.dataset_name,
+        new_dataset_name, broker=get_broker(settings.Q_MAIN_QUEUE))
+
+
+# Sync called task; spawns async.
 def spawn_backup_jobs():
     """
     Schedule all eligible filesets to backup soon.
@@ -89,28 +101,39 @@ def spawn_backup_jobs():
 
 # Async called task:
 def conditional_run(fileset_id):
-    FilesetRunner(fileset_id).conditional_run()
+    with FilesetRunner(fileset_id) as runner:
+        runner.conditional_run()
 
 
 # Async called task:
 def manual_run(fileset_id):
-    FilesetRunner(fileset_id).manual_run()
+    with FilesetRunner(fileset_id) as runner:
+        runner.manual_run()
 
 
 # Async called task:
 def unconditional_run(fileset_id):
-    FilesetRunner(fileset_id).unconditional_run()
+    with FilesetRunner(fileset_id) as runner:
+        runner.unconditional_run()
 
 
 # Async called task:
 def dutree_run(fileset_id, run_id):
-    FilesetRunner(fileset_id).dutree_run(run_id)
+    with FilesetRunner(fileset_id) as runner:
+        runner.dutree_run(run_id)
+
+
+# Async called task:
+def rename_run(fileset_id, old_dataset_name, new_dataset_name):
+    with FilesetRunner(fileset_id) as runner:
+        runner.rename_run(old_dataset_name, new_dataset_name)
 
 
 # Async called task:
 def finalize_run(task):
     fileset_id = task.args[0]
-    FilesetRunner(fileset_id).finalize_run(task.success, task.result)
+    with FilesetRunner(fileset_id) as runner:
+        runner.finalize_run(task.success, task.result)
 
 
 class JobSpawner:
@@ -146,8 +169,8 @@ class JobSpawner:
 
             # Check if we failed recently.
             if fileset.first_fail and (
-                    (timezone.now() - fileset.last_run).total_seconds() <
-                    3600):
+                    (timezone.now() - fileset.last_run).total_seconds()
+                    < 3600):
                 # Unlock.
                 Fileset.objects.filter(
                     pk=fileset.pk, is_queued=True).update(is_queued=False)
@@ -162,6 +185,16 @@ class JobSpawner:
 class FilesetRunner:
     def __init__(self, fileset_id):
         self._fileset_id = fileset_id
+        self._fileset_lock = FilesetLock(fileset_id)
+
+    def __enter__(self):
+        # Use blocking so the contained code is only executed when the lock is
+        # acquired.
+        self._fileset_lock.acquire(blocking=True)
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self._fileset_lock.release()
 
     def get_average_duration(self):
         # Take average of last 10 runs.
@@ -174,6 +207,8 @@ class FilesetRunner:
         return sum(durations) // len(durations)
 
     def conditional_run(self):
+        if not self._fileset_lock.is_acquired():
+            raise ValueError('Cannot use fileset without acquiring lock')
         now = timezone.now()
         if 9 <= now.hour < 17:
             fileset = Fileset.objects.get(pk=self._fileset_id)
@@ -190,6 +225,8 @@ class FilesetRunner:
         return self.unconditional_run()
 
     def manual_run(self):
+        if not self._fileset_lock.is_acquired():
+            raise ValueError('Cannot use fileset without acquiring lock')
         fileset = Fileset.objects.get(pk=self._fileset_id)
 
         # The task is delayed, but it has been scheduled/queued.
@@ -204,6 +241,8 @@ class FilesetRunner:
             self.unconditional_run()
 
     def unconditional_run(self):
+        if not self._fileset_lock.is_acquired():
+            raise ValueError('Cannot use fileset without acquiring lock')
         fileset = Fileset.objects.get(pk=self._fileset_id)
         first_fail = fileset.first_fail
         if getproctitle:
@@ -213,72 +252,73 @@ class FilesetRunner:
         Fileset.objects.filter(pk=fileset.pk).update(is_running=True)
         t0 = time.time()
         logger.info('[%s] Starting backup', fileset)
-
-        # Lock and open dataset for work.
+        run = BackupRun.objects.create(fileset_id=fileset.pk)
         dataset = fileset.get_dataset()
-        dataset.begin_work()
         try:
-            # Set title, create log, get transport config.
-            setproctitle('[backing up %d: %s]: transporting' % (
-                fileset.pk, fileset.friendly_name))
-            run = BackupRun.objects.create(fileset_id=fileset.pk)
-            transport = fileset.get_transport()
-            transport.run_transport()
+            # Lock and open dataset for work.
+            with dataset.workon():
+                # Set title, create log, get transport config.
+                setproctitle('[backing up %d: %s]: transporting' % (
+                    fileset.pk, fileset.friendly_name))
+                transport = fileset.get_transport()
+                transport.run_transport()
 
-            # Update snapshots.
-            setproctitle('[backing up %d: %s]: snapshots' % (
-                fileset.pk, fileset.friendly_name))
-            fileset.snapshot_rotate()
-            snapshots = fileset.snapshot_create()
+                # Update snapshots.
+                setproctitle('[backing up %d: %s]: snapshots' % (
+                    fileset.pk, fileset.friendly_name))
+                fileset.snapshot_rotate()
+                snapshots = fileset.snapshot_create()
 
-            # Close the DB connection because it may be stale.
-            connection.close()
+                # Close the DB connection because it may be stale.
+                connection.close()
 
-            # Yay, we're done.
-            fileset.refresh_from_db()
+                # Yay, we're done.
+                fileset.refresh_from_db()
 
-            # Get total size, snapshot size and listing.
-            total_size = dataset.get_used_size()
-            total_size_mb = (total_size + 524288) >> 20  # bytes to MiB
-            snapshot_size = dataset.get_referenced_size()
-            snapshot_size_mb = (snapshot_size + 524288) >> 20  # bytes to MiB
-            if fileset.do_snapshot_size_listing:
-                snapshot_size_listing = 'summary_pending: 0'
-            else:
-                snapshot_size_listing = 'summary_disabled: 0'
-            # XXX Include transport export in attributes.
-            attributes = safe_dump(dict(
-                snapshots=snapshots,
-                do_snapshot_size_listing=fileset.do_snapshot_size_listing),
-                default_flow_style=False)
-
-            # Store run info.
-            BackupRun.objects.filter(pk=run.pk).update(
-                attributes=attributes,
-                duration=(time.time() - t0),
-                success=True,
-                total_size_mb=total_size_mb,
-                snapshot_size_mb=snapshot_size_mb,
-                snapshot_size_listing=snapshot_size_listing)
-
-            # Cache values on the fileset.
-            now = timezone.now()
-            Fileset.objects.filter(pk=fileset.pk).update(
-                last_ok=now,                        # success
-                last_run=now,                       # now
-                first_fail=None,                    # no failure
-                average_duration=self.get_average_duration(),
-                total_size_mb=total_size_mb)       # "disk usage"
-
-            # Mail if failed recently.
-            if first_fail:  # last job was not okay
-                if first_fail == BOGODATE:
-                    msg = 'Backing up {} was a success.\n'.format(fileset)
+                # Get total size, snapshot size and listing.
+                total_size = dataset.get_used_size()
+                total_size_mb = (total_size + 524288) >> 20  # bytes to MiB
+                snapshot_size = dataset.get_referenced_size()
+                snapshot_size_mb = (snapshot_size + 524288) >> 20
+                if fileset.do_snapshot_size_listing:
+                    snapshot_size_listing = 'summary_pending: 0'
                 else:
-                    msg = (
-                        'Backing up {} which was failing since {}.\n\n'
-                        'Now all is well again.\n'.format(fileset, first_fail))
-                mail_admins('OK: Backup success of {}'.format(fileset), msg)
+                    snapshot_size_listing = 'summary_disabled: 0'
+                # XXX Include transport export in attributes.
+                attributes = safe_dump(dict(
+                    snapshots=snapshots,
+                    do_snapshot_size_listing=fileset.do_snapshot_size_listing),
+                    default_flow_style=False)
+
+                # Store run info.
+                BackupRun.objects.filter(pk=run.pk).update(
+                    attributes=attributes,
+                    duration=(time.time() - t0),
+                    success=True,
+                    total_size_mb=total_size_mb,
+                    snapshot_size_mb=snapshot_size_mb,
+                    snapshot_size_listing=snapshot_size_listing)
+
+                # Cache values on the fileset.
+                now = timezone.now()
+                Fileset.objects.filter(pk=fileset.pk).update(
+                    last_ok=now,                        # success
+                    last_run=now,                       # now
+                    first_fail=None,                    # no failure
+                    average_duration=self.get_average_duration(),
+                    total_size_mb=total_size_mb)       # "disk usage"
+
+                # Mail if failed recently.
+                if first_fail:  # last job was not okay
+                    if first_fail == BOGODATE:
+                        msg = 'Backing up {} was a success.\n'.format(fileset)
+                    else:
+                        msg = (
+                            'Backing up {} which was failing since {}.\n\n'
+                            'Now all is well again.\n'.format(
+                                fileset, first_fail))
+                    mail_admins(
+                        'OK: Backup success of {}'.format(fileset), msg)
 
         except Exception as e:
             if True:  # isinstance(e, DigestableError)
@@ -314,8 +354,6 @@ class FilesetRunner:
             logger.info('[%s] Completed successfully', fileset)
 
         finally:
-            dataset.end_work()
-
             if getproctitle:
                 setproctitle(oldproctitle)
 
@@ -327,6 +365,8 @@ class FilesetRunner:
                 broker=get_broker(settings.Q_DUTREE_QUEUE))
 
     def dutree_run(self, run_id):
+        if not self._fileset_lock.is_acquired():
+            raise ValueError('Cannot use fileset without acquiring lock')
         fileset = Fileset.objects.get(pk=self._fileset_id)
         logger.info('[%s] Starting dutree scan', fileset)
         run = BackupRun.objects.get(pk=run_id)
@@ -342,24 +382,24 @@ class FilesetRunner:
         # Lock and open dataset for work.
         dataset = fileset.get_dataset()
         path = dataset.get_snapshot_path(snapshot)
-        dataset.begin_work(path)
         try:
-            setproctitle('[backing up %d: %s]: dutree' % (
-                fileset.pk, fileset.friendly_name))
-            dutree = Scanner(path).scan(use_apparent_size=False)
+            with dataset.workon(path):
+                setproctitle('[backing up %d: %s]: dutree' % (
+                    fileset.pk, fileset.friendly_name))
+                dutree = Scanner(path).scan(use_apparent_size=False)
 
-            # Get snapshot size and tree.
-            snapshot_size_mb = (
-                dutree.use_size() + 524288) >> 20  # bytes to MiB
-            snapshot_size_yaml = '\n'.join(
-                '{}: {}'.format(
-                    yaml_safe_str(i.name()[len(path):]),
-                    yaml_digits(i.use_size()))
-                for i in dutree.get_leaves())
-            BackupRun.objects.filter(pk=run.pk).update(
-                snapshot_size_mb=snapshot_size_mb,
-                snapshot_size_listing=snapshot_size_yaml,
-            )
+                # Get snapshot size and tree.
+                snapshot_size_mb = (
+                    dutree.use_size() + 524288) >> 20  # bytes to MiB
+                snapshot_size_yaml = '\n'.join(
+                    '{}: {}'.format(
+                        yaml_safe_str(i.name()[len(path):]),
+                        yaml_digits(i.use_size()))
+                    for i in dutree.get_leaves())
+                BackupRun.objects.filter(pk=run.pk).update(
+                    snapshot_size_mb=snapshot_size_mb,
+                    snapshot_size_listing=snapshot_size_yaml,
+                )
         except Exception as e:
             logger.exception('[%s] Failed dutree scan', fileset)
             # Append dutree error to error_text, leave success flag as is.
@@ -373,12 +413,12 @@ class FilesetRunner:
         else:
             logger.info('[%s] Completed dutree scan', fileset)
         finally:
-            dataset.end_work()
-
             if getproctitle:
                 setproctitle(oldproctitle)
 
     def finalize_run(self, success, resultset):
+        if not self._fileset_lock.is_acquired():
+            raise ValueError('Cannot use fileset without acquiring lock')
         # Set the queued/running to False when we're done.
         fileset = Fileset.objects.get(pk=self._fileset_id)
         Fileset.objects.filter(pk=fileset.pk).update(
@@ -394,3 +434,22 @@ class FilesetRunner:
 
         logger.info('[%s] Done', fileset)
         fileset.signal_done(success=True)
+
+    def rename_run(self, old_dataset_name, new_dataset_name):
+        if not self._fileset_lock.is_acquired():
+            raise ValueError('Cannot use fileset without acquiring lock')
+
+        fileset = Fileset.objects.get(pk=self._fileset_id)
+        if fileset.dataset_name != old_dataset_name:
+            # The fileset dataset name has changed since starting this job.
+            logger.warning(
+                '[%s] Fileset name to %r cancelled, dataset %r does '
+                'not match current %r', fileset, new_dataset_name,
+                old_dataset_name, fileset.dataset_name)
+            return
+
+        logger.info(
+            '[%s] Rename from %r to %r',
+            fileset, old_dataset_name, new_dataset_name)
+        fileset.rename_dataset(new_dataset_name)
+        logger.info('[%s] Rename to %r complete', fileset, new_dataset_name)

@@ -1,11 +1,10 @@
 from django.core.management.base import BaseCommand
 
 from planb.core.models import Fileset
-from planb.core.tasks import async_backup_job
 
 
 class Command(BaseCommand):
-    help = 'Clones the Fileset of ID n'
+    help = 'Clones the Fileset of ID'
 
     def add_arguments(self, parser):
         parser.add_argument('fileset_id', type=int)
@@ -16,12 +15,6 @@ class Command(BaseCommand):
         template = Fileset.objects.get(pk=options['fileset_id'])
         copy = template.clone(
             friendly_name=options['friendly_name'],
-            host=options['host'])
+            transport__host=options['host'])
         self.stdout.write(self.style.SUCCESS('Cloned {} to {}'.format(
             template, copy)))
-
-        # Spawn a single run.
-        Fileset.objects.filter(pk=copy.pk).update(is_queued=True)
-        task_id = async_backup_job(copy)
-        self.stdout.write(self.style.SUCCESS('Enqueued {} job as {}'.format(
-            copy, task_id)))

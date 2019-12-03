@@ -11,7 +11,7 @@ def try_load_envvars(filenames):
         if envfile is not None:
             try:
                 fp = open(envfile)
-            except:
+            except Exception:
                 pass
             else:
                 try:
@@ -70,12 +70,12 @@ if __name__ == '__main__':
     # PYTHONPATH and DJANGO_SETTINGS_MODULE.
     if 'DJANGO_SETTINGS_MODULE' not in os.environ:
         try_load_envvars((
-            os.environ.get('PLANB_ENVFILE', ''),
+            os.environ.get('PLANB_ENVFILE'),
             '/etc/planb/envvars',
             './envvars'))
 
     # Try becoming the PlanB user.
-    try_become_user(os.environ.get('USER', ''))
+    try_become_user(os.environ.get('USER'))
 
     # Test reading the setting file.
     from importlib import import_module

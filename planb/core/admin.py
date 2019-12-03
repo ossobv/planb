@@ -10,7 +10,7 @@ from planb.common import human
 
 from .forms import FilesetAdminForm
 from .models import BOGODATE, BackupRun, HostGroup, Fileset
-from .tasks import async_backup_job
+from .tasks import async_backup_job, async_rename_job
 
 
 def enqueue_multiple(modeladmin, request, queryset):
@@ -41,11 +41,18 @@ class HostGroupAdmin(admin.ModelAdmin):
                 .order_by('friendly_name')):
             yield (reverse('admin:planb_fileset_change', args=(pk,)), name)
 
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if change and 'name' in form.changed_data:
+            for fileset in form.instance.filesets.iterator():
+                async_rename_job(
+                    fileset, form.instance.name, fileset.friendly_name)
+
 
 class FilesetAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': (
-            'friendly_name', 'hostgroup', 'dest_pool',
+            'friendly_name', 'hostgroup', 'storage_alias',
             'notes', 'is_enabled',
         )}),
         ('Status', {'fields': (
@@ -67,19 +74,22 @@ class FilesetAdmin(admin.ModelAdmin):
         [dict_ for title, dict_ in fieldsets
          if title == 'Status'][0]['fields'])
     readonly_change_fields = (
-        # friendly_name and hostgroup make up the directory name. Don't
-        # touch.
-        'friendly_name', 'hostgroup', 'dest_pool')
+        # Don't allow _direct_ changes to storage_alias and storage_path as
+        # they are used for the storage location. Friendly name and hostgroup
+        # changes _are_ allowed.
+        # These changes are consolidated to the storage_path when the dataset
+        # move is successful.
+        'storage_alias',)
 
     list_display = (
         'friendly_name', 'hostgroup', 'tags',
         'disk_usage', 'run_time', 'retention',
         'last_ok_', 'first_fail_',
-        'dest_pool', 'enabled_x', 'queued_q', 'running_r',
+        'storage_alias', 'enabled_x', 'queued_q', 'running_r',
     )
     list_filter = ('is_enabled',)
     if len(settings.PLANB_STORAGE_POOLS) != 1:
-        list_filter += ('dest_pool',)
+        list_filter += ('storage_alias',)
     list_filter += ('hostgroup', 'is_running', 'first_fail')
 
     actions = [enqueue_multiple]
@@ -195,6 +205,15 @@ class FilesetAdmin(admin.ModelAdmin):
         if object.yearly_retention:
             ret.append('%dy' % object.yearly_retention)
         return '/'.join(ret)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if change and (
+                'friendly_name' in form.changed_data
+                or 'hostgroup' in form.changed_data):
+            async_rename_job(
+                form.instance, form.instance.hostgroup.name,
+                form.instance.friendly_name)
 
 
 admin.site.register(BackupRun, BackupRunAdmin)

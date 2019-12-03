@@ -1,15 +1,18 @@
 from django import forms
 
-from .models import Fileset, get_pools
+from planb.storage import pools
+
+from .models import Fileset
 
 
 class FilesetAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if 'dest_pool' in self.fields:
-            self.fields['dest_pool'] = forms.ChoiceField(
-                choices=get_pools())
+        if 'storage_alias' in self.fields:
+            self.fields['storage_alias'].choices = tuple(
+                (pool.alias, pool.get_label())
+                for pool in pools.values())
 
         if 'hostgroup' in self.fields:
             self.fields['hostgroup'].queryset = (

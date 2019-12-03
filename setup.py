@@ -99,7 +99,7 @@ if __name__ == '__main__':
             'Topic :: System :: Archiving :: Backup',
         ],
         install_requires=[
-            'Django>=2.1.9,<2.2',
+            'Django>=2.2,<2.3',
             'django-q>=1.0.1,<2',
             'django-multi-email-field>=0.5,<0.6',
             'dutree>=1.5',

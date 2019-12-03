@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+from pkg_resources import (
+    get_distribution, DistributionNotFound, RequirementParseError)
+from django import get_version as get_django_version
 import os
 import sys
 
@@ -64,6 +67,14 @@ def try_become_user(planb_user):
             #         'cannot become planb user {!r}'.format(planb_user))
 
 
+def get_version():
+    try:
+        version = get_distribution('planb').version
+    except (DistributionNotFound, RequirementParseError):
+        version = '1.7'
+    return 'PlanB {} (Django {})'.format(version, get_django_version())
+
+
 if __name__ == '__main__':
     # Check env. If DJANGO_SETTINGS_MODULE is not set, we'll try to load
     # ${PLANB_ENVFILE}, /etc/planb/envvars or ./envvars to get USER,
@@ -81,6 +92,8 @@ if __name__ == '__main__':
     from importlib import import_module
     import_module(os.environ['DJANGO_SETTINGS_MODULE'])
 
+    # Monkey patch get_version so it adds the planb version.
+    from django.core.management import django, execute_from_command_line
+    setattr(django, 'get_version', get_version)
     # Move to the django-admin wrapper.
-    from django.core.management import execute_from_command_line
-    sys.exit(execute_from_command_line())
+    execute_from_command_line()

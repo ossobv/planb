@@ -37,7 +37,7 @@ def version_from_changelog(changelog):
     for line in versions:
         assert line and line[0].isdigit(), line
         line = line.split(' ', 1)[0]
-        if all(i.isdigit() for i in line.split('.')):
+        if True or all(i.isdigit() for i in line.split('.')):
             version = line  # last "complete version"
             break
         incomplete = True

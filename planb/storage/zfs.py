@@ -30,12 +30,6 @@ from .base import OldStyleStorage, Datasets, Dataset, DatasetNotFound
 
 logger = logging.getLogger(__name__)
 
-SNAPSHOT_SPECIAL_MAPPING = {
-    'weekly': ('weekly', relativedelta(weeks=+1)),
-    'monthly': ('monthly', relativedelta(months=+1)),
-    'yearly': ('yearly', relativedelta(years=+1))
-}
-
 
 class ZfsStorage(OldStyleStorage):
     def __init__(self, *args, **kwargs):
@@ -167,8 +161,8 @@ class ZfsStorage(OldStyleStorage):
         self._perform_binary_command(cmd)
         return snapshot_name
 
-    def snapshot_delete(self, snapshot):
-        cmd = ('destroy', snapshot)
+    def snapshot_delete(self, dataset_name, snapname):
+        cmd = ('destroy', '{}@{}'.format(dataset_name, snapname))
         self._perform_binary_command(cmd)
 
     def snapshot_list(self, dataset_name, typ=None):
@@ -194,7 +188,8 @@ class ZfsStorage(OldStyleStorage):
             snapshot_rgx = re.compile(r'^.*@\w+-\d+$')
         for snapshot in out.split('\n'):
             if snapshot_rgx.match(snapshot):
-                snapshots.append(snapshot)
+                # Do not include the dataset in the snapshot name.
+                snapshots.append(snapshot.split('@', 1)[1])
         return snapshots
 
     # Note: We use retention + 1 to calculate if we need to
@@ -253,17 +248,17 @@ class ZfsStorage(OldStyleStorage):
         snapshots = self.snapshot_list(dataset_name)
         destroyed = []
         logger.info('snapshots rotation for {}'.format(dataset_name))
-        for snapshot in snapshots:
-            ds, snapname = snapshot.split('@')
+        for snapname in snapshots:
             snaptype, dts = re.match(r'(\w+)-(\d+)', snapname).groups()
             snapshot_retain_func = getattr(self,
                                            'snapshot_retain_%s' % snaptype)
             retention = kwargs.get('%s_retention' % snaptype)
             if not snapshot_retain_func(snapname, retention):
-                self.snapshot_delete(snapshot)
-                destroyed.append(snapshot)
-                logger.info('destroyed: {}, past retention'.format(
-                        snapshot, retention))
+                self.snapshot_delete(dataset_name, snapname)
+                destroyed.append(snapname)
+                logger.info(
+                    'destroyed: %s@%s, past retention %s',
+                    dataset_name, snapname, retention)
         return destroyed
 
 

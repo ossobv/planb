@@ -339,76 +339,48 @@ class Fileset(models.Model):
         # Add logica what kind of snapshot
         # First we need to know what we have
         snapshots = self.storage.snapshot_list(self.dataset_name)
+        now = datetime.utcnow()
+        # Do we need a daily? We do, otherwise we wouldnt be here.
+        snaplist = [now.strftime('daily-%Y%m%d%H%M')]
 
-        snaplist = []
-        # FIXME: should use UTC dates here!
-        if not snapshots:
-            snaplist.append(datetime.now().strftime('daily-%Y%m%d%H%M'))
-            if self.weekly_retention:
-                snaplist.append(datetime.now().strftime('weekly-%Y%m%d%H%M'))
-            if self.monthly_retention:
-                snaplist.append(datetime.now().strftime('monthly-%Y%m%d%H%M'))
-            if self.yearly_retention:
-                snaplist.append(datetime.now().strftime('yearly-%Y%m%d%H%M'))
-        else:
-            # Do we need a daily? We do, otherwise we wouldnt be here.
-            snaplist.append(datetime.now().strftime('daily-%Y%m%d%H%M'))
+        # Do we need a weekly?
+        if self.weekly_retention and self.should_snapshot(
+                snapshots, 'weekly', (now - relativedelta(weeks=1))):
+            snaplist.append(now.strftime('weekly-%Y%m%d%H%M'))
 
-            # Do we need a weekly?
-            if self.weekly_retention:
-                weeklies = [
-                    x for x in snapshots
-                    if x.split('@')[1].startswith('weekly')]
-                if weeklies:
-                    latest = sorted(weeklies)[-1]
-                    dts = latest.split('@', 1)[1].split('-', 1)[1]
-                    datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-                    if datetimestamp < (
-                            datetime.now() - relativedelta(weeks=1)):
-                        snaplist.append(
-                            datetime.now().strftime('weekly-%Y%m%d%H%M'))
-                else:
-                    snaplist.append(
-                        datetime.now().strftime('weekly-%Y%m%d%H%M'))
+        # Do we need a monthly?
+        if self.monthly_retention and self.should_snapshot(
+                snapshots, 'monthly', (now - relativedelta(months=1))):
+            snaplist.append(now.strftime('monthly-%Y%m%d%H%M'))
 
-            # Do we need a monthly?
-            if self.monthly_retention:
-                monthlies = [
-                    x for x in snapshots
-                    if x.split('@')[1].startswith('monthly')]
-                if monthlies:
-                    latest = sorted(monthlies)[-1]
-                    dts = latest.split('@', 1)[1].split('-', 1)[1]
-                    datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-                    if datetimestamp < (
-                            datetime.now() - relativedelta(months=1)):
-                        snaplist.append(
-                            datetime.now().strftime('monthly-%Y%m%d%H%M'))
-                else:
-                    snaplist.append(
-                        datetime.now().strftime('monthly-%Y%m%d%H%M'))
-
-            # Do we need a yearly?
-            if self.yearly_retention:
-                yearlies = [
-                    x for x in snapshots
-                    if x.split('@')[1].startswith('yearly')]
-                if yearlies:
-                    latest = sorted(yearlies)[-1]
-                    dts = latest.split('@', 1)[1].split('-', 1)[1]
-                    datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-                    if datetimestamp < (
-                            datetime.now() - relativedelta(years=1)):
-                        snaplist.append(
-                            datetime.now().strftime('yearly-%Y%m%d%H%M'))
-                else:
-                    snaplist.append(
-                        datetime.now().strftime('yearly-%Y%m%d%H%M'))
+        # Do we need a yearly?
+        if self.yearly_retention and self.should_snapshot(
+                snapshots, 'yearly', (now - relativedelta(years=1))):
+            snaplist.append(now.strftime('yearly-%Y%m%d%H%M'))
 
         for snapname in snaplist:
             logger.info("Created: %s" % self.storage.snapshot_create(
                 self.dataset_name, snapname=snapname))
         return snaplist
+
+    def should_snapshot(self, snapshot_list, snapshot_type, snapshot_date):
+        '''
+        Return True if there are no existing snapshots of `snapshot_type` after
+        `snapshot_date`.
+        '''
+        if not snapshot_list:
+            return True
+
+        snapshots = [
+            x for x in snapshot_list
+            if x.startswith(snapshot_type)]
+        if snapshots:
+            latest = sorted(snapshots)[-1]
+            dts = latest.split('-', 1)[1]
+            datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
+            return bool(datetimestamp < snapshot_date)
+
+        return True
 
     def signal_done(self, success):
         instance = Fileset.objects.get(pk=self.pk)

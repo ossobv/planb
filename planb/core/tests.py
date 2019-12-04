@@ -19,3 +19,17 @@ class PlanbTestCase(TestCase):
             fileset.rename_dataset(new_name)
             m.assert_called_with(('rename', old_name, new_name))
         self.assertEqual(fileset.dataset_name, new_name)
+
+    def test_snapshot_create(self):
+        fileset = FilesetFactory(storage_alias='dummy')
+        # Clean dataset, create all enabled snapshots.
+        self.assertEqual(len(fileset.snapshot_create()), 4)
+        # Snapshots exist, still create a new daily.
+        self.assertEqual(len(fileset.snapshot_create()), 1)
+
+        fileset = FilesetFactory(
+            storage_alias='dummy', monthly_retention=False,
+            yearly_retention=False)
+        # Only create the daily and weekly snapshots.
+        self.assertEqual(len(fileset.snapshot_create()), 2)
+        self.assertEqual(len(fileset.snapshot_create()), 1)

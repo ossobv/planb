@@ -108,26 +108,30 @@ class BossoRESTPoster(BasePoster):
         if 200 <= response.status_code < 300:
             pass  # Success.
         elif response.status_code == 400:
-            error = response.json()
             # One or more data points were invalid.
-            if self.use_batch:
-                remaining = []
-                for d, e in zip(data, error):
-                    if len(e) == 0:
-                        remaining.append(d)
-                    else:
-                        self.handle_error(d, e)
-                # Post the items that did not fail validation.
-                if remaining:
-                    self.post(remaining)
-            else:
-                self.handle_error(data, error)
+            self.handle_error_response(data, response.json())
         else:
             try:
                 response.raise_for_status()
             except requests.RequestException:
                 logger.exception(
                     '%s: error during POST', self.__class__.__name__)
+
+    def handle_error_response(self, data, error):
+        if self.use_batch:
+            # In batch mode the request fails as a whole but may contain valid
+            # data points which can be reposted.
+            remaining = []
+            for d, e in zip(data, error):
+                if len(e) == 0:
+                    remaining.append(d)
+                else:
+                    self.handle_error(d, e)
+            # Post the items that did not fail validation.
+            if remaining:
+                self.post(remaining)
+        else:
+            self.handle_error(data, error)
 
     def handle_error(self, data, error):
         if error.get('non_field_errors', []) == self.UNIQUE_ERROR:

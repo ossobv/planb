@@ -5,12 +5,15 @@ from django.test import TestCase
 from mock import patch
 
 from planb.common.subprocess2 import CalledProcessError
-from planb.storage import pools
+from planb.storage.dummy import DummyStorage
+from planb.storage.zfs import ZfsStorage
 
 
 class PlanbStorageTestCase(TestCase):
     def test_dummy_storage(self):
-        storage = pools['dummy']
+        config = {'NAME': 'Dummy Storage'}
+        DummyStorage.ensure_defaults(config)
+        storage = DummyStorage(config, alias='dummy')
 
         dataset = storage.get_dataset('my_dataset')
         dataset.ensure_exists()
@@ -22,7 +25,10 @@ class PlanbStorageTestCase(TestCase):
         self.assertEqual(datasets[0].name, 'new_name')
 
     def test_zfs_storage(self):
-        storage = pools['zfs']
+        config = {
+            'NAME': 'Zfs Storage', 'POOLNAME': 'tank', 'SUDOBIN': '/bin/echo'}
+        ZfsStorage.ensure_defaults(config)
+        storage = ZfsStorage(config, alias='zfs')
 
         with patch.object(storage, '_perform_binary_command') as m, \
                 TemporaryDirectory() as tmpdir:

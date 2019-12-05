@@ -31,12 +31,12 @@ class Command(BaseCommandWithZabbix):
                 ret.append('[{}]'.format(fileset.hostgroup))
 
             try:
-                host = fileset.get_transport().host
+                transport = fileset.get_transport()
             except ObjectDoesNotExist:
-                host = 'MISSING_TRANSPORT'
+                transport = 'MISSING_TRANSPORT'
 
-            ret.append('{fileset.friendly_name:30s}  {host}'.format(
-                fileset=fileset, host=host))
+            ret.append('{fileset.friendly_name:30s}  {transport}'.format(
+                fileset=fileset, transport=transport))
 
         if ret:
             ret.append('')

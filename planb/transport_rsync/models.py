@@ -69,7 +69,7 @@ class Config(models.Model):
         db_table = TABLE_PREFIX  # or '{}_config'.format(TABLE_PREFIX)
 
     def __str__(self):
-        return '{}: rsync transport'.format(self.fileset)
+        return 'rsync transport {}'.format(self.host)
 
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8

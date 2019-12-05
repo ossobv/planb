@@ -10,6 +10,7 @@ from planb.core.factories import (
     BackupRunFactory, FilesetFactory, HostGroupFactory)
 from planb.core.models import Fileset
 from planb.storage.dummy import DummyStorage
+from planb.transport_exec.factories import ExecConfigFactory
 from planb.transport_rsync.factories import RsyncConfigFactory
 
 
@@ -38,27 +39,19 @@ class CommandTestCase(TestCase):
         self.assertEqual(stdout, '\n')
 
         hostgroup = HostGroupFactory(name='local')
-        FilesetFactory(friendly_name='web01', hostgroup=hostgroup)
-        FilesetFactory(friendly_name='db01', hostgroup=hostgroup)
+        web01 = FilesetFactory(friendly_name='web01', hostgroup=hostgroup)
+        db01 = FilesetFactory(friendly_name='db01', hostgroup=hostgroup)
 
         stdout, stderr = self.run_command('blist', zabbix=True)
         self.assertEqual(
             '{"data": [{"{#BKNAME}": "local-db01"}, {"{#BKNAME}": '
             '"local-web01"}]}\n', stdout)
 
-        fileset = FilesetFactory()
-        RsyncConfigFactory(fileset=fileset, host='a.very.distinct.host.local')
+        ExecConfigFactory(fileset=web01, transport_command='/bin/magic')
+        RsyncConfigFactory(fileset=db01, host='database1.local')
+        FilesetFactory(friendly_name='stats', hostgroup__name='remote')
         stdout, stderr = self.run_command('blist')
-        # Output contains 2 hosts grouped under local.
-        self.assertIn(
-            '[local]\ndb01                            MISSING_TRANSPORT\n'
-            'web01                           MISSING_TRANSPORT\n', stdout)
-        # and one lone host with a distinct transport host.
-        self.assertIn(
-            '[{}]\n{:30s}  {}'.format(
-                fileset.hostgroup.name, fileset.friendly_name,
-                fileset.get_transport().host),
-            stdout)
+        self.assertEqual(stdout, TEST_BLIST)
 
     def test_bqcluster(self):
         stdout, stderr = self.run_command(
@@ -66,6 +59,9 @@ class CommandTestCase(TestCase):
         self.assertIn("Starting qcluster for queue 'test'", stdout)
 
     def test_bqueue(self):
+        # The task queue may have other test data, clean it up.
+        self.run_command('bqueueflush')
+
         fileset = FilesetFactory()
         stdout, stderr = self.run_command('bqueueall')
         self.assertIn('Enqueued {}'.format(fileset), stdout)
@@ -126,6 +122,16 @@ class CommandTestCase(TestCase):
             dataset.set_disk_usage(271626877324)
             stdout, stderr = self.run_command('slist')
             self.assertEqual(stdout, TEST_SLIST)
+
+
+TEST_BLIST = '''[local]
+db01                            rsync transport database1.local
+web01                           exec transport /bin/magic
+
+[remote]
+stats                           MISSING_TRANSPORT
+
+'''
 
 
 TEST_CONFEXPORT_JSON = '''/* local-desktop */

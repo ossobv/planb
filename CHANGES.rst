@@ -18,6 +18,7 @@ v1.7_dev - *XXXX-XX-XX*
 
 **Other**
 
+- Fix ``blist`` to show any transport type.
 - Fix ``bclone`` to also clone transport.
 - Fix ``bqueueflush`` to default to the main queue.
 - Cleanup ZFS workdir switching.

@@ -108,6 +108,12 @@ if __name__ == '__main__':
             'redis>=2.10.5,<3',        # APT: python3-redis
             'setproctitle>=1.1.8,<2',  # APT: python3-setproctitle
         ],
+        dependency_links=[
+            # The version on pypi is broken and a fix has not been merged yet.
+            # https://github.com/fle/django-multi-email-field/pull/10
+            # Our fork that will not disappear.
+            'https://github.com/ossobv/django-multi-email-field/archive/master.zip#egg=django-multi-email-field-0.5.1',
+        ],
     )
 
 # vim: set ts=8 sw=4 sts=4 et ai tw=79:

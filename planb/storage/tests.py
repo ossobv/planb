@@ -1,15 +1,25 @@
 import os
 from tempfile import TemporaryDirectory
 
-from django.test import TestCase
+from django.core.exceptions import ImproperlyConfigured
+from django.test import TestCase, override_settings
+
 from mock import patch
 
 from planb.common.subprocess2 import CalledProcessError
+from planb.storage import load_pools
 from planb.storage.dummy import DummyStorage
 from planb.storage.zfs import ZfsStorage
 
 
 class PlanbStorageTestCase(TestCase):
+    def test_config_loading(self):
+        # PLANB_STORAGE_POOLS used to be a list.
+        # To be fair, the user already fixed this if he can run the tests.
+        with override_settings(PLANB_STORAGE_POOLS=[]), \
+                self.assertRaises(ImproperlyConfigured):
+            load_pools()
+
     def test_dummy_storage(self):
         config = {'NAME': 'Dummy Storage'}
         DummyStorage.ensure_defaults(config)

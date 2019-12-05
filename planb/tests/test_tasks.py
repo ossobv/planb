@@ -6,9 +6,9 @@ from django.utils.timezone import make_aware
 
 from mock import Mock, patch
 
-from planb.core.factories import BackupRunFactory, FilesetFactory
-from planb.core.models import Fileset
-from planb.core.tasks import (
+from planb.factories import BackupRunFactory, FilesetFactory
+from planb.models import Fileset
+from planb.tasks import (
     FilesetRunner, conditional_run, dutree_run, finalize_run, manual_run,
     rename_run, unconditional_run)
 from planb.signals import backup_done
@@ -19,7 +19,7 @@ RSYNC_BIN = '/not/rsync'
 
 def message(
         *args, message_fmt='{level}:{module}:[{}] {}', level='INFO',
-        module='planb.core.tasks'):
+        module='planb.tasks'):
     return message_fmt.format(*args, level=level, module=module)
 
 
@@ -38,8 +38,8 @@ class TaskTestCase(TestCase):
     def test_conditional_run(self):
         fileset = FilesetFactory(storage_alias='dummy')
         # Conditional run will only run backup tasks outside work hours.
-        with patch('planb.core.tasks.timezone') as m, \
-                self.assertLogs('planb.core.tasks', level='INFO') as log:
+        with patch('planb.tasks.timezone') as m, \
+                self.assertLogs('planb.tasks', level='INFO') as log:
             m.now.return_value = datetime.datetime(2019, 1, 1, 11, 0)
             conditional_run(fileset.pk)
             self.assertEqual(
@@ -48,7 +48,7 @@ class TaskTestCase(TestCase):
 
         RsyncConfigFactory(fileset=fileset)
         # Outside work hours it will immediatly run the backup.
-        with patch('planb.core.tasks.timezone') as m, \
+        with patch('planb.tasks.timezone') as m, \
                 patch('planb.transport_rsync.models.check_output') as c:
             m.now.return_value = make_aware(
                 datetime.datetime(2019, 1, 1, 3, 0))
@@ -60,7 +60,7 @@ class TaskTestCase(TestCase):
     def test_manual_run(self):
         fileset = FilesetFactory(storage_alias='dummy', is_running=True)
         # Manual run does nothing if the fileset is marked as running.
-        with self.assertLogs('planb.core.tasks', level='INFO') as log, \
+        with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
             manual_run(fileset.pk)
             self.assertEqual(
@@ -72,7 +72,7 @@ class TaskTestCase(TestCase):
         fileset = FilesetFactory(storage_alias='dummy')
         RsyncConfigFactory(fileset=fileset)
         # Otherwise manual run will immediatly run the backup.
-        with self.assertLogs('planb.core.tasks', level='INFO') as log, \
+        with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
             manual_run(fileset.pk)
             self.assertEqual(
@@ -88,7 +88,7 @@ class TaskTestCase(TestCase):
         fileset = FilesetFactory(storage_alias='dummy')
         RsyncConfigFactory(fileset=fileset)
         # Unconditional run will always run a backup.
-        with self.assertLogs('planb.core.tasks', level='INFO') as log, \
+        with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
             unconditional_run(fileset.pk)
             self.assertEqual(
@@ -109,7 +109,7 @@ class TaskTestCase(TestCase):
         run = BackupRunFactory(
             fileset=fileset,
             attributes='do_snapshot_size_listing: true\nsnapshots:\n- daily')
-        with self.assertLogs('planb.core.tasks', level='INFO') as log:
+        with self.assertLogs('planb.tasks', level='INFO') as log:
             dutree_run(fileset.pk, run.pk)
             self.assertEqual(
                 log.output, [
@@ -120,7 +120,7 @@ class TaskTestCase(TestCase):
         # The rename task checks if the path has changed since the task was
         # queued. If it has changed the rename is aborted.
         fileset = FilesetFactory()
-        with self.assertLogs('planb.core.tasks', level='WARNING') as log:
+        with self.assertLogs('planb.tasks', level='WARNING') as log:
             rename_run(fileset.pk, 'previous_name', 'new_name')
             self.assertEqual(
                 log.output, [
@@ -132,7 +132,7 @@ class TaskTestCase(TestCase):
                         level='WARNING'),
                     ])
 
-        with self.assertLogs('planb.core.tasks', level='INFO') as log:
+        with self.assertLogs('planb.tasks', level='INFO') as log:
             rename_run(fileset.pk, fileset.dataset_name, 'new_name')
             self.assertEqual(
                 log.output, [
@@ -159,7 +159,7 @@ class TaskTestCase(TestCase):
         # Afaik None of the tasks actually return anything.
         fileset = FilesetFactory()
         task = Mock(args=[fileset.pk], success=False, result=None)
-        with self.assertLogs('planb.core.tasks', level='ERROR') as log, \
+        with self.assertLogs('planb.tasks', level='ERROR') as log, \
                 self.signal_handler(backup_done) as handler:
             finalize_run(task)
             self.assertEqual(
@@ -172,7 +172,7 @@ class TaskTestCase(TestCase):
                 signal=backup_done)
 
         task = Mock(args=[fileset.pk], success=True, result=None)
-        with self.assertLogs('planb.core.tasks', level='INFO') as log, \
+        with self.assertLogs('planb.tasks', level='INFO') as log, \
                 self.signal_handler(backup_done) as handler:
             finalize_run(task)
             self.assertEqual(log.output, [message(fileset, 'Done')])

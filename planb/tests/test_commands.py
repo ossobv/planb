@@ -6,9 +6,9 @@ from django.test import TestCase, override_settings
 
 from mock import patch
 
-from planb.core.factories import (
+from planb.factories import (
     BackupRunFactory, FilesetFactory, HostGroupFactory)
-from planb.core.models import Fileset
+from planb.models import Fileset
 from planb.storage.dummy import DummyStorage
 from planb.transport_exec.factories import ExecConfigFactory
 from planb.transport_rsync.factories import RsyncConfigFactory
@@ -108,7 +108,7 @@ class CommandTestCase(TestCase):
         storage = DummyStorage({'NAME': 'DummyPool I'}, 'dummy')
         test_pools = {'dummy': storage}
         with patch('planb.management.commands.slist.pools', test_pools), \
-                patch('planb.core.models.pools', test_pools):
+                patch('planb.models.pools', test_pools):
             dataset = FilesetFactory(
                 friendly_name='storage', hostgroup__name='local',
                 storage_alias='dummy').get_dataset()

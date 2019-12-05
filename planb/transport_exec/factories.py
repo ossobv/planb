@@ -1,7 +1,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from planb.core.factories import FilesetFactory
+from planb.factories import FilesetFactory
 
 
 class ExecConfigFactory(DjangoModelFactory):

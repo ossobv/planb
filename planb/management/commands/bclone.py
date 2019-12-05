@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from planb.core.models import Fileset
+from planb.models import Fileset
 
 
 class Command(BaseCommand):

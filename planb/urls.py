@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.views.generic.base import RedirectView
 
-from .core.views import EnqueueJob
+from .views import EnqueueJob
 
 from django.conf.urls import url
 

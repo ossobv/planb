@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
-from planb.core.models import Fileset
-from planb.core.tasks import async_backup_job
+from planb.models import Fileset
+from planb.tasks import async_backup_job
 
 
 class Command(BaseCommand):

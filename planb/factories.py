@@ -24,7 +24,7 @@ class UserFactory(DjangoModelFactory):
 
 
 class HostGroupFactory(DjangoModelFactory):
-    name = factory.Faker('domain_name')
+    name = factory.Faker('domain_word')
 
     class Meta:
         model = 'planb.HostGroup'
@@ -32,18 +32,22 @@ class HostGroupFactory(DjangoModelFactory):
 
 
 class FilesetFactory(DjangoModelFactory):
+    host_prefix = factory.Faker('hostname', levels=0)
+    host_suffix = factory.Faker('domain_word')
+    tld = factory.Faker('tld')
+
     @factory.lazy_attribute
     def friendly_name(self):
         # Set friendly name as the full hostname within the hostgroup domain.
         return '.'.join((
-                factory.Faker('hostname', levels=0).generate(),
-                self.hostgroup.name))
+            self.host_prefix, self.host_suffix, self.hostgroup.name, self.tld))
 
     storage_alias = FuzzyChoice(pools)
     hostgroup = factory.SubFactory(HostGroupFactory)
 
     class Meta:
         model = 'planb.Fileset'
+        exclude = ['host_prefix', 'host_suffix', 'tld']
 
 
 class BackupRunFactory(DjangoModelFactory):

@@ -5,7 +5,7 @@ import json
 from django.core.exceptions import ObjectDoesNotExist
 
 from planb.common.customyaml import CustomYaml
-from planb.core.models import Fileset, HostGroup
+from planb.models import Fileset, HostGroup
 from planb.management.base import BaseCommand
 
 

@@ -1,7 +1,7 @@
 from django.test import TestCase
 from mock import patch
 
-from .factories import FilesetFactory
+from planb.factories import FilesetFactory
 
 
 class PlanbTestCase(TestCase):

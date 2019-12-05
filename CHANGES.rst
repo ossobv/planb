@@ -16,6 +16,10 @@ v1.7_dev - *XXXX-XX-XX*
 - Implement task to allow renaming of filesets in the Storage engine.
 - Enforce global ``Fileset`` locks to prevent race conditions.
 
+**Web interface**
+
+- Show a message when a rename task has spawned from a change.
+
 **Other**
 
 - Fix ``blist`` to show any transport type.

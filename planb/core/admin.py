@@ -17,6 +17,8 @@ def enqueue_multiple(modeladmin, request, queryset):
     for obj in queryset.filter(is_queued=False, is_enabled=True):
         Fileset.objects.filter(pk=obj.pk).update(is_queued=True)
         async_backup_job(obj)
+    modeladmin.message_user(
+        request, _('The selection has been queued for immediate backup'))
 enqueue_multiple.short_description = _(  # noqa
     'Enqueue selected hosts for immediate backup')
 
@@ -47,6 +49,9 @@ class HostGroupAdmin(admin.ModelAdmin):
             for fileset in form.instance.filesets.iterator():
                 async_rename_job(
                     fileset, form.instance.name, fileset.friendly_name)
+            self.message_user(
+                request, _('A rename task has been queued for all filesets in '
+                           'the hostgroup'))
 
 
 class FilesetAdmin(admin.ModelAdmin):
@@ -214,6 +219,8 @@ class FilesetAdmin(admin.ModelAdmin):
             async_rename_job(
                 form.instance, form.instance.hostgroup.name,
                 form.instance.friendly_name)
+            self.message_user(
+                request, _('A rename task has been queued for the fileset'))
 
 
 admin.site.register(BackupRun, BackupRunAdmin)

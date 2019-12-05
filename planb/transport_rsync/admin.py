@@ -1,8 +1,9 @@
 from zlib import adler32
 
 from django.contrib import admin
+from django.forms import modelform_factory
 
-from planb.forms import generate_filesetref_form
+from planb.forms import FilesetRefForm
 
 from .models import Config
 
@@ -20,7 +21,7 @@ class ConfigAdmin(admin.ModelAdmin):
         )}),
     )
 
-    form = generate_filesetref_form(Config)
+    form = modelform_factory(Config, form=FilesetRefForm)
     readonly_change_fields = (
         'fileset',
     )

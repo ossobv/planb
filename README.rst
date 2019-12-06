@@ -91,11 +91,12 @@ TODO
 * FIX: Add uwsgi-uid==djangoq-uid check?
 * FIX: try django_q>0.1 and fix the async() and await() keywords which won't
   work in python3.7 anymore
-
 * Alter HostGroup:
+
   - use fs-name and human-name
   - use asciifield for fs-name?
 * Alter Fileset:
+
   - use fs-name and optionally human-name
   - use asciifield for fs-name?
 * Replace the exception mails for common errors (like failing rsync) to
@@ -217,11 +218,11 @@ Setting up the local environment::
     DJANGO_SETTINGS_MODULE=settings
     EOF
 
-.. note:: *During development, you can use a local* ``./envvars`` *in your
-           development directory or set* ``PLANB_ENVFILE`` *to a
-           specific path. You can set* ``PYTHONPATH`` *to*
-           ``/etc/planb:/home/yourname/src/planb`` *to develop on the
-           production machine.*
+.. note:: *PlanB looks for an environment file in the locations:*
+          - env PLANB_ENVFILE
+          - /etc/planb/envvars
+          - ./envvars
+          *The first file that can be loaded will be used.*
 
 Setting up the local configuration::
 
@@ -230,6 +231,13 @@ Setting up the local configuration::
     ${EDITOR:-vi} /etc/planb/settings.py
 
 **Replace all *FIXME* entries in the ``settings.py``**
+
+.. note:: *For development you only need the settings module which can
+           be placed in the project root.*
+           ``cp -n example_settings.py settings.py``
+           *You can use* ``python setup.py develop`` *to install planb
+           in develop mode. This links the source directory to python
+           site-packages and is especially useful for production hacking.*
 
 Make sure the SQL database exists. How to do that is beyond the scope of
 this readme.
@@ -391,7 +399,7 @@ You can add something like this to your settings::
     @receiver(backup_done)
     def notify_zabbix(sender, fileset, success, **kwargs):
         if success:
-            key = 'planb.get_latest[{}]'.format(fileset.basename)
+            key = 'planb.get_latest[{}]'.format(fileset.unique_name)
             val = datetime.now().strftime('%s')
             cmd = (
                 'zabbix_sender', '-c', '/etc/zabbix/zabbix_agentd.conf',

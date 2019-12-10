@@ -1,7 +1,7 @@
 from django import template
 from django.urls import reverse
 
-from planb.models import Fileset
+from planb.models import BOGODATE, Fileset
 
 register = template.Library()
 
@@ -10,8 +10,9 @@ class GlobalMessagesNode(template.Node):
     def render(self, context):
         show_at_most = 10
         backup_failures = list(
-            Fileset.objects.filter(
-                is_enabled=True, first_fail__isnull=False)
+            Fileset.objects
+            .filter(is_enabled=True, first_fail__isnull=False)
+            .exclude(first_fail=BOGODATE)
             .order_by('first_fail')[0:(show_at_most + 1)])
         if not backup_failures:
             return ''

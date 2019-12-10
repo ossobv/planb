@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from planb.factories import (
     BackupRunFactory, FilesetFactory, HostGroupFactory, UserFactory)
+from planb.models import BOGODATE
 
 
 class InterfaceTestCase(TestCase):
@@ -67,6 +68,11 @@ class InterfaceTestCase(TestCase):
     def test_global_messages_templatetag(self):
         context = Context()
         template = Template('{% load planb %}{% global_messages %}')
+
+        self.assertEqual(template.render(context), '')
+
+        # Hack to trigger email updates doesn't show messages.
+        FilesetFactory(first_fail=BOGODATE)
 
         self.assertEqual(template.render(context), '')
 

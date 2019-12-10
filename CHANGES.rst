@@ -19,6 +19,7 @@ v1.7_dev - *XXXX-XX-XX*
 **Web interface**
 
 - Show a message when a rename task has spawned from a change.
+- Don't show manually queued Filesets in the backup failure warning.
 
 **Other**
 

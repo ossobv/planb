@@ -103,7 +103,7 @@ class Fileset(models.Model):
 
     # The storage alias is selected when adding the Fileset. Available choices
     # are selected from the storage pools in the FilesetForm.
-    storage_alias = models.CharField(_('Storage'), max_length=31, choices=())
+    storage_alias = models.CharField(_('Storage'), max_length=31)
     dataset_name = models.CharField(
         verbose_name=_('Dataset name'), editable=False, max_length=254,
         help_text=_('The complete dataset name for the storage.'))

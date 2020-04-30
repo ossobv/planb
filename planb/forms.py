@@ -1,6 +1,7 @@
 from django import forms
 from django.apps import apps
 from django.conf import settings
+from django.utils.translation import ugettext as _
 
 from planb.storage import pools
 
@@ -12,9 +13,11 @@ class FilesetAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if 'storage_alias' in self.fields:
-            self.fields['storage_alias'].choices = tuple(
+            storage_choices = tuple(
                 (pool.alias, pool.get_label())
                 for pool in pools.values())
+            self.fields['storage_alias'] = forms.ChoiceField(
+                label=_('Storage'), choices=storage_choices)
 
         if 'hostgroup' in self.fields:
             self.fields['hostgroup'].queryset = (

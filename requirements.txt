@@ -1,5 +1,5 @@
 Django>=2.2,<2.3
-django-q>=1.0.1,<2
+django-q>=1.2.1,<2
 django-multi-email-field>=0.6.1,<0.7
 
 redis>=2.10.5,<3        # APT: python3-redis

@@ -57,7 +57,7 @@ class Command(BaseCommand):
 
         # Double check that the Sentinel gets the values from our updated Conf
         # class.
-        dummy_sentinel = Sentinel(None, None, start=False)
+        dummy_sentinel = Sentinel(None, None, None, start=False)
         assert dummy_sentinel.pool_size == settings_q['workers']
 
     def handle(self, *args, **options):

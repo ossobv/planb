@@ -1,15 +1,17 @@
-Django>=2.2,<2.3
-django-q>=1.2.1,<2
-django-multi-email-field>=0.6.1,<0.7
+# Keep requirements in sync with setup.py and constraints.txt
+# Use requirements to set hard dependencies.
+Django
+django-q
+django-multi-email-field
 
-redis>=2.10.5,<3        # APT: python3-redis
-setproctitle>=1.1.8,<2  # APT: python3-setproctitle
+redis
+setproctitle
 
-dutree>=1.6,<2
-PyYAML>=5.1.1
+dutree
+PyYAML
 
 # For rst2html for planb-report as HTML
 # apt-get install python3-docutils --no-install-recommends
 
 # kleides-dssoclient for Discourse Single-Sign-On
-kleides-dssoclient>=0.7
+kleides-dssoclient

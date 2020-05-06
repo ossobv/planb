@@ -98,21 +98,16 @@ if __name__ == '__main__':
             'Programming Language :: Python :: 3.5',
             'Topic :: System :: Archiving :: Backup',
         ],
+        # Keep install_requires in sync with requirements.txt and
+        # constraints.txt
         install_requires=[
-            'Django>=2.2,<2.3',
-            'django-q>=1.0.1,<2',
-            'django-multi-email-field>=0.5,<0.6',
-            'dutree>=1.5',
+            'Django>=2.2,<3.1',
+            'django-q>=1.2.1,<2',
+            'django-multi-email-field>=0.6.1,<0.7',
+            'dutree>=1.6,<2',
             'PyYAML>=5.1.1',
-            'mysqlclient>=1.3.7,<2',   # APT: python3-mysqldb
             'redis>=2.10.5,<3',        # APT: python3-redis
             'setproctitle>=1.1.8,<2',  # APT: python3-setproctitle
-        ],
-        dependency_links=[
-            # The version on pypi is broken and a fix has not been merged yet.
-            # https://github.com/fle/django-multi-email-field/pull/10
-            # Our fork that will not disappear.
-            'https://github.com/ossobv/django-multi-email-field/archive/master.zip#egg=django-multi-email-field-0.5.1',
         ],
     )
 

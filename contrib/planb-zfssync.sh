@@ -73,7 +73,17 @@ for remotepath in "$@"; do
     fi
     # Disable mounting of individual filesystems on this mount point. As doing
     # so will mess up the parent mount.
-    sudo zfs set canmount=off mountpoint=legacy "$dst"
+    type=$(sudo zfs get -o value -Hp type "$dst")
+    case "$type" in
+    filesystem)
+        sudo zfs set canmount=off mountpoint=legacy "$dst"
+        ;;
+    volume)
+        ;;
+    *)
+        echo "Unexpected FS type $dst: $type" >&2
+        ;;
+    esac
 done
 
 # Keep only three snapshots on remote machine.

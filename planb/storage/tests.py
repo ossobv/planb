@@ -108,4 +108,4 @@ class PlanbStorageTestCase(TestCase):
             self.assertEqual(datasets[0].disk_usage, 101)
             m.assert_any_call((
                 'list', '-d', '1', '-t', 'filesystem,volume',
-                '-Hpo', 'name,used,type,planb:contains'))
+                '-Hpo', 'name,used,type,planb:contains', config['POOLNAME']))

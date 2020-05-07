@@ -145,7 +145,7 @@ class Dataset(object):
         pass
 
     def can_read_files(self):
-        return False
+        return True
 
     def get_data_path(self):
         raise NotImplementedError()

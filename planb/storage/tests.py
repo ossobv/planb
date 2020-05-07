@@ -58,6 +58,7 @@ class PlanbStorageTestCase(TestCase):
                 '',  # ensure_exists: unmount
             ]
             dataset = storage.get_dataset('tank/my_dataset')
+            dataset.set_dataset_type('filesystem', 'data')  # default
             dataset.ensure_exists()
             m.assert_any_call(('create', 'tank/my_dataset'))
 
@@ -99,10 +100,12 @@ class PlanbStorageTestCase(TestCase):
             # Dataset listing.
             m.reset_mock(side_effect=True)
             m.side_effect = [
-                'tank/new_name\t101',  # get_datasets: list
+                'tank/new_name\t101\tfilesystem\t-',  # get_datasets: list
             ]
             datasets = storage.get_datasets()
             self.assertEqual(len(datasets), 1)
             self.assertEqual(datasets[0].name, 'tank/new_name')
             self.assertEqual(datasets[0].disk_usage, 101)
-            m.assert_any_call(('list', '-Hpo', 'name,used'))
+            m.assert_any_call((
+                'list', '-d', '1', '-t', 'filesystem,volume',
+                '-Hpo', 'name,used,type,planb:contains'))

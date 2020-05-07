@@ -334,6 +334,13 @@ class Fileset(models.Model):
                 self.storage_alias)]
         return sorted([s.split('@')[-1] for s in snapshots])
 
+    def get_next_snapshot_name(self):
+        if not hasattr(self, '_next_snapshot_name'):
+            now = datetime.utcnow()
+            # XXX: yuck
+            self._next_snapshot_name = now.strftime('daily-%Y%m%d%H%M')
+        return self._next_snapshot_name
+
     def snapshot_create(self):
         # Add logica what kind of snapshot
         # First we need to know what we have
@@ -358,8 +365,10 @@ class Fileset(models.Model):
             snaplist.append(now.strftime('yearly-%Y%m%d%H%M'))
 
         for snapname in snaplist:
-            logger.info("Created: %s" % self.storage.snapshot_create(
-                self.dataset_name, snapname=snapname))
+            fs_snapname = self.storage.snapshot_create(
+                self.dataset_name, snapname=snapname)
+            logger.info('Created: %s' % fs_snapname)
+
         return snaplist
 
     def should_snapshot(self, snapshot_list, snapshot_type, snapshot_date):

@@ -6,7 +6,6 @@ import time
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from functools import lru_cache
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -35,8 +34,6 @@ class ZfsStorage(OldStyleStorage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.poolname = self.config['POOLNAME']
-        # Create LRU cache for this instance of Zfs.
-        self.zfs_get_property = lru_cache(maxsize=32)(self.zfs_get_property)
 
     @classmethod
     def ensure_defaults(cls, config):
@@ -45,8 +42,9 @@ class ZfsStorage(OldStyleStorage):
             raise ImproperlyConfigured('Zfs storage requires a POOLNAME')
 
     def get_label(self):
-        used = int(self.zfs_get_property(self.poolname, 'used'))
-        available = int(self.zfs_get_property(self.poolname, 'available'))
+        used, available = [
+            int(i) for i in self.zfs_get_properties(
+                self.poolname, keys=('used', 'available'))]
 
         if used and available:
             pct = '{pct:.0f}%'.format(pct=(100 * (used / (used + available))))
@@ -57,16 +55,23 @@ class ZfsStorage(OldStyleStorage):
         return '{}, {}G free ({} used)'.format(self.name, available, pct)
 
     def get_datasets(self):
-        output = self._perform_binary_command(('list', '-Hpo', 'name,used'))
+        output = self._perform_binary_command((
+            'list', '-d', '1', '-t', 'filesystem,volume',
+            '-Hpo', 'name,used,type,planb:contains',
+            self.poolname))
 
         datasets = Datasets()
         for line in output.rstrip().split('\n'):
-            dataset_name, used = line.split('\t')
+            dataset_name, used, type_, contains = line.split('\t')
+            if dataset_name == self.poolname:
+                continue
 
-            if dataset_name.startswith(self.poolname + '/'):
-                dataset = ZfsDataset(backend=self, name=dataset_name)
-                dataset.set_disk_usage(int(used))
-                datasets.append(dataset)
+            assert dataset_name.startswith(self.poolname), (
+                dataset_name, self.poolname)
+            dataset = ZfsDataset(backend=self, name=dataset_name)
+            dataset.set_dataset_type(type_, contains)
+            dataset.set_disk_usage(int(used))
+            datasets.append(dataset)
 
         return datasets
 
@@ -77,6 +82,7 @@ class ZfsStorage(OldStyleStorage):
         return '{}/{}-{}'.format(self.poolname, namespace, name)
 
     def zfs_get_local_path(self, dataset_name):
+        # FIXME: this is yet another zfs_get_properties()
         cmd = ('get', '-Ho', 'value', 'mountpoint', dataset_name)
         try:
             out = self._perform_binary_command(cmd).rstrip('\r\n')
@@ -86,29 +92,32 @@ class ZfsStorage(OldStyleStorage):
             out = None
         return out
 
-    def zfs_get_property(
-            self, dataset_name, prop, output='value', snapname=None):
+    def zfs_get_properties(
+            self, dataset_name, keys, snapname=None):
         if snapname is not None:
             dataset_name = '{}@{}'.format(dataset_name, snapname)
+        property_names = ','.join(keys)
         cmd = (
-            'get', '-o', output, '-Hp', prop, dataset_name)
+            'get', '-Hpo', 'value', property_names, dataset_name)
         try:
-            out = self._perform_binary_command(cmd)
+            values = self._perform_binary_command(cmd)  # LF-separated
         except CalledProcessError as e:
             msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
             logger.warning(msg)
-            size = '0'
+            values = '0\n' * len(keys)  # YUCK.. odd default
         else:
-            size = out.strip()
+            output = values.split('\n')
+            assert len(output) == len(keys) + 1, (keys, repr(output))
+            output = [i.strip() for i in output[0:-1]]
 
-        return size
+        return output
 
     def zfs_get_used_size(self, dataset_name):
-        return int(self.zfs_get_property(dataset_name, 'used'))
+        return int(self.zfs_get_properties(dataset_name, keys=('used',))[0])
 
     def zfs_get_referenced_size(self, dataset_name, snapname=None):
-        return int(self.zfs_get_property(
-            dataset_name, 'referenced', snapname=snapname))
+        return int(self.zfs_get_properties(
+            dataset_name, keys=('referenced',), snapname=snapname)[0])
 
     def zfs_create(self, dataset_name):
         # For multi-slash paths, we may need to create parents as well.
@@ -167,7 +176,8 @@ class ZfsStorage(OldStyleStorage):
 
     def snapshot_list(self, dataset_name, typ=None):
         cmd = (
-            'list', '-r', '-H', '-t', 'snapshot', '-o', 'name', dataset_name)
+            'list', '-d', '1', '-H', '-t', 'snapshot', '-o', 'name',
+            dataset_name)
         try:
             out = self._perform_binary_command(cmd)
         except CalledProcessError as e:
@@ -266,6 +276,17 @@ class ZfsDataset(Dataset):
     # TODO/FIXME: check these methods and add them as NotImplemented to the
     # base
 
+    def can_read_files(self):
+        if not hasattr(self, '_dataset_type'):
+            self.set_dataset_type()
+        return self._dataset_type == ('filesystem', 'data')
+
+    def flush(self):
+        super().flush()
+
+        if hasattr(self, '_dataset_type'):
+            del self._dataset_type
+
     def ensure_exists(self):
         if self.backend.binary == '/bin/true':
             return
@@ -292,6 +313,25 @@ class ZfsDataset(Dataset):
             self.backend.zfs_unmount(self.name)
         except CalledProcessError:
             pass
+
+    def set_dataset_type(self, type=None, contains=None):
+        if type is None and contains is None:
+            type, contains = self.backend.zfs_get_properties(
+                self.name, keys=('type', 'planb:contains'))
+
+        # planb:contains used to be unset, defaults to 'data'
+        if contains == '-':
+            contains = 'data'
+
+        assert type in ('filesystem', 'volume'), (self.name, type)
+        assert contains in (
+            'data',         # a regular filesystem inside
+            'filesystems',  # subdirectories (individually synced)
+            # 'zvols',      # ...
+        ), 'Unexpected planb:contains {!r} for {!r}'.format(
+            contains, self.name)
+
+        self._dataset_type = (type, contains)
 
     @contextmanager
     def workon(self, data_path=None):

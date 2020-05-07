@@ -70,6 +70,10 @@ class Config(models.Model):
         # Add our own env.
         env['planb_fileset_id'] = str(self.fileset.id)
         env['planb_fileset_friendly_name'] = self.fileset.friendly_name
+        env['planb_snapshot_target'] = (
+            self.fileset.get_next_snapshot_name())
+        env['planb_storage_name'] = (
+            self.fileset.get_dataset().name)  # XXX! zfs? how do we know?
         env['planb_storage_destination'] = (
             self.fileset.get_dataset().get_data_path())
 

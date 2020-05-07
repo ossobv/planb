@@ -308,13 +308,22 @@ class FilesetRunner:
             fileset.pk, fileset.friendly_name))
         first_fail = fileset.first_fail
         transport = fileset.get_transport()
+        planned_snapshots = [fileset.get_next_snapshot_name()]  # XXX
         transport.run_transport()
+
+        # Flush dataset properties so we get fresh ones. Do before
+        # can_read_files().
+        dataset.flush()
 
         # Update snapshots.
         setproctitle('[backing up %d: %s]: snapshots' % (
             fileset.pk, fileset.friendly_name))
-        fileset.snapshot_rotate()
-        snapshots = fileset.snapshot_create()
+        if dataset.can_read_files():
+            # XXX: should not use can_read_files() here!
+            fileset.snapshot_rotate()
+            snapshots = fileset.snapshot_create()
+        else:
+            snapshots = planned_snapshots
 
         # Close the DB connection because it may be stale.
         connection.close()
@@ -384,6 +393,8 @@ class FilesetRunner:
 
         # Lock and open dataset for work.
         dataset = fileset.get_dataset()
+        if not dataset.can_read_files():
+            raise ValueError('Trying dutree listing on unsupported filesystem')
         path = dataset.get_snapshot_path(snapshot)
         try:
             with dataset.workon(path):

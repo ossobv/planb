@@ -110,6 +110,9 @@ class Dataset(object):
     def __repr__(self):
         return '<{}:{}>'.format(self.backend.name, self.name)
 
+    def flush(self):
+        self._disk_usage = None
+
     @property
     def exists_in_database(self):
         assert self._database_object is not None
@@ -140,6 +143,9 @@ class Dataset(object):
 
     def ensure_exists(self):
         pass
+
+    def can_read_files(self):
+        return False
 
     def get_data_path(self):
         raise NotImplementedError()

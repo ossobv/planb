@@ -1,9 +1,29 @@
 #!/bin/sh -eux
 
-# Usage: .../planb-zfssync root@MACHINE tank/X tank/Y rpool/abc/def
+# Usage: .../planb-zfssync [-qlz1] root@MACHINE tank/X tank/Y rpool/abc/def
 
 env >&2
 test -z "$planb_storage_name" && exit 3
+
+case "${1:-}" in
+-qlz1)
+    deflate=qlzip1
+    inflate=qlzcat1
+    shift
+    ;;
+-*)
+    echo "ERROR: Unknown compression $1" >&2
+    exit 3
+    ;;
+'')
+    echo "ERROR: Missing arguments.." >&2
+    exit 3
+    ;;
+*)
+    deflate=cat
+    inflate=cat
+    ;;
+esac
 
 # Is this the first time?
 dataset=$(sudo zfs get -Hpo value type "$planb_storage_name")
@@ -45,10 +65,11 @@ for remotepath in "$@"; do
         # Undo any local changes (properties?)
         sudo zfs rollback "$dst@$recent_snapshot"
         src_prev=$remotepath@$recent_snapshot
-        ssh $ssh_target sudo zfs send -i "$src_prev" "$src" |
-            sudo zfs recv "$dst"
+        ssh $ssh_target sudo zfs send -i "$src_prev" "$src" '|' "$deflate" |
+            "$inflate" | sudo zfs recv "$dst"
     else
-        ssh $ssh_target sudo zfs send "$src" | sudo zfs recv "$dst"
+        ssh $ssh_target sudo zfs send "$src" '|' "$deflate" |
+            "$inflate" | sudo zfs recv "$dst"
     fi
     # Disable mounting of individual filesystems on this mount point. As doing
     # so will mess up the parent mount.

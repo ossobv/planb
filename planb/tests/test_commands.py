@@ -138,10 +138,11 @@ TEST_CONFEXPORT_JSON = '''/* local-desktop */
 
 {
   "retention": {
-    "daily": 15,
-    "weekly": 3,
-    "monthly": 11,
-    "yearly": 1
+    "hourly": 0,
+    "daily": 16,
+    "weekly": 4,
+    "monthly": 12,
+    "yearly": 2
   },
   "schedule": "nightly",
   "paths": {
@@ -170,10 +171,11 @@ TEST_CONFEXPORT_YAML = '''---
 # local-desktop
 
 retention:
-  daily: 15
-  weekly: 3
-  monthly: 11
-  yearly: 1
+  hourly: 0
+  daily: 16
+  weekly: 4
+  monthly: 12
+  yearly: 2
 schedule: nightly
 paths:
   root: /
@@ -262,7 +264,7 @@ Reports per host below
 +-----------------------+--------------------------------------+
 | Average run time      | 0s                                   |
 +-----------------------+--------------------------------------+
-| Configured retention  | 15days, 3weeks, 11months, 1year      |
+| Configured retention  | 16 days, 4 weeks, 12 months, 2 years |
 +-----------------------+--------------------------------------+
 
 

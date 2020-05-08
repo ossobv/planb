@@ -20,11 +20,13 @@ class PlanbStorageTestCase(TestCase):
                 self.assertRaises(ImproperlyConfigured):
             load_pools()
 
-    def test_dummy_storage(self):
+    def get_dummy_storage(self):
         config = {'NAME': 'Dummy Storage'}
         DummyStorage.ensure_defaults(config)
-        storage = DummyStorage(config, alias='dummy')
+        return DummyStorage(config, alias='dummy')
 
+    def test_dummy_storage(self):
+        storage = self.get_dummy_storage()
         dataset = storage.get_dataset('my_dataset')
         dataset.ensure_exists()
         dataset.rename_dataset('new_name')
@@ -33,6 +35,77 @@ class PlanbStorageTestCase(TestCase):
         datasets = storage.get_datasets()
         self.assertEqual(len(datasets), 1)
         self.assertEqual(datasets[0].name, 'new_name')
+
+    def test_snapshot_rotate(self):
+        storage = self.get_dummy_storage()
+        dataset = storage.get_dataset('my_dataset')
+        dataset.ensure_exists()
+        dataset.snapshot_create('planb-20200102T0912')
+        dataset.snapshot_create('daily-202005021743')
+        dataset.snapshot_create('daily-202005031801')
+        dataset.snapshot_create('hello')
+        dataset.snapshot_create('planb-20200504T1458')
+        dataset.snapshot_create('daily-202005041602')
+        dataset.snapshot_create('planb-20200504T1655')
+        dataset.snapshot_create('planb-20200504T1700')
+        self.assertEqual(dataset.snapshot_list(), [
+            'planb-20200102T0912', 'daily-202005021743', 'daily-202005031801',
+            'hello', 'planb-20200504T1458', 'daily-202005041602',
+            'planb-20200504T1655', 'planb-20200504T1700',
+        ])
+        destroyed = dataset.snapshots_rotate(
+            retention_map={'h': 2, 'y': 1})
+        self.assertEqual(
+            destroyed, ['planb-20200504T1655', 'daily-202005031801',
+                        'daily-202005021743'])
+        self.assertEqual(dataset.snapshot_list(), [
+            'planb-20200102T0912', 'hello', 'planb-20200504T1458',
+            'daily-202005041602', 'planb-20200504T1700',
+        ])
+
+    def test_snapshot_rotate_migration(self):
+        # Test how the migration from multiple snapshots per backuprun to a
+        # single snapshot will remove redundant snapshots.
+        storage = self.get_dummy_storage()
+        dataset = storage.get_dataset('my_dataset')
+        dataset.ensure_exists()
+        dataset.snapshot_create('yearly-201805310543')
+        dataset.snapshot_create('monthly-201905180010')
+        dataset.snapshot_create('yearly-201906010002')
+        dataset.snapshot_create('monthly-201906190001')
+        dataset.snapshot_create('monthly-201907190002')
+        dataset.snapshot_create('monthly-201908190002')
+        dataset.snapshot_create('monthly-201909190002')
+        dataset.snapshot_create('monthly-201910190002')
+        dataset.snapshot_create('monthly-201911190002')
+        dataset.snapshot_create('monthly-201912192303')
+        dataset.snapshot_create('monthly-202001202303')
+        dataset.snapshot_create('monthly-202002212303')
+        dataset.snapshot_create('monthly-202003222302')
+        dataset.snapshot_create('weekly-202004182202')
+        dataset.snapshot_create('monthly-202004240906')
+        dataset.snapshot_create('daily-202004252249')
+        dataset.snapshot_create('weekly-202004252249')
+        dataset.snapshot_create('daily-202004262300')
+        dataset.snapshot_create('daily-202004272228')
+        dataset.snapshot_create('daily-202004282225')
+        dataset.snapshot_create('daily-202004292212')
+        dataset.snapshot_create('daily-202004302211')
+        dataset.snapshot_create('daily-202005012211')
+        dataset.snapshot_create('daily-202005022209')
+        dataset.snapshot_create('daily-202005032209')
+        dataset.snapshot_create('weekly-202005032209')
+        dataset.snapshot_create('daily-202005042209')
+        dataset.snapshot_create('daily-202005052208')
+        dataset.snapshot_create('daily-202005062205')
+        dataset.snapshot_create('daily-202005072205')
+        dataset.snapshot_create('daily-202005082204')
+        dataset.snapshot_create('daily-202005092203')
+        dataset.snapshot_create('daily-202005102206')
+        destroyed = dataset.snapshots_rotate(
+            {'y': 2, 'm': 12, 'w': 4, 'd': 16})
+        self.assertEqual(
+            destroyed, ['daily-202005032209', 'yearly-201906010002'])
 
     def test_zfs_storage(self):
         config = {

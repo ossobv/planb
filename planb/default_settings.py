@@ -211,3 +211,7 @@ LOGGING = {
         },
     }
 }
+
+PLANB_PREFIX = 'planb'
+PLANB_RETENTION = '2y,12m,4w,16d'
+PLANB_BLACKLIST_HOURS = '9-17'

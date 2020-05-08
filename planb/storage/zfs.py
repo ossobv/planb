@@ -1,11 +1,8 @@
 from contextlib import contextmanager
 import logging
 import os.path
-import re
 import time
 
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
 from functools import lru_cache
 
 from django.core.exceptions import ImproperlyConfigured
@@ -81,8 +78,8 @@ class ZfsStorage(OldStyleStorage):
         try:
             out = self._perform_binary_command(cmd).rstrip('\r\n')
         except CalledProcessError as e:
-            msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
-            logging.warning(msg)
+            logging.warning(
+                'Error while calling: %r, %s', cmd, e.output.strip())
             out = None
         return out
 
@@ -95,8 +92,8 @@ class ZfsStorage(OldStyleStorage):
         try:
             out = self._perform_binary_command(cmd)
         except CalledProcessError as e:
-            msg = 'Error while calling: %r, %s' % (cmd, e.output.strip())
-            logger.warning(msg)
+            logger.warning(
+                'Error while calling: %r, %s', cmd, e.output.strip())
             size = '0'
         else:
             size = out.strip()
@@ -135,7 +132,7 @@ class ZfsStorage(OldStyleStorage):
         self._perform_sudo_command(('chown', str(os.getuid()), path))
 
         # Log something.
-        logger.info('Created ZFS dataset: %s' % dataset_name)
+        logger.info('Created ZFS dataset: %s', dataset_name)
 
     def zfs_mount(self, dataset_name):
         # Even if we have user-powers on /dev/zfs, we still cannot call
@@ -159,13 +156,14 @@ class ZfsStorage(OldStyleStorage):
         snapshot_name = '{}@{}'.format(dataset_name, snapname)
         cmd = ('snapshot', snapshot_name)
         self._perform_binary_command(cmd)
+        logger.info('Created ZFS snapshot: %s', snapshot_name)
         return snapshot_name
 
     def snapshot_delete(self, dataset_name, snapname):
         cmd = ('destroy', '{}@{}'.format(dataset_name, snapname))
         self._perform_binary_command(cmd)
 
-    def snapshot_list(self, dataset_name, typ=None):
+    def snapshot_list(self, dataset_name):
         cmd = (
             'list', '-r', '-H', '-t', 'snapshot', '-o', 'name', dataset_name)
         try:
@@ -182,84 +180,11 @@ class ZfsStorage(OldStyleStorage):
             return []
 
         snapshots = []
-        if typ:
-            snapshot_rgx = re.compile(r'.*@{}\-\d+'.format(typ))
-        else:
-            snapshot_rgx = re.compile(r'^.*@\w+-\d+$')
         for snapshot in out.split('\n'):
-            if snapshot_rgx.match(snapshot):
+            if '@' in snapshot:
                 # Do not include the dataset in the snapshot name.
                 snapshots.append(snapshot.split('@', 1)[1])
         return snapshots
-
-    # Note: We use retention + 1 to calculate if we need to
-    # retain the backup, in this situation we won't run into
-    # situations where your data already gets cleaned up just
-    # because it's older than the relative delta.
-    # 1 montly retention:
-    # 1 jan: monthly created
-    # 1 febr: new monthly created
-    # 1 febr: old monthly deleted
-    # situation, you have data from yesterday and no monthly data
-    def snapshot_retain_daily(self, snapname, retention):
-        try:
-            dts = re.match(r'\w+-(\d+)', snapname).groups()[0]
-        except AttributeError:
-            return True  # Keep
-        datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-        return datetimestamp > (
-            datetime.now() - relativedelta(days=retention+1))
-
-    def snapshot_retain_weekly(self, snapname, retention):
-        try:
-            dts = re.match(r'\w+-(\d+)', snapname).groups()[0]
-        except AttributeError:
-            return True  # Keep
-        datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-        snapdate = datetime.date(datetimestamp)
-        today_a_week_ago = datetime.date(
-            datetime.now() - relativedelta(weeks=retention+1))
-        return snapdate >= today_a_week_ago
-
-    def snapshot_retain_monthly(self, snapname, retention):
-        try:
-            dts = re.match(r'\w+-(\d+)', snapname).groups()[0]
-        except AttributeError:
-            return True  # Keep
-
-        datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-        snapdate = datetime.date(datetimestamp)
-        today_a_month_ago = datetime.date(
-            datetime.now() - relativedelta(months=retention+1))
-        return snapdate >= today_a_month_ago
-
-    def snapshot_retain_yearly(self, snapname, retention):
-        try:
-            dts = re.match(r'\w+-(\d+)', snapname).groups()[0]
-        except AttributeError:
-            return True  # Keep
-        datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-        snapdate = datetime.date(datetimestamp)
-        today_a_year_ago = datetime.date(
-            datetime.now() - relativedelta(years=retention+1))
-        return snapdate >= today_a_year_ago
-
-    def snapshots_rotate(self, dataset_name, **kwargs):
-        snapshots = self.snapshot_list(dataset_name)
-        destroyed = []
-        logger.info('snapshots rotation for {}'.format(dataset_name))
-        for snapname in snapshots:
-            snaptype, dts = re.match(r'(\w+)-(\d+)', snapname).groups()
-            snapshot_retain_func = getattr(self,
-                                           'snapshot_retain_%s' % snaptype)
-            retention = kwargs.get('%s_retention' % snaptype)
-            if not snapshot_retain_func(snapname, retention):
-                self.snapshot_delete(dataset_name, snapname)
-                destroyed.append(snapname)
-                logger.info(
-                    'destroyed: %s@%s, past retention %s',
-                    dataset_name, snapname, retention)
-        return destroyed
 
 
 class ZfsDataset(Dataset):

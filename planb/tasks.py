@@ -209,10 +209,11 @@ class FilesetRunner:
     def conditional_run(self):
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
-        now = timezone.now()
-        if 9 <= now.hour < 17:
-            fileset = Fileset.objects.get(pk=self._fileset_id)
-            logger.info('[%s] Skipped because of office hours', fileset)
+        fileset = Fileset.objects.get(pk=self._fileset_id)
+        if fileset.is_in_blacklist_hours:
+            logger.info(
+                '[%s] Skipped because of blacklist hours: %s',
+                fileset, fileset.get_blacklist_hours())
             # We could retry this, but we don't need to. The jobs are
             # rescheduled every hour, so the next hour we'll arrive here
             # too and do the same time-check.
@@ -310,11 +311,11 @@ class FilesetRunner:
         transport = fileset.get_transport()
         transport.run_transport()
 
-        # Update snapshots.
+        # Rotate old snapshots and create a new snapshot.
         setproctitle('[backing up %d: %s]: snapshots' % (
             fileset.pk, fileset.friendly_name))
         fileset.snapshot_rotate()
-        snapshots = fileset.snapshot_create()
+        snapshot = fileset.snapshot_create()
 
         # Close the DB connection because it may be stale.
         connection.close()
@@ -333,7 +334,7 @@ class FilesetRunner:
             snapshot_size_listing = 'summary_disabled: 0'
         # XXX Include transport export in attributes.
         attributes = safe_dump(dict(
-            snapshots=snapshots,
+            snapshot=snapshot,
             do_snapshot_size_listing=fileset.do_snapshot_size_listing),
             default_flow_style=False)
 
@@ -378,9 +379,13 @@ class FilesetRunner:
         if getproctitle:
             oldproctitle = getproctitle()
 
-        # All snapshots point to the same data and there is always one.
+        # Retrieve the name of the snapshot created the backup run.
         attributes = safe_load(run.attributes)
-        snapshot = attributes['snapshots'][0]
+        try:
+            snapshot = attributes['snapshot']
+        except KeyError:
+            # Old backupruns could create multiple snapshots.
+            snapshot = attributes['snapshots'][0]
 
         # Lock and open dataset for work.
         dataset = fileset.get_dataset()

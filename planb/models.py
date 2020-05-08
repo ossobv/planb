@@ -1,30 +1,35 @@
 import logging
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.core.mail import mail_admins
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import RegexValidator
 from django.db.models.signals import post_save
 from django.db import models
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.functional import cached_property
-from django.utils.translation import ugettext_lazy as _, ngettext
+from django.utils.translation import ugettext_lazy as _, ngettext, gettext_noop
 
 from django_q.brokers.redis_broker import Redis
 
 from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
 from planb.storage import pools
-from planb.storage.base import DatasetNotFound
+from planb.storage.base import RETENTION_PERIOD_SECONDS, DatasetNotFound
 
 
 logger = logging.getLogger(__name__)
 
 BOGODATE = datetime(1970, 1, 2, tzinfo=timezone.utc)
+
+validate_retention = RegexValidator(
+    r'^(\d+[ymwdh],?)*$', message=_('Enter a valid value like 6m,4w,7d'))
+validate_blacklist_hours = RegexValidator(
+    r'^((\d+(?:-\d+)?,?)*|none)$', message=_(
+        'Enter a valid value like 2,9-17 or none to disable blacklist hours'))
 
 
 class TransportChoices(models.PositiveSmallIntegerField):
@@ -45,6 +50,32 @@ class HostGroup(models.Model):
         blank=True, null=True,
         help_text=_('Use a newline per emailaddress'))
     last_monthly_report = models.DateTimeField(blank=True, null=True)
+    notes = models.TextField(blank=True, help_text=_(
+        'Description, guidelines and agreements for the hostgroup.'))
+
+    blacklist_hours = models.CharField(
+        _('Blacklist hours'), max_length=31, blank=True,
+        validators=[validate_blacklist_hours], help_text=_(
+            'Specify hours during which backups are disabled. When left empty '
+            'the system blacklist hours are used.'))
+    retention = models.CharField(
+        max_length=31, blank=True, validators=[validate_retention],
+        help_text=_(
+            'The backup retention period using notation <n><period> separated '
+            'by comma: 1y,6m,3w,15d. When left empty the system retention '
+            'periods are used.'))
+
+    def get_blacklist_hours(self):
+        if self.blacklist_hours:
+            return self.blacklist_hours
+        return settings.PLANB_BLACKLIST_HOURS
+    get_blacklist_hours.short_description = _('Blacklist hours')
+
+    def get_retention(self):
+        if self.retention:
+            return self.retention
+        return settings.PLANB_RETENTION
+    get_retention.short_description = _('Retention')
 
     def __str__(self):
         return self.name
@@ -132,22 +163,17 @@ class Fileset(models.Model):
     is_running = models.BooleanField(default=False)
     is_queued = models.BooleanField(default=False)
 
-    daily_retention = models.IntegerField(
-        default=15,
-        validators=[MinValueValidator(1), MaxValueValidator(1000)],
-        help_text=_('How many daily\'s do we keep?'))
-    weekly_retention = models.IntegerField(
-        default=3,
-        validators=[MinValueValidator(0), MaxValueValidator(1000)],
-        help_text=_('How many weekly\'s do we keep?'))
-    monthly_retention = models.IntegerField(
-        default=11,
-        validators=[MinValueValidator(0), MaxValueValidator(1000)],
-        help_text=_('How many monthly\'s do we keep?'))
-    yearly_retention = models.IntegerField(
-        default=1,
-        validators=[MinValueValidator(0), MaxValueValidator(1000)],
-        help_text=_('How many yearly\'s do we keep?'))
+    blacklist_hours = models.CharField(
+        _('Blacklist hours'), max_length=31, blank=True,
+        validators=[validate_blacklist_hours], help_text=_(
+            'Specify hours during which backups are disabled. When left empty '
+            'the hostgroup blacklist hours are used.'))
+    retention = models.CharField(
+        max_length=31, blank=True, validators=[validate_retention],
+        help_text=_(
+            'The backup retention period using notation <n><period> separated '
+            'by comma: 1y,6m,3w,15d. When left empty the hostgroup retention '
+            'periods are used.'))
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
@@ -177,31 +203,79 @@ class Fileset(models.Model):
     def storage(self):
         return pools[self.storage_alias]
 
+    def get_blacklist_hours(self):
+        for blacklist_hours in (
+                self.blacklist_hours, self.hostgroup.blacklist_hours):
+            if blacklist_hours:
+                return blacklist_hours
+        return settings.PLANB_BLACKLIST_HOURS
+    get_blacklist_hours.short_description = _('Blacklist hours')
+
+    @property
+    def is_in_blacklist_hours(self):
+        # XXX should use fileset hosts localtime.
+        now = timezone.now()
+        for hour in self.get_blacklist_hours().split(','):
+            if '-' in hour:
+                start, end = map(int, hour.split('-'))
+                if start <= now.hour < end:
+                    return True
+            elif now.hour == int(hour):
+                return True
+        return False
+
+    def get_retention(self):
+        for retention in (self.retention, self.hostgroup.retention):
+            if retention:
+                return retention
+        return settings.PLANB_RETENTION
+    get_retention.short_description = _('Retention')
+
+    @property
+    def retention_map(self):
+        if not hasattr(self, '_retention_map'):
+            self._retention_map = dict(
+                (i[-1], int(i[:-1]))
+                for i in self.get_retention().split(',')
+            )
+        return self._retention_map
+
+    @property
+    def hourly_retention(self):
+        return self.retention_map.get('h', 0)
+
+    @property
+    def daily_retention(self):
+        return self.retention_map.get('d', 0)
+
+    @property
+    def weekly_retention(self):
+        return self.retention_map.get('w', 0)
+
+    @property
+    def monthly_retention(self):
+        return self.retention_map.get('m', 0)
+
+    @property
+    def yearly_retention(self):
+        return self.retention_map.get('y', 0)
+
     @property
     def retention_display(self):
-        retention = [
-            ngettext(
-                '%(days)dday', '%(days)ddays', self.daily_retention) % {
-                'days': self.daily_retention}]
-        if self.weekly_retention:
-            retention.append(
-                ngettext(
-                    '%(weeks)dweek', '%(weeks)dweeks',
-                    self.weekly_retention) % {
-                    'weeks': self.weekly_retention})
-        if self.monthly_retention:
-            retention.append(
-                ngettext(
-                    '%(months)dmonth', '%(months)dmonths',
-                    self.monthly_retention) % {
-                    'months': self.monthly_retention})
-        if self.yearly_retention:
-            retention.append(
-                ngettext(
-                    '%(years)dyear', '%(years)dyears',
-                    self.yearly_retention) % {
-                    'years': self.yearly_retention})
-        return ', '.join(retention)
+        name_map = {
+            'h': (gettext_noop('%(n)d hour'), gettext_noop('%(n)d hours')),
+            'd': (gettext_noop('%(n)d day'), gettext_noop('%(n)d days')),
+            'w': (gettext_noop('%(n)d week'), gettext_noop('%(n)d weeks')),
+            'm': (gettext_noop('%(n)d month'), gettext_noop('%(n)d months')),
+            'y': (gettext_noop('%(n)d year'), gettext_noop('%(n)d years')),
+        }
+        order = 'hdwmy'
+        return ', '.join(
+            ngettext(*name_map[period], self.retention_map[period]) % {
+                'n': self.retention_map[period]}
+            for period in sorted(self.retention_map, key=order.index)
+            if self.retention_map[period] > 0
+        )
 
     @property
     def total_size(self):
@@ -294,34 +368,28 @@ class Fileset(models.Model):
         if self.last_ok is None:
             return False
 
+        order = 'hdwmy'
+        for period in sorted(self.retention_map, key=order.index):
+            if self.retention_map[period] > 0:
+                period_in_seconds = RETENTION_PERIOD_SECONDS[period]
+                break
+        else:
+            logger.warning(
+                '[%s] Backup disabled by retention policy: %s',
+                self, self.retention)
+            return True
+
         now = timezone.now()
-        now_date_lo = timezone.localtime(now).date()
-        backup_date_lo = timezone.localtime(self.last_ok).date()
         seconds_since_last = (now - self.last_ok).total_seconds()
-
-        # If previous backup date is unequal to current date (both
-        # localtime) and the last backup was more than 8 hours ago, it
-        # is not recent.
-        # This should make the backups start around 00:00 (localtime).
-        if backup_date_lo < now_date_lo and (
-                seconds_since_last >= (8 * 3600)):
-            return False
-
-        # If the last backup was "started" (using average duration) more
-        # than 24 hours ago. If we decrease this, we can make the
-        # backups start sooner than 00:00.
-        if (seconds_since_last + self.average_duration) >= (24 * 3600):
+        seconds_to_stale = (seconds_since_last + self.average_duration)
+        if seconds_to_stale >= period_in_seconds:
             return False
 
         return True
 
     def snapshot_rotate(self):
         return self.storage.snapshots_rotate(
-            self.dataset_name,
-            daily_retention=self.daily_retention,
-            weekly_retention=self.weekly_retention,
-            monthly_retention=self.monthly_retention,
-            yearly_retention=self.yearly_retention)
+            self.dataset_name, retention_map=self.retention_map)
 
     def snapshot_list(self):
         return self.storage.snapshot_list(self.dataset_name)
@@ -335,51 +403,12 @@ class Fileset(models.Model):
         return sorted([s.split('@')[-1] for s in snapshots])
 
     def snapshot_create(self):
-        # Add logica what kind of snapshot
-        # First we need to know what we have
-        snapshots = self.storage.snapshot_list(self.dataset_name)
-        now = datetime.utcnow()
-        # Do we need a daily? We do, otherwise we wouldnt be here.
-        snaplist = [now.strftime('daily-%Y%m%d%H%M')]
-
-        # Do we need a weekly?
-        if self.weekly_retention and self.should_snapshot(
-                snapshots, 'weekly', (now - relativedelta(weeks=1))):
-            snaplist.append(now.strftime('weekly-%Y%m%d%H%M'))
-
-        # Do we need a monthly?
-        if self.monthly_retention and self.should_snapshot(
-                snapshots, 'monthly', (now - relativedelta(months=1))):
-            snaplist.append(now.strftime('monthly-%Y%m%d%H%M'))
-
-        # Do we need a yearly?
-        if self.yearly_retention and self.should_snapshot(
-                snapshots, 'yearly', (now - relativedelta(years=1))):
-            snaplist.append(now.strftime('yearly-%Y%m%d%H%M'))
-
-        for snapname in snaplist:
-            logger.info("Created: %s" % self.storage.snapshot_create(
-                self.dataset_name, snapname=snapname))
-        return snaplist
-
-    def should_snapshot(self, snapshot_list, snapshot_type, snapshot_date):
-        '''
-        Return True if there are no existing snapshots of `snapshot_type` after
-        `snapshot_date`.
-        '''
-        if not snapshot_list:
-            return True
-
-        snapshots = [
-            x for x in snapshot_list
-            if x.startswith(snapshot_type)]
-        if snapshots:
-            latest = sorted(snapshots)[-1]
-            dts = latest.split('-', 1)[1]
-            datetimestamp = datetime.strptime(dts, '%Y%m%d%H%M')
-            return bool(datetimestamp < snapshot_date)
-
-        return True
+        snapname = datetime.utcnow().strftime('%Y%m%dT%H%M')
+        if settings.PLANB_PREFIX:
+            snapname = '{}-{}'.format(settings.PLANB_PREFIX, snapname)
+        self.storage.snapshot_create(self.dataset_name, snapname=snapname)
+        logger.info('[%s] Created snapshot %s', self, snapname)
+        return snapname
 
     def signal_done(self, success):
         instance = Fileset.objects.get(pk=self.pk)

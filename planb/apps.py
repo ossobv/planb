@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.core import checks
 
 
 class PlanbAppConfig(AppConfig):
@@ -10,3 +11,6 @@ class PlanbAppConfig(AppConfig):
         from django.views import debug
         from .monkeypatch import PlanbExceptionReporter
         debug.ExceptionReporter = PlanbExceptionReporter
+
+        from .checks import check_planb_settings
+        checks.register(check_planb_settings)

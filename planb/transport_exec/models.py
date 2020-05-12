@@ -4,7 +4,7 @@ import shlex
 
 from django.db import connections, models
 from django.urls import reverse
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from planb.common.fields import CommandField
 from planb.common.subprocess2 import CalledProcessError, argsjoin, check_output

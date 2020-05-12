@@ -5,7 +5,7 @@ import shlex
 from django.conf import settings
 from django.db import connections, models
 from django.urls import reverse
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (

@@ -2,7 +2,7 @@ import os
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.utils.translation import ugettext as _
+from django.utils.translation import gettext as _
 
 from django_q.brokers import get_broker
 from django_q.cluster import Cluster, Sentinel

@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 from django.template.defaultfilters import filesizeformat
 
 from django.utils import timezone
-from django.utils.translation import ugettext as _
+from django.utils.translation import gettext as _
 
 from planb.models import Fileset, HostGroup
 

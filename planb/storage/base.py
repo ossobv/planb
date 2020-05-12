@@ -1,9 +1,33 @@
 from contextlib import contextmanager
+import datetime
 import logging
+import re
 
 from planb.common.subprocess2 import CalledProcessError, check_output
 
 logger = logging.getLogger(__name__)
+
+# regex to get the datetime from a snapshot name.
+# older snapshots had a period prefix which can be ignored.
+SNAPNAME_DATETIME_RE = re.compile(r'(?:\w+-)?(\d{8}T?\d{4})')
+
+RETENTION_PERIOD_SECONDS = {
+    'h': 3600,
+    'd': 24 * 3600,
+    'w': 7 * 24 * 3600,
+    'm': 30 * 24 * 3600,
+    'y': 365 * 24 * 3600,
+
+}
+
+
+def parse_snapshot_datetime(value):
+    for pattern in ('%Y%m%dT%H%M', '%Y%m%d%H%M'):
+        try:
+            return datetime.datetime.strptime(value, pattern)
+        except (TypeError, ValueError):
+            pass
+    raise ValueError('Invalid timestamp')
 
 
 class DatasetNotFound(Exception):
@@ -35,14 +59,103 @@ class Storage(object):
     def snapshot_create(self, dataset_name, snapname):
         raise NotImplementedError()
 
+    def snapshot_delete(self, dataset_name, snapname):
+        raise NotImplementedError()
+
     def snapshot_list(self, dataset_name):
         raise NotImplementedError()
 
-    def snapshots_rotate(self, dataset_name, **kwargs):
+    def snapshots_rotate(self, dataset_name, retention_map):
         '''
         Rotate the snapshots according to the retention parameters in kwargs.
         '''
-        raise NotImplementedError()
+        snapshots = []
+        logger.info(
+            '[%s] Snapshots rotation using retention: %s',
+            dataset_name, retention_map)
+        for snapname in self.snapshot_list(dataset_name):
+            try:
+                dts = SNAPNAME_DATETIME_RE.match(snapname).group(1)
+                dts = parse_snapshot_datetime(dts)
+            except (AttributeError, TypeError, ValueError):
+                logger.info(
+                    '[%s] Keeping manual snapshot %s', dataset_name, snapname)
+                continue
+            snapshots.append((dts, snapname))
+
+        snapshots = list(sorted(snapshots, reverse=True))
+        logger.info(
+            '[%s] Available snapshots: %s', dataset_name,
+            [i[1] for i in snapshots])
+        if not snapshots:
+            return []
+
+        keep_snapshots = self._get_snapshots_to_keep(
+            dataset_name, snapshots, retention_map)
+        logger.info('[%s] Keeping snapshots: %s', dataset_name, keep_snapshots)
+
+        # Delete the snapshots which are not kept.
+        destroyed = []
+        for dts, snapname in snapshots:
+            if snapname in keep_snapshots:
+                continue
+            destroyed.append(snapname)
+            self.snapshot_delete(dataset_name, snapname)
+            logger.info('[%s] Destroyed snapshot: %s', dataset_name, snapname)
+        return destroyed
+
+    def _get_optimal_snapshot_datetimes(self, start_time, retention_map):
+        datetimes = []
+        for period, retention in retention_map.items():
+            period_in_seconds = RETENTION_PERIOD_SECONDS[period]
+            for i in range(1, retention + 1):
+                datetimes.append(
+                    start_time - datetime.timedelta(
+                        seconds=period_in_seconds * i)
+                )
+        return sorted(datetimes, reverse=True)
+
+    def _get_snapshots_to_keep(self, dataset_name, snapshots, retention_map):
+        # Go through all snapshots and decide which should be kept.
+        snapshots = list(sorted(snapshots, reverse=True))
+        current_snapshot = snapshots[0]
+        # Always keep the most recent snapshot.
+        keep_snapshots = {current_snapshot[1]}
+        desired_snapshots = self._get_optimal_snapshot_datetimes(
+            current_snapshot[0], retention_map)
+        logger.debug(
+            '[%s] Desired snapshots: %s', dataset_name,
+            [i.strftime('%Y%m%dT%H%M') for i in desired_snapshots])
+        # For each desired snapshot we need to keep the best matching snapshot
+        # and the snapshot that will become the best match.
+        for desired_dts in desired_snapshots:
+            best_snapshot = best_difference = None
+            for i, (dts, snapname) in enumerate(snapshots[1:], -1):
+                difference = (desired_dts - dts).total_seconds()
+                if (best_difference is None
+                        or abs(difference) < abs(best_difference)):
+                    best_difference = difference
+                    best_snapshot = snapname
+                elif abs(difference) > abs(best_difference):
+                    if best_difference > 0:
+                        # The snapshot is going stale, include a new snapshot.
+                        fresh_snapname = snapshots[i][1]
+                        logger.debug(
+                            '[%s] Select %s as fresh match for %s',
+                            dataset_name, fresh_snapname,
+                            desired_dts.strftime('%Y%m%dT%H%M'))
+                        keep_snapshots.add(fresh_snapname)
+                    break
+            if best_snapshot is not None:
+                logger.debug(
+                    '[%s] Select %s as best match for %s with diff:%d',
+                    dataset_name, best_snapshot,
+                    desired_dts.strftime('%Y%m%dT%H%M'), best_difference)
+                keep_snapshots.add(best_snapshot)
+            if len(keep_snapshots) == len(snapshots):
+                break
+        # Return with the same ordering.
+        return [i[1] for i in snapshots if i[1] in keep_snapshots]
 
 
 class Datasets(list):
@@ -155,6 +268,18 @@ class Dataset(object):
 
     def rename_dataset(self, new_dataset_name):
         raise NotImplementedError()
+
+    def snapshot_create(self, snapname):
+        return self.backend.snapshot_create(self.name, snapname)
+
+    def snapshot_delete(self, snapname):
+        return self.backend.snapshot_delete(self.name, snapname)
+
+    def snapshot_list(self, snapname):
+        return self.backend.snapshot_list(self.name)
+
+    def snapshots_rotate(self, retention_map):
+        return self.backend.snapshots_rotate(self.name, retention_map)
 
     @contextmanager
     def workon(self, data_path=None):

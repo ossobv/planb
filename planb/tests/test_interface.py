@@ -19,7 +19,7 @@ class InterfaceTestCase(TestCase):
         response = self.client.get('/planb/hostgroup/')
         row = response.context['results'][0]
         self.assertIn(hostgroup.name, row[1])
-        self.assertIn(fileset.friendly_name, row[3])
+        self.assertIn(fileset.friendly_name, row[5])
 
         response = self.client.get('/planb/fileset/')
         row = response.context['results'][0]
@@ -55,10 +55,6 @@ class InterfaceTestCase(TestCase):
         data = {
             'friendly_name': 'my-host',
             'hostgroup': hostgroup.pk,
-            'daily_retention': 1,
-            'weekly_retention': 1,
-            'monthly_retention': 1,
-            'yearly_retention': 1,
         }
         response = self.client.post(
             '/planb/fileset/{}/change/'.format(fileset.pk), data, follow=True)

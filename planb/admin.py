@@ -8,7 +8,7 @@ from django.utils.translation import ugettext as _
 
 from planb.common import human
 
-from .forms import FilesetAdminForm
+from .forms import FilesetAdminForm, HostGroupAdminForm
 from .models import BOGODATE, BackupRun, HostGroup, Fileset
 from .tasks import async_backup_job, async_rename_job
 
@@ -30,7 +30,10 @@ class BackupRunAdmin(admin.ModelAdmin):
 
 
 class HostGroupAdmin(admin.ModelAdmin):
-    list_display = ('name', 'notify_email', 'filesets')
+    form = HostGroupAdminForm
+    list_display = (
+        'name', 'notify_email', 'get_retention', 'get_blacklist_hours',
+        'filesets')
 
     def filesets(self, object):
         return format_html_join(
@@ -57,7 +60,7 @@ class HostGroupAdmin(admin.ModelAdmin):
 class FilesetAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': (
-            'friendly_name', 'hostgroup', 'storage_alias',
+            'friendly_name', 'hostgroup', 'storage_alias', 'dataset_name',
             'notes', 'is_enabled',
         )}),
         ('Status', {'fields': (
@@ -65,19 +68,15 @@ class FilesetAdmin(admin.ModelAdmin):
             'last_run', 'first_fail', 'is_queued', 'is_running',
             'last_error', 'last_ok_snapshot',
         )}),
-        ('Retention', {'fields': (
-            'daily_retention', 'weekly_retention',
-            'monthly_retention', 'yearly_retention',
-        )}),
         ('Advanced', {'fields': (
-            'do_snapshot_size_listing',
+            'blacklist_hours', 'retention', 'do_snapshot_size_listing',
         )}),
     )
 
     readonly_fields = tuple(
         # All status fields are never writable by the admin.
         [dict_ for title, dict_ in fieldsets
-         if title == 'Status'][0]['fields'])
+         if title == 'Status'][0]['fields']) + ('dataset_name',)
     readonly_change_fields = (
         # Don't allow _direct_ changes to storage_alias and storage_path as
         # they are used for the storage location. Friendly name and hostgroup
@@ -88,7 +87,7 @@ class FilesetAdmin(admin.ModelAdmin):
 
     list_display = (
         'friendly_name', 'hostgroup', 'tags',
-        'disk_usage', 'run_time', 'retention',
+        'disk_usage', 'run_time', 'get_retention', 'get_blacklist_hours',
         'last_ok_', 'first_fail_',
         'storage_alias', 'enabled_x', 'queued_q', 'running_r',
     )
@@ -198,18 +197,6 @@ class FilesetAdmin(admin.ModelAdmin):
     running_r.admin_order_field = 'is_running'
     running_r.boolean = True
     running_r.short_description = 'R'
-
-    def retention(self, object):
-        ret = []
-        if object.daily_retention:
-            ret.append('%dd' % object.daily_retention)
-        if object.weekly_retention:
-            ret.append('%dw' % object.weekly_retention)
-        if object.monthly_retention:
-            ret.append('%dm' % object.monthly_retention)
-        if object.yearly_retention:
-            ret.append('%dy' % object.yearly_retention)
-        return '/'.join(ret)
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)

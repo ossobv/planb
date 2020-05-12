@@ -209,10 +209,11 @@ class FilesetRunner:
     def conditional_run(self):
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
-        now = timezone.now()
-        if 9 <= now.hour < 17:
-            fileset = Fileset.objects.get(pk=self._fileset_id)
-            logger.info('[%s] Skipped because of office hours', fileset)
+        fileset = Fileset.objects.get(pk=self._fileset_id)
+        if fileset.is_in_blacklist_hours:
+            logger.info(
+                '[%s] Skipped because of blacklist hours: %s',
+                fileset, fileset.get_blacklist_hours())
             # We could retry this, but we don't need to. The jobs are
             # rescheduled every hour, so the next hour we'll arrive here
             # too and do the same time-check.
@@ -308,7 +309,7 @@ class FilesetRunner:
             fileset.pk, fileset.friendly_name))
         first_fail = fileset.first_fail
         transport = fileset.get_transport()
-        planned_snapshots = [fileset.get_next_snapshot_name()]  # XXX
+        planned_snapshot = fileset.get_next_snapshot_name()  # XXX
         transport.run_transport()
 
         # Flush dataset properties so we get fresh ones. Do before
@@ -321,9 +322,9 @@ class FilesetRunner:
         if dataset.can_read_files():
             # XXX: should not use can_read_files() here!
             fileset.snapshot_rotate()
-            snapshots = fileset.snapshot_create()
+            snapshot = fileset.snapshot_create()
         else:
-            snapshots = planned_snapshots
+            snapshot = planned_snapshot
 
         # Close the DB connection because it may be stale.
         connection.close()
@@ -342,7 +343,7 @@ class FilesetRunner:
             snapshot_size_listing = 'summary_disabled: 0'
         # XXX Include transport export in attributes.
         attributes = safe_dump(dict(
-            snapshots=snapshots,
+            snapshot=snapshot,
             do_snapshot_size_listing=fileset.do_snapshot_size_listing),
             default_flow_style=False)
 
@@ -387,9 +388,13 @@ class FilesetRunner:
         if getproctitle:
             oldproctitle = getproctitle()
 
-        # All snapshots point to the same data and there is always one.
+        # Retrieve the name of the snapshot created the backup run.
         attributes = safe_load(run.attributes)
-        snapshot = attributes['snapshots'][0]
+        try:
+            snapshot = attributes['snapshot']
+        except KeyError:
+            # Old backupruns could create multiple snapshots.
+            snapshot = attributes['snapshots'][0]
 
         # Lock and open dataset for work.
         dataset = fileset.get_dataset()

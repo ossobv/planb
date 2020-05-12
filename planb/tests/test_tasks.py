@@ -44,11 +44,11 @@ class TaskTestCase(TestCase):
             conditional_run(fileset.pk)
             self.assertEqual(
                 log.output,
-                [message(fileset, 'Skipped because of office hours')])
+                [message(fileset, 'Skipped because of blacklist hours: 9-17')])
 
         RsyncConfigFactory(fileset=fileset)
         # Outside work hours it will immediatly run the backup.
-        with patch('planb.tasks.timezone') as m, \
+        with patch('planb.models.timezone') as m, \
                 patch('planb.transport_rsync.models.check_output') as c:
             m.now.return_value = make_aware(
                 datetime.datetime(2019, 1, 1, 3, 0))
@@ -102,10 +102,20 @@ class TaskTestCase(TestCase):
     def test_dutree_run(self):
         # Dutree is spawned at the end of the unconditional_run.
         fileset = FilesetFactory(storage_alias='dummy')
-        # All successful backups have at least one snapshot and the dutree task
-        # only spawns when do_snapshot_size_listing=True on the fileset.
-        # This attribuut is copied to the backuprun so it can run independent
+        # All successful backups have one snapshot and the dutree task only
+        # spawns when do_snapshot_size_listing=True on the fileset.
+        # This attribute is copied to the backuprun so it can run independent
         # of fileset changes made by the user.
+        run = BackupRunFactory(
+            fileset=fileset,
+            attributes='do_snapshot_size_listing: true\nsnapshot: daily')
+        with self.assertLogs('planb.tasks', level='INFO') as log:
+            dutree_run(fileset.pk, run.pk)
+            self.assertEqual(
+                log.output, [
+                    message(fileset, 'Starting dutree scan'),
+                    message(fileset, 'Completed dutree scan')])
+        # XXX Previously a backup could create multiple snapshots.
         run = BackupRunFactory(
             fileset=fileset,
             attributes='do_snapshot_size_listing: true\nsnapshots:\n- daily')

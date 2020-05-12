@@ -26,12 +26,13 @@ class DummyStorage(Storage):
         dataset = self.get_dataset(dataset_name)
         return dataset.snapshot_create(snapname)
 
+    def snapshot_delete(self, dataset_name, snapname):
+        dataset = self.get_dataset(dataset_name)
+        return dataset.snapshot_delete(snapname)
+
     def snapshot_list(self, dataset_name):
         dataset = self.get_dataset(dataset_name)
         return dataset.snapshot_list()
-
-    def snapshots_rotate(self, dataset_name, **kwargs):
-        pass
 
 
 class DummyDataset(Dataset):
@@ -61,8 +62,13 @@ class DummyDataset(Dataset):
         self.backend._datasets[self.name] = self
 
     def snapshot_create(self, snapname):
-        if snapname not in self._snapshots:
-            self._snapshots.append(snapname)
+        if snapname in self._snapshots:
+            raise ValueError('Snapshot with name {} exists'.format(snapname))
+        self._snapshots.append(snapname)
+        return snapname
+
+    def snapshot_delete(self, snapname):
+        self._snapshots.remove(snapname)
         return snapname
 
     def snapshot_list(self):

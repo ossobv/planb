@@ -10,6 +10,11 @@ v1.7_dev - *XXXX-XX-XX*
 - Refactor ``Storage`` and ``Dataset`` classes.
 - Consolidate storage location in ``Fileset`` field ``dataset_name``.
 - Refactor ``Storage`` configuration.
+- Refactor backup retention.
+- Add support for hourly backups.
+- Add configurable blacklist hours.
+- Refactor snapshots, drop retention prefixes.
+- A backup now creates one snapshot.
 
 **Tasks**
 
@@ -29,7 +34,11 @@ v1.7_dev - *XXXX-XX-XX*
 - Cleanup ZFS workdir switching.
 - Fix many bugs.
 - Add many tests.
-- Add tox and travis-ci configuration
+- Add tox and travis-ci configuration.
+- Drop python 3.5 support.
+- Fix compatibility with latest django-q.
+- Fix model validation with choices in django>=2.1.
+- Exclude manual backups from triggering failure.
 
 
 v1.6.post1 - *2019-03-20*

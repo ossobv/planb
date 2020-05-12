@@ -5,12 +5,44 @@ from django.utils.translation import ugettext as _
 
 from planb.storage import pools
 
-from .models import Fileset
+from .models import Fileset, HostGroup
+
+
+class HostGroupAdminForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['blacklist_hours'].help_text = _(
+            'Specify hours during which backups are disabled using notation '
+            'h,h-h. When left empty the system blacklist hours {} are used.'
+            ).format(
+                settings.PLANB_BLACKLIST_HOURS)
+        self.fields['retention'].help_text = _(
+            'The backup retention period using notation <n><period> separated '
+            'by comma: 1y,6m,3w,15d. When left empty the system retention '
+            '{} is used.').format(settings.PLANB_RETENTION)
+
+    class Meta:
+        model = HostGroup
+        fields = '__all__'
 
 
 class FilesetAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            blacklist_hours = self.instance.hostgroup.get_blacklist_hours()
+            retention = self.instance.hostgroup.get_retention()
+        else:
+            blacklist_hours = settings.PLANB_BLACKLIST_HOURS
+            retention = settings.PLANB_RETENTION
+        self.fields['blacklist_hours'].help_text = _(
+            'Specify hours during which backups are disabled using notation '
+            'h,h-h. When left empty the hostgroup blacklist hours {} are used.'
+            ).format(blacklist_hours)
+        self.fields['retention'].help_text = _(
+            'The backup retention period using notation <n><period> separated '
+            'by comma: 1y,6m,3w,15d. When left empty the hostgroup retention '
+            '{} is used.').format(retention)
 
         if 'storage_alias' in self.fields:
             storage_choices = tuple(

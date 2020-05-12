@@ -11,6 +11,9 @@ class ConfigAdmin(admin.ModelAdmin):
         (None, {'fields': (
             'fileset', 'transport_command',
         )}),
+        ('Advanced options', {'fields': (
+            'can_create_snapshot', 'can_rotate_snapshot',
+        )}),
     )
 
     form = modelform_factory(Config, form=FilesetRefForm)

@@ -50,20 +50,20 @@ class ZfsStorage(OldStyleStorage):
 
         return '{}, {}G free ({} used)'.format(self.name, available, pct)
 
-    def get_datasets(self):
+    def get_datasets(self, parent=None):
+        parent = self.poolname if parent is None else parent
         output = self._perform_binary_command((
             'list', '-d', '1', '-t', 'filesystem,volume',
             '-Hpo', 'name,used,type,planb:contains',
-            self.poolname))
+            parent))
 
         datasets = Datasets()
         for line in output.rstrip().split('\n'):
             dataset_name, used, type_, contains = line.split('\t')
-            if dataset_name == self.poolname:
+            if dataset_name == parent:
                 continue
 
-            assert dataset_name.startswith(self.poolname), (
-                dataset_name, self.poolname)
+            assert dataset_name.startswith(parent), (dataset_name, parent)
             dataset = ZfsDataset(backend=self, name=dataset_name)
             dataset.set_dataset_type(type_, contains)
             dataset.set_disk_usage(int(used))
@@ -200,10 +200,13 @@ class ZfsDataset(Dataset):
     # TODO/FIXME: check these methods and add them as NotImplemented to the
     # base
 
-    def can_read_files(self):
+    def has_child_datasets(self):
         if not hasattr(self, '_dataset_type'):
             self.set_dataset_type()
-        return self._dataset_type == ('filesystem', 'data')
+        return self._dataset_type == ('filesystem', 'filesystems')
+
+    def get_child_datasets(self):
+        return self.backend.get_datasets(self.name)
 
     def flush(self):
         super().flush()

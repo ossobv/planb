@@ -10,6 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (
     CalledProcessError, argsjoin, check_output)
+from planb.transport import AbstractTransport
 
 from .apps import TABLE_PREFIX
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
@@ -29,10 +30,7 @@ class TransportChoices(models.PositiveSmallIntegerField):
         super().__init__(default=self.SSH, choices=choices)
 
 
-class Config(models.Model):
-    fileset = models.OneToOneField(
-        'planb.Fileset', on_delete=models.CASCADE, related_name='+')
-
+class Config(AbstractTransport):
     host = models.CharField(max_length=254)
 
     src_dir = models.CharField(max_length=254, default='/')
@@ -70,19 +68,6 @@ class Config(models.Model):
 
     def __str__(self):
         return 'rsync transport {}'.format(self.host)
-
-    def clone(self, **override):
-        # See: https://github.com/django/django/commit/a97ecfdea8
-        copy = self.__class__.objects.get(pk=self.pk)
-        copy.pk = None
-        copy.fileset = None
-
-        # Use the overrides.
-        for key, value in override.items():
-            setattr(copy, key, value)
-
-        copy.save()
-        return copy
 
     def get_change_url(self):
         return reverse('admin:transport_rsync_config_change', args=(self.pk,))

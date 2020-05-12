@@ -8,7 +8,7 @@ from planb.common.subprocess2 import CalledProcessError, check_output
 logger = logging.getLogger(__name__)
 
 # regex to get the datetime from a snapshot name.
-# older snapshots had a period prefix which can be ignored.
+# the optional prefix can be ignored.
 SNAPNAME_DATETIME_RE = re.compile(r'(?:\w+-)?(\d{8}T?\d{4})')
 
 RETENTION_PERIOD_SECONDS = {
@@ -67,7 +67,7 @@ class Storage(object):
 
     def snapshots_rotate(self, dataset_name, retention_map):
         '''
-        Rotate the snapshots according to the retention parameters in kwargs.
+        Rotate the snapshots according to the retention parameters.
         '''
         snapshots = []
         logger.info(
@@ -248,7 +248,7 @@ class Dataset(object):
         assert self._database_object is None
         self._database_object = database_object
 
-    def get_referenced_size(self):
+    def get_referenced_size(self, snapname=None):
         raise NotImplementedError()
 
     def get_used_size(self):
@@ -257,8 +257,11 @@ class Dataset(object):
     def ensure_exists(self):
         pass
 
-    def can_read_files(self):
-        return True
+    def has_child_datasets(self):
+        return False
+
+    def get_child_datasets(self):
+        raise NotImplementedError()
 
     def get_data_path(self):
         raise NotImplementedError()
@@ -279,7 +282,14 @@ class Dataset(object):
         return self.backend.snapshot_list(self.name)
 
     def snapshots_rotate(self, retention_map):
-        return self.backend.snapshots_rotate(self.name, retention_map)
+        if self.has_child_datasets():
+            destroyed = []
+            for dataset in self.get_child_datasets():
+                destroyed.extend(
+                    self.backend.snapshots_rotate(dataset.name, retention_map))
+            return destroyed
+        else:
+            return self.backend.snapshots_rotate(self.name, retention_map)
 
     @contextmanager
     def workon(self, data_path=None):

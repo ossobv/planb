@@ -2,22 +2,20 @@ import logging
 import os
 import shlex
 
-from django.db import connections, models
+from django.db import connections
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from planb.common.fields import CommandField
 from planb.common.subprocess2 import CalledProcessError, argsjoin, check_output
+from planb.transport import AbstractTransport
 
 from .apps import TABLE_PREFIX
 
 logger = logging.getLogger(__name__)
 
 
-class Config(models.Model):
-    fileset = models.OneToOneField(
-        'planb.Fileset', on_delete=models.CASCADE, related_name='+')
-
+class Config(AbstractTransport):
     transport_command = CommandField(help_text=_(  # FIXME: add env docs
         'Program to run to do the transport (data import). It is '
         'split by spaces and fed to execve(). '
@@ -28,19 +26,6 @@ class Config(models.Model):
 
     def __str__(self):
         return 'exec transport {}'.format(self.transport_command)
-
-    def clone(self, **override):
-        # See: https://github.com/django/django/commit/a97ecfdea8
-        copy = self.__class__.objects.get(pk=self.pk)
-        copy.pk = None
-        copy.fileset = None
-
-        # Use the overrides.
-        for key, value in override.items():
-            setattr(copy, key, value)
-
-        copy.save()
-        return copy
 
     def get_change_url(self):
         return reverse('admin:transport_exec_config_change', args=(self.pk,))

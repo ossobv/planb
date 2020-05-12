@@ -309,22 +309,23 @@ class FilesetRunner:
             fileset.pk, fileset.friendly_name))
         first_fail = fileset.first_fail
         transport = fileset.get_transport()
-        planned_snapshot = fileset.get_next_snapshot_name()  # XXX
+        # Fixate the snapshot name if the transport creates snapshots.
+        planned_snapshot = fileset.get_next_snapshot_name()
         transport.run_transport()
 
         # Flush dataset properties so we get fresh ones. Do before
-        # can_read_files().
+        # has_child_datasets().
         dataset.flush()
 
         # Update snapshots.
         setproctitle('[backing up %d: %s]: snapshots' % (
             fileset.pk, fileset.friendly_name))
-        if dataset.can_read_files():
-            # XXX: should not use can_read_files() here!
+        if not transport.can_rotate_snapshot:
             fileset.snapshot_rotate()
-            snapshot = fileset.snapshot_create()
-        else:
+        if transport.can_create_snapshot:
             snapshot = planned_snapshot
+        else:
+            snapshot = fileset.snapshot_create()
 
         # Close the DB connection because it may be stale.
         connection.close()
@@ -398,8 +399,33 @@ class FilesetRunner:
 
         # Lock and open dataset for work.
         dataset = fileset.get_dataset()
-        if not dataset.can_read_files():
-            raise ValueError('Trying dutree listing on unsupported filesystem')
+        try:
+            if dataset.has_child_datasets():
+                self._snapshot_info_from_child_datasets(dataset, snapshot, run)
+            else:
+                self._snapshot_info_from_dutree(
+                    fileset, dataset, snapshot, run)
+        finally:
+            if getproctitle:
+                setproctitle(oldproctitle)
+
+    def _snapshot_info_from_child_datasets(self, dataset, snapshot, run):
+        snapshot_size = 524288
+        snapshot_size_listing = []
+        for subset in dataset.get_child_datasets():
+            size = subset.get_referenced_size(snapshot)
+            snapshot_size += size
+            snapshot_size_listing.append(
+                '{}: {}'.format(
+                    yaml_safe_str(subset.name[len(dataset.name):]),
+                    yaml_digits(size))
+            )
+        BackupRun.objects.filter(pk=run.pk).update(
+            snapshot_size_mb=snapshot_size >> 20,
+            snapshot_size_listing='\n'.join(snapshot_size_listing),
+        )
+
+    def _snapshot_info_from_dutree(self, fileset, dataset, snapshot, run):
         path = dataset.get_snapshot_path(snapshot)
         try:
             with dataset.workon(path):
@@ -431,9 +457,6 @@ class FilesetRunner:
             )
         else:
             logger.info('[%s] Completed dutree scan', fileset)
-        finally:
-            if getproctitle:
-                setproctitle(oldproctitle)
 
     def finalize_run(self, success, resultset):
         if not self._fileset_lock.is_acquired():

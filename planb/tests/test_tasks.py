@@ -115,7 +115,7 @@ class TaskTestCase(TestCase):
                 log.output, [
                     message(fileset, 'Starting dutree scan'),
                     message(fileset, 'Completed dutree scan')])
-        # XXX Previously a backup could create multiple snapshots.
+        # Previously a backup could create multiple snapshots.
         run = BackupRunFactory(
             fileset=fileset,
             attributes='do_snapshot_size_listing: true\nsnapshots:\n- daily')

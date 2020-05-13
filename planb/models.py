@@ -404,7 +404,7 @@ class Fileset(models.Model):
 
     def get_next_snapshot_name(self):
         if not hasattr(self, '_next_snapshot_name'):
-            snapname = datetime.utcnow().strftime('%Y%m%dT%H%M')
+            snapname = datetime.utcnow().strftime('%Y%m%dT%H%MZ')  # yuck
             if settings.PLANB_PREFIX:
                 snapname = '{}-{}'.format(settings.PLANB_PREFIX, snapname)
             # XXX: yuck
@@ -412,7 +412,7 @@ class Fileset(models.Model):
         return self._next_snapshot_name
 
     def snapshot_create(self):
-        snapname = datetime.utcnow().strftime('%Y%m%dT%H%M')
+        snapname = datetime.utcnow().strftime('%Y%m%dT%H%MZ')  # XXX: see yuck
         if settings.PLANB_PREFIX:
             snapname = '{}-{}'.format(settings.PLANB_PREFIX, snapname)
         self.storage.snapshot_create(self.dataset_name, snapname=snapname)

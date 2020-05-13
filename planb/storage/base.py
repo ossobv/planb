@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # regex to get the datetime from a snapshot name.
 # the optional prefix can be ignored.
-SNAPNAME_DATETIME_RE = re.compile(r'(?:\w+-)?(\d{8}T?\d{4})')
+SNAPNAME_DATETIME_RE = re.compile(r'^(?:\w+-)?(\d{8}T?\d{4}Z?)$')
 
 RETENTION_PERIOD_SECONDS = {
     'h': 3600,
@@ -22,7 +22,10 @@ RETENTION_PERIOD_SECONDS = {
 
 
 def parse_snapshot_datetime(value):
-    for pattern in ('%Y%m%dT%H%M', '%Y%m%d%H%M'):
+    for pattern in (
+            '%Y%m%dT%H%MZ',  # planb-newTtimeZ
+            '%Y%m%dT%H%M',   # planb-veryTemporary
+            '%Y%m%d%H%M'):   # daily-oldtimestamp
         try:
             return datetime.datetime.strptime(value, pattern)
         except (TypeError, ValueError):
@@ -125,7 +128,7 @@ class Storage(object):
             current_snapshot[0], retention_map)
         logger.debug(
             '[%s] Desired snapshots: %s', dataset_name,
-            [i.strftime('%Y%m%dT%H%M') for i in desired_snapshots])
+            [i.strftime('%Y%m%dT%H%MZ') for i in desired_snapshots])
         # For each desired snapshot we need to keep the best matching snapshot
         # and the snapshot that will become the best match.
         for desired_dts in desired_snapshots:
@@ -143,14 +146,14 @@ class Storage(object):
                         logger.debug(
                             '[%s] Select %s as fresh match for %s',
                             dataset_name, fresh_snapname,
-                            desired_dts.strftime('%Y%m%dT%H%M'))
+                            desired_dts.strftime('%Y%m%dT%H%MZ'))
                         keep_snapshots.add(fresh_snapname)
                     break
             if best_snapshot is not None:
                 logger.debug(
                     '[%s] Select %s as best match for %s with diff:%d',
                     dataset_name, best_snapshot,
-                    desired_dts.strftime('%Y%m%dT%H%M'), best_difference)
+                    desired_dts.strftime('%Y%m%dT%H%MZ'), best_difference)
                 keep_snapshots.add(best_snapshot)
             if len(keep_snapshots) == len(snapshots):
                 break

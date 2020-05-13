@@ -40,27 +40,27 @@ class PlanbStorageTestCase(TestCase):
         storage = self.get_dummy_storage()
         dataset = storage.get_dataset('my_dataset')
         dataset.ensure_exists()
-        dataset.snapshot_create('planb-20200102T0912')
+        dataset.snapshot_create('planb-20200102T0912Z')
         dataset.snapshot_create('daily-202005021743')
         dataset.snapshot_create('daily-202005031801')
         dataset.snapshot_create('hello')
-        dataset.snapshot_create('planb-20200504T1458')
+        dataset.snapshot_create('planb-20200504T1458Z')
         dataset.snapshot_create('daily-202005041602')
-        dataset.snapshot_create('planb-20200504T1655')
-        dataset.snapshot_create('planb-20200504T1700')
+        dataset.snapshot_create('planb-20200504T1655Z')
+        dataset.snapshot_create('planb-20200504T1700Z')
         self.assertEqual(dataset.snapshot_list(), [
-            'planb-20200102T0912', 'daily-202005021743', 'daily-202005031801',
-            'hello', 'planb-20200504T1458', 'daily-202005041602',
-            'planb-20200504T1655', 'planb-20200504T1700',
+            'planb-20200102T0912Z', 'daily-202005021743', 'daily-202005031801',
+            'hello', 'planb-20200504T1458Z', 'daily-202005041602',
+            'planb-20200504T1655Z', 'planb-20200504T1700Z',
         ])
         destroyed = dataset.snapshots_rotate(
             retention_map={'h': 2, 'y': 1})
         self.assertEqual(
-            destroyed, ['planb-20200504T1655', 'daily-202005031801',
+            destroyed, ['planb-20200504T1655Z', 'daily-202005031801',
                         'daily-202005021743'])
         self.assertEqual(dataset.snapshot_list(), [
-            'planb-20200102T0912', 'hello', 'planb-20200504T1458',
-            'daily-202005041602', 'planb-20200504T1700',
+            'planb-20200102T0912Z', 'hello', 'planb-20200504T1458Z',
+            'daily-202005041602', 'planb-20200504T1700Z',
         ])
 
     def test_snapshot_rotate_migration(self):

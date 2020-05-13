@@ -29,10 +29,10 @@ class PlanbTestCase(TestCase):
             # snapshot create will always create a snapshot.
             # The snapshot name is a utc timestamp.
             self.assertEqual(
-                fileset.snapshot_create(), 'planb-20200503T1442')
+                fileset.snapshot_create(), 'planb-20200503T1442Z')
             m.utcnow.return_value = datetime.datetime(2020, 5, 3, 15, 31)
             self.assertEqual(
-                fileset.snapshot_create(), 'planb-20200503T1531')
+                fileset.snapshot_create(), 'planb-20200503T1531Z')
 
     @override_settings(PLANB_BLACKLIST_HOURS='9-17')
     @patch('planb.models.timezone')

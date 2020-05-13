@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='fileset',
             name='blacklist_hours',
-            field=models.CharField(blank=True, help_text='Specify hours during which backups are disabled. When left empty the hostgroup blacklist hours are used.', max_length=31, validators=[django.core.validators.RegexValidator('^((\\d+(?:-\\d+)?,?)*|none)$', message='Enter a valid value like 2,9-17 or none to disable blacklist hours')], verbose_name='Blacklist hours'),
+            field=models.CharField(blank=True, help_text='Specify hours during which backups are disabled using notation h,h-h or none to disable blacklist hours. When left empty the hostgroup blacklist hours are used.', max_length=31, validators=[django.core.validators.RegexValidator('^((\\d+(?:-\\d+)?,?)*|none)$', message='Enter a valid value like 2,9-17 or none to disable blacklist hours')], verbose_name='Blacklist hours'),
         ),
         migrations.AddField(
             model_name='fileset',
@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='hostgroup',
             name='blacklist_hours',
-            field=models.CharField(blank=True, help_text='Specify hours during which backups are disabled. When left empty the system blacklist hours are used.', max_length=31, validators=[django.core.validators.RegexValidator('^((\\d+(?:-\\d+)?,?)*|none)$', message='Enter a valid value like 2,9-17 or none to disable blacklist hours')], verbose_name='Blacklist hours'),
+            field=models.CharField(blank=True, help_text='Specify hours during which backups are disabled using notation h,h-h or none to disable blacklist hours. When left empty the system blacklist hours are used.', max_length=31, validators=[django.core.validators.RegexValidator('^((\\d+(?:-\\d+)?,?)*|none)$', message='Enter a valid value like 2,9-17 or none to disable blacklist hours')], verbose_name='Blacklist hours'),
         ),
         migrations.AddField(
             model_name='hostgroup',

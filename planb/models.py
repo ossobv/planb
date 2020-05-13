@@ -56,8 +56,9 @@ class HostGroup(models.Model):
     blacklist_hours = models.CharField(
         _('Blacklist hours'), max_length=31, blank=True,
         validators=[validate_blacklist_hours], help_text=_(
-            'Specify hours during which backups are disabled. When left empty '
-            'the system blacklist hours are used.'))
+            'Specify hours during which backups are disabled using notation '
+            'h,h-h or none to disable blacklist hours. When left empty the '
+            'system blacklist hours are used.'))
     retention = models.CharField(
         max_length=31, blank=True, validators=[validate_retention],
         help_text=_(
@@ -166,8 +167,9 @@ class Fileset(models.Model):
     blacklist_hours = models.CharField(
         _('Blacklist hours'), max_length=31, blank=True,
         validators=[validate_blacklist_hours], help_text=_(
-            'Specify hours during which backups are disabled. When left empty '
-            'the hostgroup blacklist hours are used.'))
+            'Specify hours during which backups are disabled using notation '
+            'h,h-h or none to disable blacklist hours. When left empty the '
+            'hostgroup blacklist hours are used.'))
     retention = models.CharField(
         max_length=31, blank=True, validators=[validate_retention],
         help_text=_(

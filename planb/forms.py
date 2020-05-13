@@ -13,9 +13,9 @@ class HostGroupAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['blacklist_hours'].help_text = _(
             'Specify hours during which backups are disabled using notation '
-            'h,h-h. When left empty the system blacklist hours {} are used.'
-            ).format(
-                settings.PLANB_BLACKLIST_HOURS)
+            'h,h-h or none to disable blacklist hours. When left empty the '
+            'system blacklist hours {} are used.'
+            ).format(settings.PLANB_BLACKLIST_HOURS)
         self.fields['retention'].help_text = _(
             'The backup retention period using notation <n><period> separated '
             'by comma: 1y,6m,3w,15d. When left empty the system retention '
@@ -37,7 +37,8 @@ class FilesetAdminForm(forms.ModelForm):
             retention = settings.PLANB_RETENTION
         self.fields['blacklist_hours'].help_text = _(
             'Specify hours during which backups are disabled using notation '
-            'h,h-h. When left empty the hostgroup blacklist hours {} are used.'
+            'h,h-h or none to disable blacklist hours. When left empty the '
+            'hostgroup blacklist hours {} are used.'
             ).format(blacklist_hours)
         self.fields['retention'].help_text = _(
             'The backup retention period using notation <n><period> separated '

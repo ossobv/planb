@@ -46,7 +46,7 @@ fi
 ssh_target="$1"; shift  # root@DEST
 target_snapshot=$planb_snapshot_target
 target_snapshot_prefix=${planb_snapshot_target%-*}
-test "$target_snapshot_prefix" = "daily"  # HARDCODED, see below..
+test "$target_snapshot_prefix" = "planb"  # HARDCODED (see temp 'daily|')
 
 # Make snapshots.
 for remotepath in "$@"; do
@@ -91,16 +91,6 @@ for remotepath in "$@"; do
     src=$remotepath@$target_snapshot
     ssh $ssh_target sudo zfs list -d 1 -Hpo name -t snapshot \
             -S creation "$remotepath" |
-        grep "^.*@$target_snapshot_prefix-" | sed -e '1,3d' |
+        grep -E "^.*@(daily|$target_snapshot_prefix)-" | sed -e '1,3d' |
         xargs --no-run-if-empty -n1 ssh $ssh_target sudo zfs destroy
-done
-
-# Keep only 30 snapshots on local machine (XXX: this should be configured by
-# the user in planb).
-for remotepath in "$@"; do
-    our_path=$(echo "$remotepath" | sed -e 's#/#--#g')
-    dst=$planb_storage_name/$our_path
-    sudo zfs list -d 1 -Hpo name -t snapshot -S creation "$dst" |
-        grep "^.*@$target_snapshot_prefix-" | sed -e '1,30d' |
-        xargs --no-run-if-empty -n1 sudo zfs destroy
 done

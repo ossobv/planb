@@ -256,9 +256,6 @@ class ZfsDataset(Dataset):
             del self._dataset_type
 
     def ensure_exists(self):
-        if self.backend.binary == '/bin/true':
-            return
-
         # Common case is the unmounted yet existing path. If the mount point
         # exists, everything in it should be fine too.
         if self.get_mount_path():

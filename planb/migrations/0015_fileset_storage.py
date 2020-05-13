@@ -8,12 +8,12 @@ def validate_config(apps, schema_editor):
     '''
     Ensure the data migration can succeed before altering the table.
     '''
-    from planb.storage import pools
+    from planb.storage import pools as storage_pools
     Fileset = apps.get_model('planb', 'Fileset')
 
     required_storages = set(
         Fileset.objects.distinct().values_list('dest_pool', flat=True))
-    available_storages = set(pools.keys())
+    available_storages = set(storage_pools.keys())
     if not required_storages.issubset(available_storages):
         raise ImproperlyConfigured(
             'PLANB_STORAGE_POOLS requires a storage definition for {}'.format(
@@ -21,7 +21,7 @@ def validate_config(apps, schema_editor):
     # At this point in time Zfs is the only supported storage.
     # Make sure the user doesn't map the fileset to a different storage.
     for alias in required_storages:
-        storage = pools[alias]
+        storage = storage_pools[alias]
         if storage.config['ENGINE'] != 'planb.storage.zfs.ZfsStorage':
             raise ImproperlyConfigured(
                 'Storage {} should be of type ZfsStorage (current={})'.format(
@@ -29,12 +29,12 @@ def validate_config(apps, schema_editor):
 
 
 def set_dataset_name(apps, schema_editor):
-    from planb.storage import pools
+    from planb.storage import pools as storage_pools
     Fileset = apps.get_model('planb', 'Fileset')
 
     for fileset in Fileset.objects.prefetch_related('hostgroup'):
-        storage = pools[fileset.storage_alias]
-        fileset.dataset_name = storage.get_dataset_name(
+        storage = storage_pools[fileset.storage_alias]
+        fileset.dataset_name = storage.name_dataset(
             fileset.hostgroup.name, fileset.friendly_name)
         fileset.save(update_fields=['dataset_name'])
 

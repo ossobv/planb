@@ -84,8 +84,7 @@ def async_rename_job(fileset, new_namespace, new_name):
     """
     Spawn a task to rename the fileset.
     """
-    new_dataset_name = fileset.storage.get_dataset_name(
-        new_namespace, new_name)
+    new_dataset_name = fileset.storage.name_dataset(new_namespace, new_name)
     return async_task(
         'planb.tasks.rename_run', fileset.pk, fileset.dataset_name,
         new_dataset_name, broker=get_broker(settings.Q_MAIN_QUEUE))

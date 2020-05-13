@@ -2,7 +2,7 @@ import factory
 from factory.django import DjangoModelFactory
 from factory.fuzzy import FuzzyChoice
 
-from planb.storage import pools
+from planb.storage import pools as storage_pools
 
 
 class UserFactory(DjangoModelFactory):
@@ -42,7 +42,7 @@ class FilesetFactory(DjangoModelFactory):
         return '.'.join((
             self.host_prefix, self.host_suffix, self.hostgroup.name, self.tld))
 
-    storage_alias = FuzzyChoice(pools)
+    storage_alias = FuzzyChoice(storage_pools)
     hostgroup = factory.SubFactory(HostGroupFactory)
 
     class Meta:

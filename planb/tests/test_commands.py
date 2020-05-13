@@ -107,8 +107,10 @@ class CommandTestCase(TestCase):
         # Create a standalone clean dummy storage for this test.
         storage = DummyStorage({'NAME': 'DummyPool I'}, 'dummy')
         test_pools = {'dummy': storage}
-        with patch('planb.management.commands.slist.pools', test_pools), \
-                patch('planb.models.pools', test_pools):
+        with (
+                patch('planb.management.commands.slist.storage_pools',
+                      test_pools),
+                patch('planb.models.storage_pools', test_pools)):
             dataset = FilesetFactory(
                 friendly_name='storage', hostgroup__name='local',
                 storage_alias='dummy').get_dataset()

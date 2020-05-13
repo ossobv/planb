@@ -3,8 +3,6 @@ import datetime
 import logging
 import re
 
-from planb.common.subprocess2 import CalledProcessError, check_output
-
 logger = logging.getLogger(__name__)
 
 # regex to get the datetime from a snapshot name.
@@ -37,28 +35,8 @@ class DatasetNotFound(Exception):
     pass
 
 
-class Storage(object):
-    def __init__(self, config, alias):
-        self.config = config
-        self.name = config['NAME']
-        self.alias = alias
-
-    def get_label(self):
-        return self.name
-
-    @classmethod
-    def ensure_defaults(cls, config):
-        config.setdefault('NAME', cls.__name__)
-
-    def get_dataset_name(self, namespace, name):
-        return '{}-{}'.format(namespace, name)
-
-    def get_datasets(self):
-        raise NotImplementedError()
-
-    def get_dataset(self, dataset_name):
-        raise NotImplementedError()
-
+class _PrivateStorage:
+    "Private/friend parts for storage backends."
     def snapshot_create(self, dataset_name, snapname):
         raise NotImplementedError()
 
@@ -159,6 +137,40 @@ class Storage(object):
                 break
         # Return with the same ordering.
         return [i[1] for i in snapshots if i[1] in keep_snapshots]
+
+
+class Storage(_PrivateStorage):
+    name = NotImplemented
+
+    @classmethod
+    def ensure_defaults(cls, config):
+        config.setdefault('NAME', cls.__name__)
+
+    def __init__(self, config, alias):
+        self.config = config
+        self.name = config['NAME']
+        self.alias = alias
+
+    def get_label(self):
+        return self.name
+
+    def get_datasets(self):
+        """
+        Return a list of Dataset objects found in the storage.
+
+        Example implementation::
+
+            return Datasets([
+                Dataset(zfs_backend, directory)
+                for directory in `zfs list -Hpo name`])
+        """
+        raise NotImplementedError()
+
+    def name_dataset(self, namespace, name):
+        return '{}-{}'.format(namespace, name)
+
+    def get_dataset(self, dataset_name):
+        raise NotImplementedError()
 
 
 class Datasets(list):
@@ -297,65 +309,3 @@ class Dataset(object):
     @contextmanager
     def workon(self, data_path=None):
         yield
-
-
-class OldStyleStorage(Storage):
-    name = NotImplemented
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.binary = self.config['BINARY']
-        self.sudobin = self.config['SUDOBIN']
-
-    @classmethod
-    def ensure_defaults(cls, config):
-        super().ensure_defaults(config)
-        config.setdefault('BINARY', '/sbin/zfs')
-        config.setdefault('SUDOBIN', '/usr/bin/sudo')
-
-    def __perform_system_command(self, cmd):
-        """
-        Do exec command, expect 0 return value, convert output to utf-8.
-        """
-        try:
-            output = check_output(cmd)
-        except CalledProcessError as e:
-            logger.info('Non-zero exit after cmd {!r}: {}'.format(
-                cmd, e))
-            raise
-        return output.decode('utf-8')  # expect valid ascii/utf-8
-
-    def _perform_sudo_command(self, cmd):
-        """
-        Do __perform_system_command, but with 'sudo'.
-        """
-        return self.__perform_system_command(
-            (self.sudobin,) + tuple(cmd))
-
-    def _perform_binary_command(self, cmd):
-        """
-        Do _perform_sudo_command, but for the supplied binary.
-        """
-        return self._perform_sudo_command(
-            (self.binary,) + tuple(cmd))
-
-    def get_datasets(self):
-        """
-        Return a list of Dataset objects found in the storage.
-
-        Example implementation::
-
-            return Datasets([
-                Dataset(zfs_backend, directory)
-                for directory in `zfs list -Hpo name`])
-        """
-        raise NotImplementedError()
-
-    def snapshot_retain_weekly(self, datetimestamp, retention):
-        raise NotImplementedError()
-
-    def snapshot_retain_monthly(self, datetimestamp, retention):
-        raise NotImplementedError()
-
-    def snapshot_retain_yearly(self, datetimestamp, retention):
-        raise NotImplementedError()

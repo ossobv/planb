@@ -5,9 +5,9 @@ import time
 
 from django.core.exceptions import ImproperlyConfigured
 
-from planb.common.subprocess2 import CalledProcessError
+from planb.common.subprocess2 import CalledProcessError, check_output
 
-from .base import OldStyleStorage, Datasets, Dataset, DatasetNotFound
+from .base import Datasets, Dataset, DatasetNotFound, Storage
 
 # Check if we can backup (daily)
 # backup
@@ -26,56 +26,45 @@ from .base import OldStyleStorage, Datasets, Dataset, DatasetNotFound
 logger = logging.getLogger(__name__)
 
 
-class ZfsStorage(OldStyleStorage):
+class _PerformCommands:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.poolname = self.config['POOLNAME']
+        self.__perform_system_binary = self.config['BINARY']
+        self.__perform_sudo_binary = self.config['SUDOBIN']
 
+    def __perform_system_command(self, cmd):
+        """
+        Do exec command, expect 0 return value, convert output to utf-8.
+        """
+        try:
+            output = check_output(cmd)
+        except CalledProcessError as e:
+            logger.info('Non-zero exit after cmd {!r}: {}'.format(
+                cmd, e))
+            raise
+        return output.decode('utf-8')  # expect valid ascii/utf-8
+
+    def _perform_sudo_command(self, cmd):
+        """
+        Do __perform_system_command, but with 'sudo'.
+        """
+        return self.__perform_system_command(
+            (self.__perform_sudo_binary,) + tuple(cmd))
+
+    def _perform_binary_command(self, cmd):
+        """
+        Do _perform_sudo_command, but for the supplied binary.
+        """
+        return self._perform_sudo_command(
+            (self.__perform_system_binary,) + tuple(cmd))
+
+
+class _ZfsPrivateStorage(_PerformCommands, Storage):
     @classmethod
     def ensure_defaults(cls, config):
         super().ensure_defaults(config)
-        if 'POOLNAME' not in config:
-            raise ImproperlyConfigured('Zfs storage requires a POOLNAME')
-
-    def get_label(self):
-        used, available = [
-            int(i) for i in self.zfs_get_properties(
-                self.poolname, keys=('used', 'available'))]
-
-        if used and available:
-            pct = '{pct:.0f}%'.format(pct=(100 * (used / (used + available))))
-            available = int(available / 1024 / 1024 / 1024)
-        else:
-            available = pct = '???'
-
-        return '{}, {}G free ({} used)'.format(self.name, available, pct)
-
-    def get_datasets(self, parent=None):
-        parent = self.poolname if parent is None else parent
-        output = self._perform_binary_command((
-            'list', '-d', '1', '-t', 'filesystem,volume',
-            '-Hpo', 'name,used,type,planb:contains',
-            parent))
-
-        datasets = Datasets()
-        for line in output.rstrip().split('\n'):
-            dataset_name, used, type_, contains = line.split('\t')
-            if dataset_name == parent:
-                continue
-
-            assert dataset_name.startswith(parent), (dataset_name, parent)
-            dataset = ZfsDataset(backend=self, name=dataset_name)
-            dataset.set_dataset_type(type_, contains)
-            dataset.set_disk_usage(int(used))
-            datasets.append(dataset)
-
-        return datasets
-
-    def get_dataset(self, dataset_name):
-        return ZfsDataset(backend=self, name=dataset_name)
-
-    def get_dataset_name(self, namespace, name):
-        return '{}/{}-{}'.format(self.poolname, namespace, name)
+        config.setdefault('BINARY', '/sbin/zfs')
+        config.setdefault('SUDOBIN', '/usr/bin/sudo')
 
     def zfs_get_local_path(self, dataset_name):
         # FIXME: this is yet another zfs_get_properties()
@@ -194,6 +183,58 @@ class ZfsStorage(OldStyleStorage):
                 # Do not include the dataset in the snapshot name.
                 snapshots.append(snapshot.split('@', 1)[1])
         return snapshots
+
+
+class ZfsStorage(_ZfsPrivateStorage):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.poolname = self.config['POOLNAME']
+
+    @classmethod
+    def ensure_defaults(cls, config):
+        super().ensure_defaults(config)
+        if 'POOLNAME' not in config:
+            raise ImproperlyConfigured('Zfs storage requires a POOLNAME')
+
+    def get_label(self):
+        used, available = [
+            int(i) for i in self.zfs_get_properties(
+                self.poolname, keys=('used', 'available'))]
+
+        if used and available:
+            pct = '{pct:.0f}%'.format(pct=(100 * (used / (used + available))))
+            available = int(available / 1024 / 1024 / 1024)
+        else:
+            available = pct = '???'
+
+        return '{}, {}G free ({} used)'.format(self.name, available, pct)
+
+    def get_datasets(self, parent=None):
+        parent = self.poolname if parent is None else parent
+        output = self._perform_binary_command((
+            'list', '-d', '1', '-t', 'filesystem,volume',
+            '-Hpo', 'name,used,type,planb:contains',
+            parent))
+
+        datasets = Datasets()
+        for line in output.rstrip().split('\n'):
+            dataset_name, used, type_, contains = line.split('\t')
+            if dataset_name == parent:
+                continue
+
+            assert dataset_name.startswith(parent), (dataset_name, parent)
+            dataset = ZfsDataset(backend=self, name=dataset_name)
+            dataset.set_dataset_type(type_, contains)
+            dataset.set_disk_usage(int(used))
+            datasets.append(dataset)
+
+        return datasets
+
+    def get_dataset(self, dataset_name):
+        return ZfsDataset(backend=self, name=dataset_name)
+
+    def name_dataset(self, namespace, name):
+        return '{}/{}-{}'.format(self.poolname, namespace, name)
 
 
 class ZfsDataset(Dataset):

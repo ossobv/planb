@@ -3,7 +3,7 @@ from django.apps import apps
 from django.conf import settings
 from django.utils.translation import gettext as _
 
-from planb.storage import pools
+from planb.storage import pools as storage_pools
 
 from .models import Fileset, HostGroup
 
@@ -46,8 +46,8 @@ class FilesetAdminForm(forms.ModelForm):
 
         if 'storage_alias' in self.fields:
             storage_choices = tuple(
-                (pool.alias, pool.get_label())
-                for pool in pools.values())
+                (storage.alias, storage.get_label())
+                for storage in storage_pools.values())
             self.fields['storage_alias'] = forms.ChoiceField(
                 label=_('Storage'), choices=storage_choices)
 

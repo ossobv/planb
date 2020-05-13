@@ -2,7 +2,7 @@ from fnmatch import fnmatch
 
 from planb.common import human
 from planb.management.base import BaseCommand
-from planb.storage import pools
+from planb.storage import pools as storage_pools
 from planb.storage.base import Datasets
 
 
@@ -21,8 +21,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         datasets = []
-        for pool in pools.values():
-            datasets.extend(pool.get_datasets())
+        for storage in storage_pools.values():
+            datasets.extend(storage.get_datasets())
 
         for exclude in set(options['exclude']):
             datasets = [i for i in datasets if not fnmatch(i.name, exclude)]

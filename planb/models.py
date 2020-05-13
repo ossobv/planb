@@ -17,7 +17,7 @@ from django_q.brokers.redis_broker import Redis
 
 from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
-from planb.storage import pools
+from planb.storage import pools as storage_pools
 from planb.storage.base import RETENTION_PERIOD_SECONDS, DatasetNotFound
 
 
@@ -201,7 +201,7 @@ class Fileset(models.Model):
 
     @cached_property
     def storage(self):
-        return pools[self.storage_alias]
+        return storage_pools[self.storage_alias]
 
     def get_blacklist_hours(self):
         for blacklist_hours in (
@@ -308,13 +308,18 @@ class Fileset(models.Model):
         return self.backuprun_set.filter(success=True).latest('started')
 
     def get_dataset(self):
-        return self.storage.get_dataset(self.dataset_name)
+        if not hasattr(self, '_get_dataset'):
+            self._get_dataset = self.storage.get_dataset(self.dataset_name)
+        return self._get_dataset
 
     def rename_dataset(self, new_dataset_name):
         self.get_dataset().rename_dataset(new_dataset_name)
         self.__class__.objects.filter(pk=self.pk).update(
             dataset_name=new_dataset_name)
+
         self.dataset_name = new_dataset_name
+        if hasattr(self, '_get_dataset'):
+            del self._get_dataset
 
     def clone(self, **override):
         # See: https://github.com/django/django/commit/a97ecfdea8
@@ -388,11 +393,10 @@ class Fileset(models.Model):
         return True
 
     def snapshot_rotate(self):
-        return self.storage.snapshots_rotate(
-            self.dataset_name, retention_map=self.retention_map)
+        return self.get_dataset().snapshots_rotate(self.retention_map)
 
     def snapshot_list(self):
-        return self.storage.snapshot_list(self.dataset_name)
+        return self.get_dataset().snapshot_list()
 
     def snapshot_list_display(self):
         try:
@@ -415,7 +419,7 @@ class Fileset(models.Model):
         snapname = datetime.utcnow().strftime('%Y%m%dT%H%MZ')  # XXX: see yuck
         if settings.PLANB_PREFIX:
             snapname = '{}-{}'.format(settings.PLANB_PREFIX, snapname)
-        self.storage.snapshot_create(self.dataset_name, snapname=snapname)
+        self.get_dataset().snapshot_create(snapname)
         logger.info('[%s] Created snapshot %s', self, snapname)
         return snapname
 
@@ -439,7 +443,7 @@ class Fileset(models.Model):
                     'Toggled is_enabled-flag on {}.\n'.format(self))
 
         if not self.dataset_name:
-            self.dataset_name = self.storage.get_dataset_name(
+            self.dataset_name = self.storage.name_dataset(
                 self.hostgroup.name, self.friendly_name)
         return super().save(*args, **kwargs)
 

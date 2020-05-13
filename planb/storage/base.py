@@ -293,7 +293,7 @@ class Dataset(object):
     def snapshot_delete(self, snapname):
         return self.backend.snapshot_delete(self.name, snapname)
 
-    def snapshot_list(self, snapname):
+    def snapshot_list(self):
         return self.backend.snapshot_list(self.name)
 
     def snapshots_rotate(self, retention_map):

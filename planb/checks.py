@@ -52,15 +52,6 @@ def _settings__planb_prefix():
 
 
 @_is_planb_settings_check
-def _settings__secret_key():
-    if len(getattr(settings, 'SECRET_KEY', '')) < 20:
-        return [Critical(
-            'settings.STATIC_KEY is too short',
-            hint='Please use pwgen -ys 58', id='planb.E004')]
-    return []
-
-
-@_is_planb_settings_check
 def _settings__planb_guid():
     if not re.match(
             r'^[0-9a-f]{4}([0-9a-f]{4}-){4}[[0-9a-f]{12}$',

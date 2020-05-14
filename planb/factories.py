@@ -42,7 +42,7 @@ class FilesetFactory(DjangoModelFactory):
         return '.'.join((
             self.host_prefix, self.host_suffix, self.hostgroup.name, self.tld))
 
-    storage_alias = FuzzyChoice(storage_pools)
+    storage_alias = 'dummy'
     hostgroup = factory.SubFactory(HostGroupFactory)
 
     class Meta:

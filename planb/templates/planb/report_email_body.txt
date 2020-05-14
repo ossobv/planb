@@ -50,7 +50,9 @@ Reports per host below
 +-----------------------+--------------------------------------+
 | Configured retention  | {{ fileset.retention_display|ljust:36 }} |{% if not fileset.is_enabled %}
 +-----------------------+--------------------------------------+
-| State                 | DISABLED                             |{% endif %}
+| State                 | DISABLED                             |{% endif %}{% if fileset.has_child_datasets %}
++-----------------------+--------------------------------------+
+| Has child datasets    | YES                                  |{% endif %}
 +-----------------------+--------------------------------------+
 {% if fileset.first_fail and fileset.is_enabled %}
 Last backup FAILED with error::
@@ -66,12 +68,12 @@ Last backup FAILED with error::
 
 {% for path in excludes.split %}- ``/{{ path }}``
 {% endfor %}{% endif %}{% endwith %}
-{% if fileset.last_successful_backuprun %}Last snapshot disk usage:
+{% if fileset.last_successful_backuprun %}{% if fileset.has_child_datasets %}Last dataset disk usage:{% else %}Last snapshot disk usage:{% endif %}
 
 {% for path, size in fileset.last_successful_backuprun.snapshot_size_listing_as_list %}{% comment %}
 {% endcomment %}- {{ size|filesizeformat|rjust:10 }} ``{{ path }}``
 {% endfor %}{% endif %}
-Available snapshots:
+Available snapshots{% if fileset.has_child_datasets %} for *all* datasets{% endif %}:
 
 {% for snapshot in fileset.snapshot_list_display %}- ``{{ snapshot }}``
 {% empty %}

@@ -22,9 +22,12 @@ def validate_config(apps, schema_editor):
     # Make sure the user doesn't map the fileset to a different storage.
     for alias in required_storages:
         storage = storage_pools[alias]
-        if storage.config['ENGINE'] != 'planb.storage.zfs.ZfsStorage':
+        if storage.config['ENGINE'] not in (
+                'planb.storage.dummy.DummyStorage',
+                'planb.storage.zfs.ZfsStorage'):
             raise ImproperlyConfigured(
-                'Storage {} should be of type ZfsStorage (current={})'.format(
+                'Storage {} should be of type ZfsStorage (or DummyStorage) '
+                '(current={})'.format(
                     alias, storage.config['ENGINE']))
 
 

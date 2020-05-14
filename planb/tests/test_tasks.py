@@ -43,7 +43,7 @@ class TaskTestCase(TestCase):
         # XXX: we should move the use of timezones to a more central
         # location probably.. this m1, m2 is not nice
         with patch('planb.models.timezone') as m1, \
-             patch('planb.tasks.timezone') as m2, \
+                patch('planb.tasks.timezone') as m2, \
                 self.assertLogs('planb.tasks', level='INFO') as log:
             m1.now.return_value = datetime.datetime(2019, 1, 1, 11, 0)
             m2.now.return_value = datetime.datetime(2019, 1, 1, 11, 0)

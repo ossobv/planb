@@ -73,7 +73,7 @@ for key, handler in LOGGING['handlers'].items():
 
 ALLOWED_HOSTS = ('testserver',)
 
-SECRET_KEY = 'T3$TK3Y'
+SECRET_KEY = 'T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y'
 
 #STATIC_ROOT = '/srv/http/planb.example.com/static'
 

@@ -49,3 +49,12 @@ def _settings__planb_prefix():
             'PLANB_PREFIX can only contain ascii letters',
             id='planb.E003')]
     return []
+
+
+@_is_planb_settings_check
+def _settings__secret_key():
+    if len(getattr(settings, 'SECRET_KEY', '')) < 20:
+        return [Critical(
+            'settings.STATIC_KEY is too short',
+            hint='Please use pwgen -ys 58', id='planb.E004')]
+    return []

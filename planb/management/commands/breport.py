@@ -104,11 +104,12 @@ class Command(BaseCommand):
                 sorted(filesets, key=attrgetter('total_size'),
                        reverse=True), 1):
             if i < 4:
-                # Add a rank to the first 3 filesets.
-                if i in (2, 3):
-                    rank = chr(176 + i)
+                if i == 1:
+                    rank = '\u00b9'  # U+00B9 SUPERSCRIPT ONE
+                elif i in (2, 3):
+                    rank = chr(0x00b0 + i)  # U+00B2, U+00B3
                 else:
-                    rank = chr(8304 + i)
+                    rank = chr(0x2070 + i)  # U+2070, U+2074..U+2079
             else:
                 rank = ' '
             fileset.total_size_display = '{}{}'.format(

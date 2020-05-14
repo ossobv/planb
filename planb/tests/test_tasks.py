@@ -27,6 +27,8 @@ def message(
 # not the focus of this test.
 @override_settings(PLANB_RSYNC_BIN=RSYNC_BIN)
 class TaskTestCase(TestCase):
+    maxDiff = 8192
+
     def test_runner(self):
         fileset = FilesetFactory()
         runner = FilesetRunner(fileset.pk)
@@ -38,9 +40,11 @@ class TaskTestCase(TestCase):
     def test_conditional_run(self):
         fileset = FilesetFactory(storage_alias='dummy')
         # Conditional run will only run backup tasks outside work hours.
-        with patch('planb.tasks.timezone') as m, \
+        with patch('planb.models.timezone') as m1, \
+             patch('planb.tasks.timezone') as m2, \
                 self.assertLogs('planb.tasks', level='INFO') as log:
-            m.now.return_value = datetime.datetime(2019, 1, 1, 11, 0)
+            m1.now.return_value = datetime.datetime(2019, 1, 1, 11, 0)
+            m2.now.return_value = datetime.datetime(2019, 1, 1, 11, 0)
             conditional_run(fileset.pk)
             self.assertEqual(
                 log.output,

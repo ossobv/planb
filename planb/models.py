@@ -213,15 +213,16 @@ class Fileset(models.Model):
 
     @property
     def is_in_blacklist_hours(self):
-        # XXX should use fileset hosts localtime.
-        now = timezone.now()
-        for hour in self.get_blacklist_hours().split(','):
-            if '-' in hour:
-                start, end = map(int, hour.split('-'))
-                if start <= now.hour < end:
+        hours = self.get_blacklist_hours()
+        if hours != 'none':
+            now = timezone.now()  # XXX should use fileset hosts localtime?
+            for hour in hours.split(','):
+                if '-' in hour:
+                    start, end = map(int, hour.split('-'))
+                    if start <= now.hour < end:
+                        return True
+                elif now.hour == int(hour):
                     return True
-            elif now.hour == int(hour):
-                return True
         return False
 
     def get_retention(self):

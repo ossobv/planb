@@ -40,6 +40,8 @@ class TaskTestCase(TestCase):
     def test_conditional_run(self):
         fileset = FilesetFactory(storage_alias='dummy')
         # Conditional run will only run backup tasks outside work hours.
+        # XXX: we should move the use of timezones to a more central
+        # location probably.. this m1, m2 is not nice
         with patch('planb.models.timezone') as m1, \
              patch('planb.tasks.timezone') as m2, \
                 self.assertLogs('planb.tasks', level='INFO') as log:

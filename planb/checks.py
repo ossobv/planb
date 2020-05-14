@@ -58,3 +58,14 @@ def _settings__secret_key():
             'settings.STATIC_KEY is too short',
             hint='Please use pwgen -ys 58', id='planb.E004')]
     return []
+
+
+@_is_planb_settings_check
+def _settings__planb_guid():
+    if not re.match(
+            r'^[0-9a-f]{4}([0-9a-f]{4}-){4}[[0-9a-f]{12}$',
+            getattr(settings, 'PLANB_GUID', '')):
+        return [Critical(
+            'settings.PLANB_GUID does not look like a valid uuid',
+            hint='Please use uuidgen', id='planb.E005')]
+    return []

@@ -25,6 +25,9 @@ case "${1:-}" in
     ;;
 esac
 
+# Do we hava a guid?
+test -n "$planb_guid"
+
 # Is this the first time?
 dataset=$(sudo zfs get -Hpo value type "$planb_storage_name")
 test "$dataset" = "filesystem"
@@ -46,12 +49,14 @@ fi
 ssh_target="$1"; shift  # root@DEST
 target_snapshot=$planb_snapshot_target
 target_snapshot_prefix=${planb_snapshot_target%-*}
-test "$target_snapshot_prefix" = "planb"  # HARDCODED (see temp 'daily|')
+test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
 
 # Make snapshots.
 for remotepath in "$@"; do
     src=$remotepath@$target_snapshot
-    ssh $ssh_target sudo zfs snapshot "$src"
+    ssh $ssh_target "\
+        sudo zfs snapshot \"$src\" && \
+        sudo zfs set planb:owner=$planb_guid \"$src\""
 done
 
 # Download snapshots.
@@ -86,11 +91,12 @@ for remotepath in "$@"; do
     esac
 done
 
-# Keep only three snapshots on remote machine.
+# Keep only three snapshots on remote machine. Filter by planb:owner=GUID.
 for remotepath in "$@"; do
     src=$remotepath@$target_snapshot
-    ssh $ssh_target sudo zfs list -d 1 -Hpo name -t snapshot \
-            -S creation "$remotepath" |
-        grep -E "^.*@(daily|$target_snapshot_prefix)-" | sed -e '1,3d' |
+    ssh $ssh_target sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
+            -S creation "$remotepath" | grep -E \
+        "^.*@(daily|$target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
+        sed -e '1,3d' | awk '{print $1}' |
         xargs --no-run-if-empty -n1 ssh $ssh_target sudo zfs destroy
 done

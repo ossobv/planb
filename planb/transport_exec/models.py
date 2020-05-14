@@ -2,6 +2,7 @@ import logging
 import os
 import shlex
 
+from django.conf import settings
 from django.db import connections
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -53,6 +54,7 @@ class Config(AbstractTransport):
                 env[key] = os.environ[key]
 
         # Add our own env.
+        env['planb_guid'] = settings.PLANB_GUID
         env['planb_fileset_id'] = str(self.fileset.id)
         env['planb_fileset_friendly_name'] = self.fileset.friendly_name
         env['planb_snapshot_target'] = (

@@ -14,6 +14,10 @@ PLANB_RSYNC_BIN = '/usr/bin/rsync'
 # PLANB_SUDO_BIN = '/bin/true'
 # PLANB_ZFS_BIN = '/bin/true'
 
+# Globally unique identifier. Can be used by PlanB to mark snapshots as "owned"
+# by this instance.
+PLANB_GUID = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'  # use uuidgen(1) here
+
 # Configure storage pools.
 # Name and engine are required.
 # The config keys are passed to the Storage class in the config parameter.

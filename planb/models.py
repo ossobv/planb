@@ -394,18 +394,28 @@ class Fileset(models.Model):
         return True
 
     def snapshot_rotate(self):
-        return self.get_dataset().snapshots_rotate(self.retention_map)
+        dataset = self.get_dataset()
+        if dataset.has_child_datasets():
+            return dataset.child_dataset_snapshots_rotate(self.retention_map)
+        return dataset.snapshots_rotate(self.retention_map)
 
     def snapshot_list(self):
         return self.get_dataset().snapshot_list()
 
     def snapshot_list_display(self):
         try:
-            snapshots = self.snapshot_list()
+            dataset = self.get_dataset()
         except DatasetNotFound:
             return ['(dataset not found in storage {!r})'.format(
                 self.storage_alias)]
-        return sorted([s.split('@')[-1] for s in snapshots])
+        return sorted(
+            dataset.child_dataset_snapshot_list()
+            if dataset.has_child_datasets()
+            else dataset.snapshot_list())
+
+    @property
+    def has_child_datasets(self):
+        return self.get_dataset().has_child_datasets()
 
     def get_next_snapshot_name(self):
         if not hasattr(self, '_next_snapshot_name'):

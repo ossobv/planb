@@ -293,15 +293,39 @@ class Dataset(object):
         return self._storage.snapshot_list(self.name)
 
     def snapshots_rotate(self, retention_map):
-        if self.has_child_datasets():
-            destroyed = []
-            for dataset in self.get_child_datasets():
-                destroyed.extend(
-                    self._storage.snapshots_rotate(
-                        dataset.name, retention_map))
-            return destroyed
-        else:
-            return self._storage.snapshots_rotate(self.name, retention_map)
+        return self._storage.snapshots_rotate(self.name, retention_map)
+
+    def child_dataset_snapshot_rotate(self, retention_map):
+        '''
+        Rotate the snapshots for all child datasets and return all unique
+        destroyed snapshots.
+        '''
+        if not self.has_child_datasets():
+            raise ValueError('Dataset has no child datasets')
+        # Call the storage directly, child datasets are not guaranteed to be
+        # recursion safe.
+        destroyed = set()
+        for dataset in self.get_child_datasets():
+            destroyed.update(
+                self._storage.snapshots_rotate(
+                    dataset.name, retention_map))
+        return list(destroyed)
+
+    def child_dataset_snapshot_list(self):
+        '''
+        Returns snapshots which are available for *all* child datasets.
+        '''
+        if not self.has_child_datasets():
+            raise ValueError('Dataset has no child datasets')
+
+        snapshots = None
+        for dataset in self.get_child_datasets():
+            if snapshots is None:
+                snapshots = set(self._storage.snapshot_list(dataset.name))
+            else:
+                snapshots.intersection_update(
+                    self._storage.snapshot_list(dataset.name))
+        return snapshots
 
     @contextmanager
     def workon(self, data_path=None):

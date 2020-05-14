@@ -206,11 +206,9 @@ class Fileset(models.Model):
         return storage_pools[self.storage_alias]
 
     def get_blacklist_hours(self):
-        for blacklist_hours in (
-                self.blacklist_hours, self.hostgroup.blacklist_hours):
-            if blacklist_hours:
-                return blacklist_hours
-        return settings.PLANB_BLACKLIST_HOURS
+        return (self.blacklist_hours
+                or self.hostgroup.blacklist_hours
+                or settings.PLANB_BLACKLIST_HOURS)
     get_blacklist_hours.short_description = _('Blacklist hours')
 
     @property

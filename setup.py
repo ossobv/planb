@@ -60,8 +60,8 @@ if __name__ == '__main__':
 
     # TODO: perhaps check out https://github.com/pypa/setuptools_scm
     version = (
-        version_from_git() or
-        version_from_changelog(changes))
+        version_from_git()
+        or version_from_changelog(changes))
 
     setup(
         name='planb',

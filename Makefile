@@ -23,5 +23,5 @@ has-virtualenv:
 
 flake8:
 	test -n "$(FLAKE8)"
-	find . -type f -name '*.py' '!' -path '*/migrations/*' | \
-	  LC_ALL=C sort | xargs -d'\n' $(FLAKE8)
+	find . -type f -name '*.py' '!' -path '*/migrations/*' \
+	  '!' -path './.*' | LC_ALL=C sort | xargs -d'\n' $(FLAKE8)

@@ -378,8 +378,8 @@ class SwiftSync:
                 # it. And only add X_segments containers if there is no X
                 # container.
                 else:
-                    if (name.endswith('_segments') and
-                            name.rsplit('_', 1)[0] in container_names):
+                    if (name.endswith('_segments')
+                            and name.rsplit('_', 1)[0] in container_names):
                         # Don't add X_segments, because X exists.
                         pass
                     else:
@@ -991,8 +991,8 @@ class Cli:
         self.args = parser.parse_args()
 
         if not self.args.test_path_translate:
-            if not (bool(self.args.container) ^
-                    bool(self.args.all_containers)):
+            if not (bool(self.args.container)
+                    ^ bool(self.args.all_containers)):
                 parser.error('either specify a container or --all-containers')
 
     @property

@@ -8,7 +8,7 @@ def validate_config(apps, schema_editor):
     '''
     Ensure the data migration can succeed before altering the table.
     '''
-    from planb.storage import pools as storage_pools
+    from planb.storage import storage_pools
     Fileset = apps.get_model('planb', 'Fileset')
 
     required_storages = set(
@@ -32,7 +32,7 @@ def validate_config(apps, schema_editor):
 
 
 def set_dataset_name(apps, schema_editor):
-    from planb.storage import pools as storage_pools
+    from planb.storage import storage_pools
     Fileset = apps.get_model('planb', 'Fileset')
 
     for fileset in Fileset.objects.prefetch_related('hostgroup'):

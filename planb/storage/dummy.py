@@ -19,7 +19,7 @@ class DummyStorage(Storage):
     def get_dataset(self, dataset_name):
         if dataset_name not in self._datasets:
             self._datasets[dataset_name] = DummyDataset(
-                backend=self, name=dataset_name)
+                storage=self, name=dataset_name)
         return self._datasets[dataset_name]
 
     def snapshot_create(self, dataset_name, snapname):
@@ -57,9 +57,9 @@ class DummyDataset(Dataset):
         return 1001
 
     def rename_dataset(self, new_dataset_name):
-        self.backend._datasets.pop(self.name)
+        self._storage._datasets.pop(self.name)
         self.name = new_dataset_name
-        self.backend._datasets[self.name] = self
+        self._storage._datasets[self.name] = self
 
     def snapshot_create(self, snapname):
         if snapname in self._snapshots:

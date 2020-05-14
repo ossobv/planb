@@ -2,7 +2,7 @@ from fnmatch import fnmatch
 
 from planb.common import human
 from planb.management.base import BaseCommand
-from planb.storage import pools as storage_pools
+from planb.storage import storage_pools
 from planb.storage.base import Datasets
 
 

@@ -3,7 +3,7 @@ from django.apps import apps
 from django.conf import settings
 from django.utils.translation import gettext as _
 
-from planb.storage import pools as storage_pools
+from planb.storage import storage_pools
 
 from .models import Fileset, HostGroup
 

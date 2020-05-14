@@ -16,7 +16,8 @@ class PlanbTestCase(TestCase):
         fileset.hostgroup.save()
         new_name = fileset.storage.name_dataset(
             fileset.hostgroup.name, fileset.friendly_name)
-        with patch.object(fileset.storage, '_perform_binary_command') as m:
+        with patch.object(
+                fileset.storage._storage, '_perform_binary_command') as m:
             m.return_value = '/' + old_name  # dataset mountpoint.
             fileset.rename_dataset(new_name)
             m.assert_called_with(('rename', old_name, new_name))

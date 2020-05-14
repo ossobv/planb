@@ -17,7 +17,7 @@ from django_q.brokers.redis_broker import Redis
 
 from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
-from planb.storage import pools as storage_pools
+from planb.storage import storage_pools
 from planb.storage.base import RETENTION_PERIOD_SECONDS, DatasetNotFound
 
 

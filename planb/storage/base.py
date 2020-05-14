@@ -35,8 +35,38 @@ class DatasetNotFound(Exception):
     pass
 
 
-class _PrivateStorage:
-    "Private/friend parts for storage backends."
+class Storage(object):
+    'Private/friend parts for storage backends.'
+    @classmethod
+    def ensure_defaults(cls, config):
+        config.setdefault('NAME', cls.__name__)
+
+    def __init__(self, config, alias):
+        self.config = config
+        self.name = config['NAME']
+        self.alias = alias
+
+    def get_label(self):
+        return self.name
+
+    def get_datasets(self):
+        '''
+        Return a list of Dataset objects found in the storage.
+
+        Example implementation::
+
+            return Datasets([
+                Dataset(zfs_storage, directory)
+                for directory in `zfs list -Hpo name`])
+        '''
+        raise NotImplementedError()
+
+    def get_dataset(self, dataset_name):
+        raise NotImplementedError()
+
+    def name_dataset(self, namespace, name):
+        return '{}-{}'.format(namespace, name)
+
     def snapshot_create(self, dataset_name, snapname):
         raise NotImplementedError()
 
@@ -139,40 +169,6 @@ class _PrivateStorage:
         return [i[1] for i in snapshots if i[1] in keep_snapshots]
 
 
-class Storage(_PrivateStorage):
-    name = NotImplemented
-
-    @classmethod
-    def ensure_defaults(cls, config):
-        config.setdefault('NAME', cls.__name__)
-
-    def __init__(self, config, alias):
-        self.config = config
-        self.name = config['NAME']
-        self.alias = alias
-
-    def get_label(self):
-        return self.name
-
-    def get_datasets(self):
-        """
-        Return a list of Dataset objects found in the storage.
-
-        Example implementation::
-
-            return Datasets([
-                Dataset(zfs_backend, directory)
-                for directory in `zfs list -Hpo name`])
-        """
-        raise NotImplementedError()
-
-    def name_dataset(self, namespace, name):
-        return '{}-{}'.format(namespace, name)
-
-    def get_dataset(self, dataset_name):
-        raise NotImplementedError()
-
-
 class Datasets(list):
     """
     A list of Dataset objects.
@@ -213,7 +209,7 @@ class Dataset(object):
     Storage(zfs pools)->Dataset(directory)->Snapshot(directory snapshot)
     """
     @staticmethod
-    def sortkey_by_name(instance):
+    def sortkey_by_name(dataset):
         """
         Common sort key to sort the dataset list.
 
@@ -225,18 +221,18 @@ class Dataset(object):
         O(n^2) times.
         """
         return (
-            (instance._database_object
-                and instance._database_object.hostgroup.name or ''),
-            instance.backend.name, instance.name)
+            (dataset._database_object
+                and dataset._database_object.hostgroup.name or ''),
+            dataset._storage.name, dataset.name)
 
-    def __init__(self, backend, name):
-        self.backend = backend
+    def __init__(self, storage, name):
+        self._storage = storage
         self.name = name
         self._disk_usage = None
         self._database_object = None  # of type Fileset
 
     def __repr__(self):
-        return '<{}:{}>'.format(self.backend.name, self.name)
+        return '<{}:{}>'.format(self._storage.name, self.name)
 
     def flush(self):
         self._disk_usage = None
@@ -288,23 +284,24 @@ class Dataset(object):
         raise NotImplementedError()
 
     def snapshot_create(self, snapname):
-        return self.backend.snapshot_create(self.name, snapname)
+        return self._storage.snapshot_create(self.name, snapname)
 
     def snapshot_delete(self, snapname):
-        return self.backend.snapshot_delete(self.name, snapname)
+        return self._storage.snapshot_delete(self.name, snapname)
 
     def snapshot_list(self):
-        return self.backend.snapshot_list(self.name)
+        return self._storage.snapshot_list(self.name)
 
     def snapshots_rotate(self, retention_map):
         if self.has_child_datasets():
             destroyed = []
             for dataset in self.get_child_datasets():
                 destroyed.extend(
-                    self.backend.snapshots_rotate(dataset.name, retention_map))
+                    self._storage.snapshots_rotate(
+                        dataset.name, retention_map))
             return destroyed
         else:
-            return self.backend.snapshots_rotate(self.name, retention_map)
+            return self._storage.snapshots_rotate(self.name, retention_map)
 
     @contextmanager
     def workon(self, data_path=None):

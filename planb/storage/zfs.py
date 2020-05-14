@@ -26,7 +26,13 @@ from .base import Datasets, Dataset, DatasetNotFound, Storage
 logger = logging.getLogger(__name__)
 
 
-class _PerformCommands:
+class PerformCommands:
+    @classmethod
+    def ensure_defaults(cls, config):
+        super().ensure_defaults(config)
+        config.setdefault('BINARY', '/sbin/zfs')
+        config.setdefault('SUDOBIN', '/usr/bin/sudo')
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__perform_system_binary = self.config['BINARY']
@@ -59,12 +65,16 @@ class _PerformCommands:
             (self.__perform_system_binary,) + tuple(cmd))
 
 
-class _ZfsPrivateStorage(_PerformCommands, Storage):
+class ZfsStorage(PerformCommands, Storage):
     @classmethod
     def ensure_defaults(cls, config):
         super().ensure_defaults(config)
-        config.setdefault('BINARY', '/sbin/zfs')
-        config.setdefault('SUDOBIN', '/usr/bin/sudo')
+        if 'POOLNAME' not in config:
+            raise ImproperlyConfigured('Zfs storage requires a POOLNAME')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.poolname = self.config['POOLNAME']
 
     def zfs_get_local_path(self, dataset_name):
         # FIXME: this is yet another zfs_get_properties()
@@ -184,18 +194,6 @@ class _ZfsPrivateStorage(_PerformCommands, Storage):
                 snapshots.append(snapshot.split('@', 1)[1])
         return snapshots
 
-
-class ZfsStorage(_ZfsPrivateStorage):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.poolname = self.config['POOLNAME']
-
-    @classmethod
-    def ensure_defaults(cls, config):
-        super().ensure_defaults(config)
-        if 'POOLNAME' not in config:
-            raise ImproperlyConfigured('Zfs storage requires a POOLNAME')
-
     def get_label(self):
         used, available = [
             int(i) for i in self.zfs_get_properties(
@@ -223,7 +221,7 @@ class ZfsStorage(_ZfsPrivateStorage):
                 continue
 
             assert dataset_name.startswith(parent), (dataset_name, parent)
-            dataset = ZfsDataset(backend=self, name=dataset_name)
+            dataset = ZfsDataset(storage=self, name=dataset_name)
             dataset.set_dataset_type(type_, contains)
             dataset.set_disk_usage(int(used))
             datasets.append(dataset)
@@ -231,7 +229,7 @@ class ZfsStorage(_ZfsPrivateStorage):
         return datasets
 
     def get_dataset(self, dataset_name):
-        return ZfsDataset(backend=self, name=dataset_name)
+        return ZfsDataset(storage=self, name=dataset_name)
 
     def name_dataset(self, namespace, name):
         return '{}/{}-{}'.format(self.poolname, namespace, name)
@@ -247,7 +245,7 @@ class ZfsDataset(Dataset):
         return self._dataset_type == ('filesystem', 'filesystems')
 
     def get_child_datasets(self):
-        return self.backend.get_datasets(self.name)
+        return self._storage.get_datasets(self.name)
 
     def flush(self):
         super().flush()
@@ -262,7 +260,7 @@ class ZfsDataset(Dataset):
             return
 
         # Try creating it. (Creation also mounts it.)
-        self.backend.zfs_create(self.name)
+        self._storage.zfs_create(self.name)
 
         # Now it should exist. Create the 'data' subdirectory as well.
         if hasattr(self, '_get_mount_path'):
@@ -275,13 +273,13 @@ class ZfsDataset(Dataset):
 
         # Unmount if possible.
         try:
-            self.backend.zfs_unmount(self.name)
+            self._storage.zfs_unmount(self.name)
         except CalledProcessError:
             pass
 
     def set_dataset_type(self, type=None, contains=None):
         if type is None and contains is None:
-            type, contains = self.backend.zfs_get_properties(
+            type, contains = self._storage.zfs_get_properties(
                 self.name, keys=('type', 'planb:contains'))
 
         # planb:contains used to be unset, defaults to 'data'
@@ -322,7 +320,7 @@ class ZfsDataset(Dataset):
         for attempt in (1, 2, 3):
             try:
                 # Attempt mount.
-                self.backend.zfs_mount(self.name)  # zfs dataset
+                self._storage.zfs_mount(self.name)  # zfs dataset
             except CalledProcessError:
                 # Maybe it was already mounted?
                 pass
@@ -346,7 +344,7 @@ class ZfsDataset(Dataset):
         # Leave directory, so it can be unmounted.
         os.chdir('/')
         try:
-            self.backend.zfs_unmount(self.name)  # zfs dataset
+            self._storage.zfs_unmount(self.name)  # zfs dataset
         except CalledProcessError:
             # Ok. This might be because someone else is using it. Ignore.
             pass
@@ -357,7 +355,7 @@ class ZfsDataset(Dataset):
 
     def get_mount_path(self):
         if not hasattr(self, '_get_mount_path'):
-            ret = self.backend.zfs_get_local_path(self.name)
+            ret = self._storage.zfs_get_local_path(self.name)
             if not ret:
                 return None  # no negative cache
 
@@ -382,10 +380,10 @@ class ZfsDataset(Dataset):
             self.get_data_path(), '../.zfs/snapshot', snapshot, 'data'))
 
     def get_used_size(self):
-        return self.backend.zfs_get_used_size(self.name)
+        return self._storage.zfs_get_used_size(self.name)
 
     def get_referenced_size(self, snapname=None):
-        return self.backend.zfs_get_referenced_size(
+        return self._storage.zfs_get_referenced_size(
             self.name, snapname)
 
     def rename_dataset(self, new_dataset_name):
@@ -396,7 +394,7 @@ class ZfsDataset(Dataset):
             'Cannot rename dataset {} while working from dataset directory '
             '{}'.format(self.get_mount_path(), os.getcwd()))
 
-        self.backend.zfs_rename_dataset(self.name, new_dataset_name)
+        self._storage.zfs_rename_dataset(self.name, new_dataset_name)
         self.name = new_dataset_name
 
         # Clear cached properties.

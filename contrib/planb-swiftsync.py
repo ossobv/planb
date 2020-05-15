@@ -927,7 +927,7 @@ _comm_actions = namedtuple('_comm_actions', 'both leftonly rightonly')
 def _comm(input_, actions):
     """
     Like comm(1) - compare two sorted files line by line - using the
-    listing_iter iterator.
+    _comm_lineiter iterator.
     """
     left_iter = _comm_lineiter(input_.left)
     right_iter = _comm_lineiter(input_.right)
@@ -1011,12 +1011,14 @@ class _ListLineTest(TestCase):
     def test_comm_lineiter_good(self):
         a = '''\
 contx|a|2021-02-03T12:34:56.654321|1234
+contx|ab|2021-02-03T12:34:56.654321|1234
 contx|b|2021-02-03T12:34:56.654321|1234
 conty|a|2021-02-03T12:34:56.654321|1234'''.split('\n')
         it = _comm_lineiter(a)
         values = [i for i in it]
         self.assertEqual(values, [
             ListLine('contx|a|2021-02-03T12:34:56.654321|1234'),
+            ListLine('contx|ab|2021-02-03T12:34:56.654321|1234'),
             ListLine('contx|b|2021-02-03T12:34:56.654321|1234'),
             ListLine('conty|a|2021-02-03T12:34:56.654321|1234')])
 
@@ -1030,7 +1032,7 @@ contx|b|2021-02-03T12:34:56.654321|1234'''.split('\n')
 
 
 class _CommTest(TestCase):
-    def test_1(self):
+    def test_mixed(self):
         a = '''\
 a|2021-02-03T12:34:56.654321|1234
 b|2021-02-03T12:34:56.654321|1234
@@ -1056,6 +1058,28 @@ c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
             'b2|2021-02-03T12:34:56.654321|1234',
             'b3|2021-02-03T12:34:56.654321|1234',
             'c2|2021-02-03T12:34:56.654321|1234'])
+
+    def test_oneonly(self):
+        a = '''\
+a|2021-02-03T12:34:56.654321|1234
+b|2021-02-03T12:34:56.654321|1234
+c|2021-02-03T12:34:56.654321|1234'''.split('\n')
+
+        act_both, act_left, act_right = [], [], []
+        ret = _comm(_comm_input(a, []), _comm_actions(
+            both=(lambda e: act_both.append(e)),
+            leftonly=(lambda d: act_left.append(d)),
+            rightonly=(lambda a: act_right.append(a))))
+        self.assertEqual(ret, None)
+        self.assertEqual((act_both, act_left, act_right), ([], a, []))
+
+        act_both, act_left, act_right = [], [], []
+        ret = _comm(_comm_input([], a), _comm_actions(
+            both=(lambda e: act_both.append(e)),
+            leftonly=(lambda d: act_left.append(d)),
+            rightonly=(lambda a: act_right.append(a))))
+        self.assertEqual(ret, None)
+        self.assertEqual((act_both, act_left, act_right), ([], [], a))
 
 
 class Cli:

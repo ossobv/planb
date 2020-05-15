@@ -9,7 +9,7 @@ import traceback
 import warnings
 
 from argparse import ArgumentParser
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
@@ -551,15 +551,14 @@ class SwiftSync:
                     os.chmod(self._path_del, 0o600)
                     with open(self._path_add, 'w') as add_fp:
                         os.chmod(self._path_add, 0o600)
-                        _comm(
-                            _comm_input(cur_fp, new_fp),
-                            _comm_actions(
-                                # We already have it if in both:
-                                both=(lambda e: None),
-                                # Remove when only in cur_fp:
-                                leftonly=(lambda d: del_fp.write(d)),
-                                # Add when only in new_fp:
-                                rightonly=(lambda a: add_fp.write(a))))
+                        llc = _ListLineComm(cur_fp, new_fp)
+                        llc.act(
+                            # We already have it if in both:
+                            both=(lambda e: None),
+                            # Remove when only in cur_fp:
+                            leftonly=(lambda d: del_fp.write(d)),
+                            # Add when only in new_fp:
+                            rightonly=(lambda a: add_fp.write(a)))
         finally:
             cur_fp.close()
 
@@ -571,15 +570,14 @@ class SwiftSync:
         with open(self._path_cur, 'r') as cur_fp:
             with open(path_tmp, 'w') as tmp_fp:
                 os.chmod(path_tmp, 0o600)
-                _comm(
-                    _comm_input(cur_fp, added_fp),
-                    _comm_actions(
-                        # Keep it if in both:
-                        both=(lambda e: tmp_fp.write(e)),
-                        # Keep it if we already had it:
-                        leftonly=(lambda d: tmp_fp.write(d)),
-                        # Keep it if we added it now:
-                        rightonly=(lambda a: tmp_fp.write(a))))
+                llc = _ListLineComm(cur_fp, added_fp)
+                llc.act(
+                    # Keep it if in both:
+                    both=(lambda e: tmp_fp.write(e)),
+                    # Keep it if we already had it:
+                    leftonly=(lambda d: tmp_fp.write(d)),
+                    # Keep it if we added it now:
+                    rightonly=(lambda a: tmp_fp.write(a)))
         os.rename(path_tmp, self._path_cur)
 
     def update_cur_list_from_deleted(self, deleted_fp):
@@ -590,15 +588,14 @@ class SwiftSync:
         with open(self._path_cur, 'r') as cur_fp:
             with open(path_tmp, 'w') as tmp_fp:
                 os.chmod(path_tmp, 0o600)
-                _comm(
-                    _comm_input(cur_fp, deleted_fp),
-                    _comm_actions(
-                        # Drop it if in both (we deleted it now):
-                        both=(lambda e: None),
-                        # Keep it if we didn't touch it:
-                        leftonly=(lambda d: tmp_fp.write(d)),
-                        # This should not happen:
-                        rightonly=None))
+                llc = _ListLineComm(cur_fp, deleted_fp)
+                llc.act(
+                    # Drop it if in both (we deleted it now):
+                    both=(lambda e: None),
+                    # Keep it if we didn't touch it:
+                    leftonly=(lambda d: tmp_fp.write(d)),
+                    # This should not happen:
+                    rightonly=None)
         os.rename(path_tmp, self._path_cur)
 
 
@@ -705,15 +702,14 @@ class SwiftSyncAdder:
                     log.info(
                         'Merging success lists (%d into %d)',
                         added_size, prev_size)
-                    _comm(
-                        _comm_input(prev_fp, added_fp),
-                        _comm_actions(
-                            # Keep it if in both:
-                            both=(lambda e: combined_fp.write(e)),
-                            # Keep it if we already had it:
-                            leftonly=(lambda d: combined_fp.write(d)),
-                            # Keep it if we added it now:
-                            rightonly=(lambda a: combined_fp.write(a))))
+                    llc = _ListLineComm(prev_fp, added_fp)
+                    llc.act(
+                        # Keep it if in both:
+                        both=(lambda e: combined_fp.write(e)),
+                        # Keep it if we already had it:
+                        leftonly=(lambda d: combined_fp.write(d)),
+                        # Keep it if we added it now:
+                        rightonly=(lambda a: combined_fp.write(a)))
                     combined_fp.flush()
 
                     # We don't need left anymore. Make combined the new left.
@@ -850,11 +846,22 @@ class SwiftSyncMultiAdder(threading.Thread):
                 path, record.container_path)
             return 1
 
+        self._add_new_record_dir(path)
+        if not self._add_new_record_download(record, container, path):
+            return 1
+        if not self._add_new_record_valid(record, path):
+            return 1
+
+        self._set_success(record)
+        return 0
+
+    def _add_new_record_dir(self, path):
         try:
             os.makedirs(os.path.dirname(path), 0o700)
         except FileExistsError:
             pass
 
+    def _add_new_record_download(self, record, container, path):
         try:
             with open(path, 'wb') as out_fp:
                 # resp_chunk_size - if defined, chunk size of data to read.
@@ -876,8 +883,10 @@ class SwiftSyncMultiAdder(threading.Thread):
                 os.unlink(path)
             except FileNotFoundError:
                 pass
-            return 1
+            return False
+        return True
 
+    def _add_new_record_valid(self, record, path):
         os.utime(path, ns=(record.modified, record.modified))
         local_size = os.stat(path).st_size
         if local_size != record.size:
@@ -889,10 +898,8 @@ class SwiftSyncMultiAdder(threading.Thread):
                 os.unlink(path)
             except FileNotFoundError:
                 pass
-            return 1
-
-        self._set_success(record)
-        return 0
+            return False
+        return True
 
     def _set_success(self, record):
         self._success_fp.write(record.line)
@@ -923,67 +930,98 @@ def _comm_lineiter(fp):
         prev_record = record
 
 
-_comm_input = namedtuple('_comm_input', 'left right')
-_comm_actions = namedtuple('_comm_actions', 'both leftonly rightonly')
-
-
-def _comm(input_, actions):
+class _ListLineComm:
     """
     Like comm(1) - compare two sorted files line by line - using the
     _comm_lineiter iterator.
+
+    Usage::
+
+        llc = _ListLineComm(cur_fp, new_fp)
+        llc.act(
+            # We already have it if in both:
+            both=(lambda e: None),
+            # Remove when only in cur_fp:
+            leftonly=(lambda d: del_fp.write(d)),
+            # Add when only in new_fp:
+            rightonly=(lambda a: add_fp.write(a)))
     """
-    left_iter = _comm_lineiter(input_.left)
-    right_iter = _comm_lineiter(input_.right)
+    def __init__(self, left, right):
+        self._left_src = left
+        self._right_src = right
 
-    try:
-        left = next(left_iter)
-    except StopIteration:
-        left = left_iter = None
-    try:
-        right = next(right_iter)
-    except StopIteration:
-        right = right_iter = None
+    def act(self, both, leftonly, rightonly):
+        self._act_both = both
+        self._act_leftonly = leftonly
+        self._act_rightonly = rightonly
 
-    while left_iter and right_iter:
-        if left.container_path < right.container_path:
-            # Current is lower, remove and seek current.
-            actions.leftonly(left.line)
-            try:
-                left = next(left_iter)
-            except StopIteration:
-                left = left_iter = None
-        elif right.container_path < left.container_path:
-            # New is lower, add and seek right.
-            actions.rightonly(right.line)
-            try:
-                right = next(right_iter)
-            except StopIteration:
-                right = right_iter = None
-        else:
-            # They must be equal, remove/add if line is different and seek
-            # both.
-            if left.line == right.line:
-                actions.both(right.line)
+        self._process_main()
+        self._process_tail()
+
+    def _setup(self, source):
+        it = _comm_lineiter(source)
+        try:
+            elem = next(it)
+        except StopIteration:
+            elem = it = None
+        return it, elem
+
+    def _process_main(self):
+        # Make local
+        act_both, act_leftonly, act_rightonly = (
+            self._act_both, self._act_leftonly, self._act_rightonly)
+
+        left_iter, left = self._setup(self._left_src)
+        right_iter, right = self._setup(self._right_src)
+
+        while left_iter and right_iter:
+            if left.container_path < right.container_path:
+                # Current is lower, remove and seek current.
+                act_leftonly(left.line)
+                try:
+                    left = next(left_iter)
+                except StopIteration:
+                    left = left_iter = None
+            elif right.container_path < left.container_path:
+                # New is lower, add and seek right.
+                act_rightonly(right.line)
+                try:
+                    right = next(right_iter)
+                except StopIteration:
+                    right = right_iter = None
             else:
-                actions.leftonly(left.line)
-                actions.rightonly(right.line)
-            try:
-                left = next(left_iter)
-            except StopIteration:
-                left = left_iter = None
-            try:
-                right = next(right_iter)
-            except StopIteration:
-                right = right_iter = None
+                # They must be equal, remove/add if line is different and seek
+                # both.
+                if left.line == right.line:
+                    act_both(right.line)
+                else:
+                    act_leftonly(left.line)
+                    act_rightonly(right.line)
+                try:
+                    left = next(left_iter)
+                except StopIteration:
+                    left = left_iter = None
+                try:
+                    right = next(right_iter)
+                except StopIteration:
+                    right = right_iter = None
 
-    if left_iter:
-        actions.leftonly(left.line)
-        for left in left_iter:
-            actions.leftonly(left.line)
-    if right_iter:
-        actions.rightonly(right.line)
-        for right in right_iter:
-            actions.rightonly(right.line)
+        # Store
+        self._left_iter, self._left = left_iter, left
+        self._right_iter, self._right = right_iter, right
+
+    def _process_tail(self):
+        if self._left_iter:
+            act_leftonly = self._act_leftonly
+            act_leftonly(self._left.line)
+            for left in self._left_iter:
+                act_leftonly(left.line)
+
+        if self._right_iter:
+            act_rightonly = self._act_rightonly
+            act_rightonly(self._right.line)
+            for right in self._right_iter:
+                act_rightonly(right.line)
 
 
 class _ListLineTest(TestCase):
@@ -994,22 +1032,22 @@ class _ListLineTest(TestCase):
             'containerx|path/to||esc|2021-02-03T12:34:56.654321|1234')
 
     def test_with_container(self):
-        l = ListLine(
-            'containerx|path/to/somewhere|2021-02-03T12:34:56.654321|1234')
-        self.assertEqual(l.container, 'containerx')
-        self.assertEqual(l.container_path, ('containerx', 'path/to/somewhere'))
-        self.assertEqual(l.path, 'path/to/somewhere')
-        self.assertEqual(l.modified, 1612355696654321000)
-        self.assertEqual(l.size, 1234)
+        ll = ListLine(
+            'contx|path/to/somewhere|2021-02-03T12:34:56.654321|1234')
+        self.assertEqual(ll.container, 'contx')
+        self.assertEqual(ll.container_path, ('contx', 'path/to/somewhere'))
+        self.assertEqual(ll.path, 'path/to/somewhere')
+        self.assertEqual(ll.modified, 1612355696654321000)
+        self.assertEqual(ll.size, 1234)
 
     def test_no_container(self):
-        l = ListLine(
+        ll = ListLine(
             'nocontainer/to/somewhere|2021-02-03T12:34:57.654321|12345')
-        self.assertEqual(l.container, None)
-        self.assertEqual(l.container_path, (None, 'nocontainer/to/somewhere'))
-        self.assertEqual(l.path, 'nocontainer/to/somewhere')
-        self.assertEqual(l.modified, 1612355697654321000)
-        self.assertEqual(l.size, 12345)
+        self.assertEqual(ll.container, None)
+        self.assertEqual(ll.container_path, (None, 'nocontainer/to/somewhere'))
+        self.assertEqual(ll.path, 'nocontainer/to/somewhere')
+        self.assertEqual(ll.modified, 1612355697654321000)
+        self.assertEqual(ll.size, 12345)
 
     def test_comm_lineiter_good(self):
         a = '''\
@@ -1034,7 +1072,7 @@ contx|b|2021-02-03T12:34:56.654321|1234'''.split('\n')
         self.assertRaises(ValueError, list, it)
 
 
-class _CommTest(TestCase):
+class _ListLineCommTest(TestCase):
     def test_mixed(self):
         a = '''\
 a|2021-02-03T12:34:56.654321|1234
@@ -1047,11 +1085,11 @@ b3|2021-02-03T12:34:56.654321|1234
 c|2021-02-03T12:34:56.654321|1234
 c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
         act_both, act_left, act_right = [], [], []
-        ret = _comm(_comm_input(a, b), _comm_actions(
+        llc = _ListLineComm(a, b)
+        llc.act(
             both=(lambda e: act_both.append(e)),
             leftonly=(lambda d: act_left.append(d)),
-            rightonly=(lambda a: act_right.append(a))))
-        self.assertEqual(ret, None)
+            rightonly=(lambda a: act_right.append(a)))
         self.assertEqual(act_both, [
             'a|2021-02-03T12:34:56.654321|1234',
             'c|2021-02-03T12:34:56.654321|1234'])
@@ -1069,19 +1107,19 @@ b|2021-02-03T12:34:56.654321|1234
 c|2021-02-03T12:34:56.654321|1234'''.split('\n')
 
         act_both, act_left, act_right = [], [], []
-        ret = _comm(_comm_input(a, []), _comm_actions(
+        llc = _ListLineComm(a, [])
+        llc.act(
             both=(lambda e: act_both.append(e)),
             leftonly=(lambda d: act_left.append(d)),
-            rightonly=(lambda a: act_right.append(a))))
-        self.assertEqual(ret, None)
+            rightonly=(lambda a: act_right.append(a)))
         self.assertEqual((act_both, act_left, act_right), ([], a, []))
 
         act_both, act_left, act_right = [], [], []
-        ret = _comm(_comm_input([], a), _comm_actions(
+        llc = _ListLineComm([], a)
+        llc.act(
             both=(lambda e: act_both.append(e)),
             leftonly=(lambda d: act_left.append(d)),
-            rightonly=(lambda a: act_right.append(a))))
-        self.assertEqual(ret, None)
+            rightonly=(lambda a: act_right.append(a)))
         self.assertEqual((act_both, act_left, act_right), ([], [], a))
 
 

@@ -70,7 +70,9 @@ for remotepath in "$@"; do
         # Undo any local changes (properties?)
         sudo zfs rollback "$dst@$recent_snapshot"
         src_prev=$remotepath@$recent_snapshot
-        ssh $ssh_target sudo zfs send -i "$src_prev" "$src" '|' "$deflate" |
+        # Use "-I" instead of "-i" to send all manual snapshots too.
+        # Unsure about the "--props" setting to send properties..
+        ssh $ssh_target sudo zfs send -I "$src_prev" "$src" '|' "$deflate" |
             "$inflate" | sudo zfs recv "$dst"
     else
         ssh $ssh_target sudo zfs send "$src" '|' "$deflate" |

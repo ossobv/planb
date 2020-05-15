@@ -53,7 +53,7 @@ class PlanbStorageTestCase(TestCase):
             'hello', 'planb-20200504T1458Z', 'daily-202005041602',
             'planb-20200504T1655Z', 'planb-20200504T1700Z',
         ])
-        destroyed = dataset.snapshots_rotate(
+        destroyed = dataset.snapshot_rotate(
             retention_map={'h': 2, 'y': 1})
         self.assertEqual(
             destroyed, ['planb-20200504T1655Z', 'daily-202005031801',
@@ -102,7 +102,7 @@ class PlanbStorageTestCase(TestCase):
         dataset.snapshot_create('daily-202005082204')
         dataset.snapshot_create('daily-202005092203')
         dataset.snapshot_create('daily-202005102206')
-        destroyed = dataset.snapshots_rotate(
+        destroyed = dataset.snapshot_rotate(
             {'y': 2, 'm': 12, 'w': 4, 'd': 16})
         self.assertEqual(
             destroyed, ['daily-202005032209', 'yearly-201906010002'])

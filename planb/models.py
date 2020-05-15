@@ -396,8 +396,8 @@ class Fileset(models.Model):
     def snapshot_rotate(self):
         dataset = self.get_dataset()
         if dataset.has_child_datasets():
-            return dataset.child_dataset_snapshots_rotate(self.retention_map)
-        return dataset.snapshots_rotate(self.retention_map)
+            return dataset.child_dataset_snapshot_rotate(self.retention_map)
+        return dataset.snapshot_rotate(self.retention_map)
 
     def snapshot_list(self):
         return self.get_dataset().snapshot_list()

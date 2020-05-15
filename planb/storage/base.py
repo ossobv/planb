@@ -76,7 +76,7 @@ class Storage(object):
     def snapshot_list(self, dataset_name):
         raise NotImplementedError()
 
-    def snapshots_rotate(self, dataset_name, retention_map):
+    def snapshot_rotate(self, dataset_name, retention_map):
         '''
         Rotate the snapshots according to the retention parameters.
         '''
@@ -292,8 +292,8 @@ class Dataset(object):
     def snapshot_list(self):
         return self._storage.snapshot_list(self.name)
 
-    def snapshots_rotate(self, retention_map):
-        return self._storage.snapshots_rotate(self.name, retention_map)
+    def snapshot_rotate(self, retention_map):
+        return self._storage.snapshot_rotate(self.name, retention_map)
 
     def child_dataset_snapshot_rotate(self, retention_map):
         '''
@@ -307,7 +307,7 @@ class Dataset(object):
         destroyed = set()
         for dataset in self.get_child_datasets():
             destroyed.update(
-                self._storage.snapshots_rotate(
+                self._storage.snapshot_rotate(
                     dataset.name, retention_map))
         return list(destroyed)
 

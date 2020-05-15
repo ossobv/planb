@@ -14,6 +14,7 @@ from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
 from tempfile import NamedTemporaryFile
 from time import time
+from unittest import TestCase
 
 try:
     from swiftclient import Connection
@@ -320,6 +321,12 @@ class ListLine:
             assert len(us) == 6
             self._modified_cache = 1000000000 * dates + 1000 * int(us)
         return self._modified_cache
+
+    def __eq__(self, other):
+        return (self.size == other.size
+                and self.container == other.container
+                and self.container_path == other.container_path
+                and self.path == other.path)
 
 
 class SwiftSync:
@@ -976,6 +983,81 @@ def _comm(input_, actions):
             actions.rightonly(right.line)
 
 
+class _ListLineTest(TestCase):
+    def test_pipe_in_path(self):
+        self.assertRaises(
+            NotImplementedError,
+            ListLine,
+            'containerx|path/to||esc|2021-02-03T12:34:56.654321|1234')
+
+    def test_with_container(self):
+        l = ListLine(
+            'containerx|path/to/somewhere|2021-02-03T12:34:56.654321|1234')
+        self.assertEqual(l.container, 'containerx')
+        self.assertEqual(l.container_path, ('containerx', 'path/to/somewhere'))
+        self.assertEqual(l.path, 'path/to/somewhere')
+        self.assertEqual(l.modified, 1612355696654321000)
+        self.assertEqual(l.size, 1234)
+
+    def test_no_container(self):
+        l = ListLine(
+            'nocontainer/to/somewhere|2021-02-03T12:34:57.654321|12345')
+        self.assertEqual(l.container, None)
+        self.assertEqual(l.container_path, (None, 'nocontainer/to/somewhere'))
+        self.assertEqual(l.path, 'nocontainer/to/somewhere')
+        self.assertEqual(l.modified, 1612355697654321000)
+        self.assertEqual(l.size, 12345)
+
+    def test_comm_lineiter_good(self):
+        a = '''\
+contx|a|2021-02-03T12:34:56.654321|1234
+contx|b|2021-02-03T12:34:56.654321|1234
+conty|a|2021-02-03T12:34:56.654321|1234'''.split('\n')
+        it = _comm_lineiter(a)
+        values = [i for i in it]
+        self.assertEqual(values, [
+            ListLine('contx|a|2021-02-03T12:34:56.654321|1234'),
+            ListLine('contx|b|2021-02-03T12:34:56.654321|1234'),
+            ListLine('conty|a|2021-02-03T12:34:56.654321|1234')])
+
+    def test_comm_lineiter_error(self):
+        a = '''\
+contx|a|2021-02-03T12:34:56.654321|1234
+contx|c|2021-02-03T12:34:56.654321|1234
+contx|b|2021-02-03T12:34:56.654321|1234'''.split('\n')
+        it = _comm_lineiter(a)
+        self.assertRaises(ValueError, list, it)
+
+
+class _CommTest(TestCase):
+    def test_1(self):
+        a = '''\
+a|2021-02-03T12:34:56.654321|1234
+b|2021-02-03T12:34:56.654321|1234
+c|2021-02-03T12:34:56.654321|1234'''.split('\n')
+        b = '''\
+a|2021-02-03T12:34:56.654321|1234
+b2|2021-02-03T12:34:56.654321|1234
+b3|2021-02-03T12:34:56.654321|1234
+c|2021-02-03T12:34:56.654321|1234
+c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
+        act_both, act_left, act_right = [], [], []
+        ret = _comm(_comm_input(a, b), _comm_actions(
+            both=(lambda e: act_both.append(e)),
+            leftonly=(lambda d: act_left.append(d)),
+            rightonly=(lambda a: act_right.append(a))))
+        self.assertEqual(ret, None)
+        self.assertEqual(act_both, [
+            'a|2021-02-03T12:34:56.654321|1234',
+            'c|2021-02-03T12:34:56.654321|1234'])
+        self.assertEqual(act_left, [
+            'b|2021-02-03T12:34:56.654321|1234'])
+        self.assertEqual(act_right, [
+            'b2|2021-02-03T12:34:56.654321|1234',
+            'b3|2021-02-03T12:34:56.654321|1234',
+            'c2|2021-02-03T12:34:56.654321|1234'])
+
+
 class Cli:
     def __init__(self):
         parser = ArgumentParser()
@@ -1033,6 +1115,7 @@ class Cli:
 
 
 if __name__ == '__main__':
+    # Test using: python3 -m unittest contrib/planb-swiftsync.py
     cli = Cli()
     try:
         cli.execute()

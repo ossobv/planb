@@ -42,9 +42,9 @@ def load_storage_pools():
     pools = {}
     for alias, config in settings.PLANB_STORAGE_POOLS.items():
         config.setdefault('ENGINE', 'planb.storage.dummy.DummyStorage')
-        Storage = import_string(config['ENGINE'])
-        Storage.ensure_defaults(config)
-        pools[alias] = StorageWrapper(Storage(config, alias))
+        StorageImpl = import_string(config['ENGINE'])
+        StorageImpl.ensure_defaults(config)
+        pools[alias] = StorageWrapper(StorageImpl(config, alias))
     return pools
 
 

@@ -1,8 +1,5 @@
 import factory
 from factory.django import DjangoModelFactory
-from factory.fuzzy import FuzzyChoice
-
-from planb.storage import storage_pools
 
 
 class UserFactory(DjangoModelFactory):

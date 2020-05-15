@@ -905,7 +905,10 @@ def _comm_lineiter(fp):
     it = iter(fp)
 
     # Do one manually, so we get prev_path.
-    line = next(it)
+    try:
+        line = next(it)
+    except StopIteration:
+        return
     record = ListLine(line)
     yield record
     prev_record = record

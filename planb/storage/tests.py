@@ -63,6 +63,20 @@ class PlanbStorageTestCase(TestCase):
             'daily-202005041602', 'planb-20200504T1700Z',
         ])
 
+    def test_snapshot_rotate_irregular(self):
+        storage = self.get_dummy_storage()
+        dataset = storage.get_dataset('my_dataset')
+        dataset.ensure_exists()
+        dataset.snapshot_create('planb-20200102T0912Z')
+        dataset.snapshot_create('planb-20200502T1743Z')
+        dataset.snapshot_create('planb-20200503T1801Z')
+        self.assertEqual(dataset.snapshot_list(), [
+            'planb-20200102T0912Z', 'planb-20200502T1743Z',
+            'planb-20200503T1801Z',
+        ])
+        destroyed = dataset.snapshot_rotate(retention_map={'h': 2})
+        self.assertEqual(destroyed, ['planb-20200102T0912Z'])
+
     def test_snapshot_rotate_migration(self):
         # Test how the migration from multiple snapshots per backuprun to a
         # single snapshot will remove redundant snapshots.
@@ -104,8 +118,7 @@ class PlanbStorageTestCase(TestCase):
         dataset.snapshot_create('daily-202005102206')
         destroyed = dataset.snapshot_rotate(
             {'y': 2, 'm': 12, 'w': 4, 'd': 16})
-        self.assertEqual(
-            destroyed, ['daily-202005032209', 'yearly-201906010002'])
+        self.assertEqual(destroyed, ['daily-202005032209'])
 
     def test_zfs_storage(self):
         config = {

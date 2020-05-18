@@ -115,58 +115,60 @@ class Storage(object):
             logger.info('[%s] Destroyed snapshot: %s', dataset_name, snapname)
         return destroyed
 
-    def _get_optimal_snapshot_datetimes(self, start_time, retention_map):
-        datetimes = []
-        for period, retention in retention_map.items():
-            period_in_seconds = RETENTION_PERIOD_SECONDS[period]
-            for i in range(1, retention + 1):
-                datetimes.append(
-                    start_time - datetime.timedelta(
-                        seconds=period_in_seconds * i)
-                )
-        return sorted(datetimes, reverse=True)
-
     def _get_snapshots_to_keep(self, dataset_name, snapshots, retention_map):
         # Go through all snapshots and decide which should be kept.
         snapshots = list(sorted(snapshots, reverse=True))
-        current_snapshot = snapshots[0]
-        # Always keep the most recent snapshot.
-        keep_snapshots = {current_snapshot[1]}
-        desired_snapshots = self._get_optimal_snapshot_datetimes(
-            current_snapshot[0], retention_map)
-        logger.debug(
-            '[%s] Desired snapshots: %s', dataset_name,
-            [i.strftime('%Y%m%dT%H%MZ') for i in desired_snapshots])
-        # For each desired snapshot we need to keep the best matching snapshot
-        # and the snapshot that will become the best match.
-        for desired_dts in desired_snapshots:
-            best_snapshot = best_difference = None
-            for i, (dts, snapname) in enumerate(snapshots[1:], -1):
-                difference = (desired_dts - dts).total_seconds()
-                if (best_difference is None
-                        or abs(difference) < abs(best_difference)):
-                    best_difference = difference
-                    best_snapshot = snapname
-                elif abs(difference) > abs(best_difference):
-                    if best_difference > 0:
-                        # The snapshot is going stale, include a new snapshot.
-                        fresh_snapname = snapshots[i][1]
-                        logger.debug(
-                            '[%s] Select %s as fresh match for %s',
-                            dataset_name, fresh_snapname,
-                            desired_dts.strftime('%Y%m%dT%H%MZ'))
-                        keep_snapshots.add(fresh_snapname)
+        latest_dts, latest_snapshot = snapshots[0]
+        # Always keep the latest snapshot.
+        keep_snapshots = {latest_snapshot}
+        for period, retention in retention_map.items():
+            next_dts = latest_dts
+            period_in_seconds = RETENTION_PERIOD_SECONDS[period]
+            for i in range(retention):
+                # Find the next best snapshot from the previous match to
+                # increase coverage on systems with irregular schedules.
+                next_dts = self._find_snapshot_for_desired_dts(
+                    dataset_name, snapshots, keep_snapshots,
+                    next_dts - datetime.timedelta(
+                        seconds=period_in_seconds))
+                if len(keep_snapshots) == len(snapshots):
                     break
-            if best_snapshot is not None:
-                logger.debug(
-                    '[%s] Select %s as best match for %s with diff:%d',
-                    dataset_name, best_snapshot,
-                    desired_dts.strftime('%Y%m%dT%H%MZ'), best_difference)
-                keep_snapshots.add(best_snapshot)
-            if len(keep_snapshots) == len(snapshots):
-                break
+            else:
+                continue
+            # Inner loop was broken.
+            break
         # Return with the same ordering.
         return [i[1] for i in snapshots if i[1] in keep_snapshots]
+
+    def _find_snapshot_for_desired_dts(
+            self, dataset_name, snapshots, keep_snapshots, desired_dts):
+        # For each desired snapshot we need to keep the best matching snapshot
+        # and the snapshot that will become the best match.
+        best_difference = best_dts = best_snapshot = None
+        for i, (dts, snapname) in enumerate(snapshots[1:], -1):
+            difference = (desired_dts - dts).total_seconds()
+            if (best_difference is None
+                    or abs(difference) < abs(best_difference)):
+                best_difference = difference
+                best_snapshot = snapname
+                best_dts = dts
+            elif abs(difference) > abs(best_difference):
+                if best_difference > 0:
+                    # The snapshot is going stale, include a new snapshot.
+                    fresh_snapname = snapshots[i][1]
+                    logger.debug(
+                        '[%s] Select %s as fresh match for %s',
+                        dataset_name, fresh_snapname,
+                        desired_dts.strftime('%Y%m%dT%H%MZ'))
+                    keep_snapshots.add(fresh_snapname)
+                break
+        if best_snapshot is not None:
+            logger.debug(
+                '[%s] Select %s as best match for %s with diff:%d',
+                dataset_name, best_snapshot,
+                desired_dts.strftime('%Y%m%dT%H%MZ'), best_difference)
+            keep_snapshots.add(best_snapshot)
+        return best_dts
 
 
 class Datasets(list):

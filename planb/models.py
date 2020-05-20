@@ -18,7 +18,8 @@ from django_q.brokers.redis_broker import Redis
 from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
 from planb.storage import storage_pools
-from planb.storage.base import RETENTION_PERIOD_SECONDS, DatasetNotFound
+from planb.storage.base import DatasetNotFound
+from planb.utils import RETENTION_PERIOD_ADVANCED
 
 
 logger = logging.getLogger(__name__)
@@ -238,6 +239,7 @@ class Fileset(models.Model):
             self._retention_map = dict(
                 (i[-1], int(i[:-1]))
                 for i in self.get_retention().split(',')
+                if i
             )
         return self._retention_map
 
@@ -359,7 +361,7 @@ class Fileset(models.Model):
         if self._has_recent_backup():
             return False
 
-        self.refresh_from_db()
+        self.refresh_from_db(fields=['is_running'])
         if self.is_running:
             return False
 
@@ -377,7 +379,7 @@ class Fileset(models.Model):
         order = 'hdwmy'
         for period in sorted(self.retention_map, key=order.index):
             if self.retention_map[period] > 0:
-                period_in_seconds = RETENTION_PERIOD_SECONDS[period]
+                period_has_advanced = RETENTION_PERIOD_ADVANCED[period]
                 break
         else:
             logger.warning(
@@ -386,9 +388,10 @@ class Fileset(models.Model):
             return True
 
         now = timezone.now()
-        seconds_since_last = (now - self.last_ok).total_seconds()
-        seconds_to_stale = (seconds_since_last + self.average_duration)
-        if seconds_to_stale >= period_in_seconds:
+        # Advances in the period value should trigger a backup.
+        # This will cause backups to start at a similar time every interval.
+        # e.g. dailies every day, hourlies every hour.
+        if period_has_advanced(self.last_ok, now):
             return False
 
         return True

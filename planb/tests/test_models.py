@@ -1,6 +1,7 @@
 import datetime
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from mock import patch
 
 from planb.factories import FilesetFactory
@@ -83,3 +84,56 @@ class PlanbTestCase(TestCase):
         fileset = FilesetFactory(
             retention='36h,7d', hostgroup__retention='12m,3y')
         self.assertEqual(fileset.retention_map, {'h': 36, 'd': 7})
+
+    @override_settings(PLANB_RETENTION='')
+    def test_should_backup(self):
+        fileset = FilesetFactory(
+            average_duration=19172, first_fail=timezone.now(),
+            is_enabled=False)
+        # Fileset disabled.
+        self.assertFalse(fileset.should_backup())
+        fileset.is_enabled = True
+
+        # Last backup failed.
+        self.assertTrue(fileset.should_backup())
+        fileset.first_fail = None
+
+        # No backups.
+        self.assertTrue(fileset.should_backup())
+        fileset.last_ok = timezone.now()
+
+        # No retention = no backup interval.
+        self.assertFalse(fileset.should_backup())
+        fileset.retention = '3d'
+        del fileset._retention_map
+
+        # Has recent backup.
+        self.assertFalse(fileset.should_backup())
+
+        # No recent backup.
+        # 68400 seconds since last + 19172 avg duration > 86400 daily interval.
+        fileset.last_ok = timezone.now() - datetime.timedelta(hours=19)
+        self.assertTrue(fileset.should_backup())
+
+        # Daily backups should start each day, hourly backups should start
+        # each hour, regardless of the time since the previous backup.
+        with patch('planb.models.timezone') as m:
+            # Time since last backup is just 5 hours.
+            fileset.last_ok = datetime.datetime(
+                2020, 5, 19, 19, tzinfo=timezone.utc)
+            m.now.return_value = datetime.datetime(
+                2020, 5, 20, tzinfo=timezone.utc)
+            self.assertTrue(fileset.should_backup())
+            # Same day of the month, one month later at midnight.
+            m.now.return_value = datetime.datetime(
+                2020, 6, 19, tzinfo=timezone.utc)
+            self.assertTrue(fileset.should_backup())
+
+        # Backup is running.
+        # The running status is refreshed from the database.
+        fileset.is_running = True
+        fileset.save()
+        self.assertFalse(fileset.should_backup())
+        fileset.is_running = False
+        fileset.save()
+        self.assertTrue(fileset.should_backup())

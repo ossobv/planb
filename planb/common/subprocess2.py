@@ -113,7 +113,7 @@ def check_output(cmd, *, env=None, return_stderr=None, shell=False,
         if fp:
             fp.kill()
 
-    if stderr and return_stderr:
+    if stderr and return_stderr is not None:
         return_stderr.append(stderr)
     return stdout
 

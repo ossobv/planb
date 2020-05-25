@@ -2,8 +2,8 @@
 =======
 
 PlanB backs up your remote SSH-accessible files using rsync to a local ZFS
-storage. Manage many hosts and host groups. Automate daily, weekly, monthly and
-yearly backups with snapshots.
+storage. Manage many hosts and host groups. Automate hourly, daily,
+weekly, monthly and yearly backups with snapshots.
 
 
 ------------
@@ -15,8 +15,8 @@ At the moment, the interface is just a Django admin interface:
 .. image:: assets/example_hosts.png
     :alt: A list of hosts configured in PlanB with most recent backup status
 
-The files are stored on ZFS storage, using snapshots to keep earlier versions
-of tiles. See this example shell transscript::
+The files are stored on ZFS storage. It uses ZFS snapshots to keep earlier
+versions of files. See this example shell transscript::
 
     # zfs list | grep mongo2
     tank/BACKUP/experience-mongo2   9,34G  1,60T   855M  /srv/backups/experience-mongo2
@@ -32,18 +32,18 @@ Those are the "current" files in the workspace. But you can go back in time::
     # zfs list -r -t all tank/BACKUP/experience-mongo2 | head -n4
     NAME                                                 USED  AVAIL  REFER  MOUNTPOINT
     tank/BACKUP/experience-mongo2                       9,34G  1,60T   855M  /srv/backups/experience-mongo2
-    tank/BACKUP/experience-mongo2@daily-201706031147        0      -   809M  -
-    tank/BACKUP/experience-mongo2@monthly-201706031147      0      -   809M  -
+    tank/BACKUP/experience-mongo2@planb-20170603T1147Z      0      -   809M  -
+    tank/BACKUP/experience-mongo2@planb-20170603T1211Z      0      -   809M  -
 
     # cd /srv/backups/experience-mongo2/.zfs/
     # ls -1
-    daily-201706031147
-    daily-201706031211
-    daily-201706040001
-    daily-201706050002
+    planb-20170603T1147Z
+    planb-20170603T1211Z
+    planb-20170604T0001Z
+    planb-20170605T0002Z
     ...
 
-    # ls daily-201706031147/data/srv/mongodb -l
+    # ls planb-20170603T1147Z/data/srv/mongodb -l
     total 581434
     -rw------- 1 planb nogroup   67108864 jun  2 18:21 experience.0
     -rw------- 1 planb nogroup  134217728 mei 29 14:38 experience.1

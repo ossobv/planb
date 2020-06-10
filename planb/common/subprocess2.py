@@ -23,6 +23,15 @@ class CalledProcessError(OrigCalledProcessError):
         if not text:
             return ''
 
+        # You should not rely on this output to be complete. And when
+        # you're getting this via e-mail, you don't want big mega-byte
+        # blobs. Trim it if it's too large:
+        if len(text) >= 256 * 1024:
+            text = (
+                text[0:(128 * 1024)]
+                + '\n[... truncated ...]\n'
+                + text[-(128 * 1024):])
+
         if text.endswith('\n'):
             text = text[0:-1]
         else:

@@ -21,6 +21,8 @@ try:
 except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
+else:
+    from swiftclient.exceptions import ClientException
 
 # TODO: when stopping mid-add, we get lots of "ValueError: early abort"
 # backtraces polluting the log; should do without error
@@ -34,11 +36,15 @@ user = NAMESPACE:USER
 key = KEY
 auth = https://AUTHSERVER/auth/v1.0
 
+; You can use one or more 'planb_translate' or use 'planb_translate_<N>'
+; to define filename translation rules. They may be needed to circumvent
+; local filesystem limits (like not allowing trailing / in a filename).
+
 ; GUID-style (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) to "ID/GU/FULLGUID".
 planb_translate_0 = document=
     ^([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{8}([0-9a-f]{2})([0-9a-f]{2}))$=
     \4/\3/\1
-; BEWARE ^^ remove excess linefeeds and indentation before use ^^
+; BEWARE ^^ remove excess linefeeds and indentation from this example  ^^
 
 ; Translate in the 'wsdl' container all paths that start with "YYYYMMDD"
 ; to "YYYY/MM/DD/"
@@ -47,7 +53,8 @@ planb_translate_1 = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
 ; Translate in all containers all paths (files) that end with a slash to %2F.
 ; (This will conflict with files actually having a %2F there, but that
 ; is not likely to happen.)
-planb_translate = *=/$=%2F
+planb_translate_2 = *=/$=%2F
+
 
 [acme_swift_v3_config]
 
@@ -59,6 +66,11 @@ auth = https://AUTHSERVER/v3/
 tenant = PROJECT
 tenant_domain = PROJECT_DOMAIN
 auth_version = 3
+
+; Set this to always to skip autodetection of DLO segment support: not all DLO
+; segments are stored in a separate <container>_segments container.
+; (You may need to clear the planb-swiftsync.new cache after setting this.)
+planb_container_has_segments = always
 """
 
 
@@ -191,6 +203,13 @@ class SwiftSyncConfig:
         for key in sorted(config.keys()):
             if key == 'planb_translate' or key.startswith('planb_translate_'):
                 self.planb_translations.extend(config[key])
+
+        # Sometimes segment autodetection can fail, resulting in:
+        # > Filesize mismatch for '...': 0 != 9515
+        # This is probably because the object has X-Object-Manifest and is a
+        # Dynamic Large Object (DLO).
+        self.all_containers_have_segments = (
+            config.get('planb_container_has_segments', [''])[-1] == 'always')
 
     def read_environment(self):
         # /tank/customer-friendly_name/data
@@ -362,6 +381,8 @@ class SwiftSync:
             #    'name': 'containerA'}]
             container_names = set(i['name'] for i in containers)
 
+            force_segments = self.config.all_containers_have_segments
+
             # Translate container set into containers with and without
             # segments. For example:
             # - containerA (has_segments=False)
@@ -377,10 +398,12 @@ class SwiftSync:
                 if self.container:
                     if self.container == name:
                         new = SwiftContainer(name)
-                        if '{}_segments'.format(name) in container_names:
+                        if force_segments or (
+                                '{}_segments'.format(name) in container_names):
                             new.has_segments = True
                         selected_containers.append(new)
                         break
+
                 # We're getting all containers. Check if X_segments exists for
                 # it. And only add X_segments containers if there is no X
                 # container.
@@ -391,7 +414,8 @@ class SwiftSync:
                         pass
                     else:
                         new = SwiftContainer(name)
-                        if '{}_segments'.format(name) in container_names:
+                        if force_segments or (
+                                '{}_segments'.format(name) in container_names):
                             new.has_segments = True
                         selected_containers.append(new)
 
@@ -512,26 +536,39 @@ class SwiftSync:
                         container, full_listing=False, limit=limit,
                         marker=marker)
                     for idx, line in enumerate(lines):
-                        record = SwiftLine(line)
-
-                        if record.size == 0 and container.has_segments:
-                            # Do a head to get DLO/SLO stats. This is
-                            # only needed if this container has segments,
-                            # and if the apparent file size is 0.
-                            obj_stat = swiftconn.head_object(
-                                container, line['name'])
-                            # If this is still 0, then it an empty file
-                            # anyway.
-                            record.size = int(obj_stat['content-length'])
-
-                        dest.write(fmt.format(
-                            record.path.replace('|', '||'),
-                            record.modified,
-                            record.size))
+                        self._make_new_list_add_line(
+                            dest, fmt, swiftconn, container, line)
                         marker = line['name']
                     if idx + 1 < limit:
                         break
         os.rename(path_tmp, self._path_new)
+
+    def _make_new_list_add_line(self, dest, fmt, swiftconn, container, line):
+        record = SwiftLine(line)
+
+        if record.size == 0 and container.has_segments:
+            # Do a head to get DLO/SLO stats. This is
+            # only needed if this container has segments,
+            # and if the apparent file size is 0.
+            try:
+                obj_stat = swiftconn.head_object(
+                    container, line['name'])
+                # If this is still 0, then it's an empty file
+                # anyway.
+                record.size = int(obj_stat['content-length'])
+            except ClientException as e:
+                # 404?
+                log.warning(
+                    'File %r %r disappeared from under us '
+                    'when doing a HEAD (%s)',
+                    container.name, line['name'], e)
+                # Skip record.
+                return
+
+        dest.write(fmt.format(
+            record.path.replace('|', '||'),
+            record.modified,
+            record.size))
 
     def _make_diff_lists(self):
         """
@@ -869,6 +906,12 @@ class SwiftSyncMultiAdder(threading.Thread):
                 # > the object's contents before making another request.
                 resp_headers, obj = self._swiftconn.get_object(
                     container, record.path, resp_chunk_size=(16 * 1024 * 1024))
+                if record.size == 0 and 'X-Object-Manifest' in resp_headers:
+                    raise NotImplementedError(
+                        '0-sized files with X-Object-Manifest? '
+                        'cont={!r}, path={!r}, size={!r}, hdrs={!r}'.format(
+                            container, record.path, record.size, resp_headers))
+
                 for data in obj:
                     if _MT_ABORT:
                         raise ValueError('early abort during {}'.format(

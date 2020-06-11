@@ -154,7 +154,7 @@ LOGGING = {
             'class': 'logging.NullHandler',
         },
         'mail_admins': {
-            'level': 'ERROR',
+            'level': 'WARNING',
             'filters': ['require_debug_false'],
             'class': 'django.utils.log.AdminEmailHandler'
         },
@@ -191,7 +191,7 @@ LOGGING = {
     'loggers': {
         '': {
             'handlers': ['mail_admins'],
-            'level': 'ERROR',
+            'level': 'WARNING',
         },
         # Let the handlers below propagate on to here so we can send
         # mail for all ERRORs.

@@ -304,7 +304,10 @@ class Fileset(models.Model):
 
     @cached_property
     def last_backuprun(self):
-        return self.backuprun_set.latest('started')
+        # If the backuprun has no duration it is still running.
+        # The attributes on the Fileset still reflect that of the last
+        # finished backuprun (success or failure) so we need to return that.
+        return self.backuprun_set.exclude(duration=None).latest('started')
 
     @cached_property
     def last_successful_backuprun(self):

@@ -158,12 +158,12 @@ LOGGING = {
         'mail_admins_err': {
             'level': 'ERROR',
             'filters': ['require_debug_false'],
-            'class': 'django.utils.log.AdminEmailHandler'
+            'class': 'planb.common.log2.AdminEmailHandler'  # django.utils.log
         },
         'mail_admins_warn': {
             'level': 'WARNING',
             'filters': ['require_debug_false'],
-            'class': 'django.utils.log.AdminEmailHandler'
+            'class': 'planb.common.log2.AdminEmailHandler'  # django.utils.log
         },
         'console': {
             'level': 'DEBUG',

@@ -155,7 +155,12 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.NullHandler',
         },
-        'mail_admins': {
+        'mail_admins_err': {
+            'level': 'ERROR',
+            'filters': ['require_debug_false'],
+            'class': 'django.utils.log.AdminEmailHandler'
+        },
+        'mail_admins_warn': {
             'level': 'WARNING',
             'filters': ['require_debug_false'],
             'class': 'django.utils.log.AdminEmailHandler'
@@ -191,16 +196,17 @@ LOGGING = {
         },
     },
     'loggers': {
+        'planb': {
+            'handlers': ['console', 'logfile', 'mail_admins_err'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
         '': {
-            'handlers': ['mail_admins'],
+            'handlers': ['mail_admins_warn'],
             'level': 'WARNING',
         },
-        # Let the handlers below propagate on to here so we can send
-        # mail for all ERRORs.
-        'planb': {
-            'handlers': ['console', 'logfile'],
-            'level': 'DEBUG',
-        },
+        # Let all other handlers below propagate on to here so we can send mail
+        # for all WARNINGs.
         'django-q': {
             'handlers': ['djangoqlogfile'],
             'level': 'DEBUG',

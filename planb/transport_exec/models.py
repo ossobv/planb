@@ -84,7 +84,7 @@ class Config(AbstractTransport):
             output = check_output(
                 cmd, env=env, return_stderr=stderr).decode('utf-8')
         except CalledProcessError as e:
-            logging.warning(
+            logger.warning(
                 'Failure during exec %r: %s', argsjoin(cmd), str(e))
             raise
 

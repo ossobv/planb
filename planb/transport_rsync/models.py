@@ -280,7 +280,7 @@ class Config(AbstractTransport):
         except CalledProcessError as e:
             returncode, output = e.returncode, e.output
             errstr = RSYNC_EXITCODES.get(returncode, 'Return code not matched')
-            logging.warning(
+            logger.warning(
                 'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e))
             if returncode not in RSYNC_HARMLESS_EXITCODES:
                 raise

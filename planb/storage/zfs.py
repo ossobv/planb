@@ -82,7 +82,7 @@ class ZfsStorage(PerformCommands, Storage):
         try:
             out = self._perform_binary_command(cmd).rstrip('\r\n')
         except CalledProcessError as e:
-            logging.warning(
+            logger.warning(
                 'Error while calling: %r, %s', cmd, e.output.strip())
             out = None
         return out

@@ -46,7 +46,18 @@ if test "$contains" != "filesystems"; then
 fi
 
 
-ssh_target="$1"; shift  # root@DEST
+ssh_target="$1"; shift  # remotebackup@DEST (options like -luser disallowed)
+# XXX: todo: sanitize $1? (no spaces, no funny chars)
+# XXX: todo: sanitize $HOME? (no spaces, no funny chars)
+
+known_hosts_file="$HOME/.ssh/known_hosts.d/${ssh_target##*@}"
+ssh_options="-o HashKnownHosts=no -o UserKnownHostsFile=$known_hosts_file"
+if test -f "$known_hosts_file"; then
+    ssh_options="$ssh_options -o StrictHostKeyChecking=yes"
+else
+    ssh_options="$ssh_options -o StrictHostKeyChecking=no"
+fi
+
 target_snapshot=$planb_snapshot_target
 target_snapshot_prefix=${planb_snapshot_target%-*}
 test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
@@ -54,7 +65,7 @@ test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
 # Make snapshots.
 for remotepath in "$@"; do
     src=$remotepath@$target_snapshot
-    ssh $ssh_target "\
+    ssh $ssh_options $ssh_target "\
         sudo zfs snapshot \"$src\" && \
         sudo zfs set planb:owner=$planb_guid \"$src\""
 done
@@ -72,10 +83,12 @@ for remotepath in "$@"; do
         src_prev=$remotepath@$recent_snapshot
         # Use "-I" instead of "-i" to send all manual snapshots too.
         # Unsure about the "--props" setting to send properties..
-        ssh $ssh_target sudo zfs send -I "$src_prev" "$src" '|' "$deflate" |
+        ssh $ssh_options $ssh_target "\
+            sudo zfs send -I \"$src_prev\" \"$src\" | \"$deflate\"" |
             "$inflate" | sudo zfs recv "$dst"
     else
-        ssh $ssh_target sudo zfs send "$src" '|' "$deflate" |
+        ssh $ssh_options $ssh_target "\
+            sudo zfs send \"$src\" | \"$deflate\"" |
             "$inflate" | sudo zfs recv "$dst"
     fi
     # Disable mounting of individual filesystems on this mount point. As doing
@@ -96,9 +109,11 @@ done
 # Keep only three snapshots on remote machine. Filter by planb:owner=GUID.
 for remotepath in "$@"; do
     src=$remotepath@$target_snapshot
-    ssh $ssh_target sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
-            -S creation "$remotepath" | grep -E \
+    ssh $ssh_options $ssh_target "\
+            sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
+            -S creation \"$remotepath\"" | grep -E \
         "^.*@(daily|$target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
         sed -e '1,3d' | awk '{print $1}' |
-        xargs --no-run-if-empty -n1 ssh $ssh_target sudo zfs destroy
+        xargs --no-run-if-empty -n1 ssh $ssh_options $ssh_target "\
+            sudo zfs destroy"
 done

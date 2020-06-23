@@ -367,6 +367,13 @@ Configure sudo access using ``visudo -f /etc/sudoers.d/remotebackup``::
     remotebackup ALL=NOPASSWD: /usr/bin/ionice -c2 -n7 /usr/bin/rsync --server --sender *
     remotebackup ALL=NOPASSWD: /usr/bin/ionice -c3 /usr/bin/rsync --server --sender *
 
+    # Optional, for planb-zfsync.sh (only destroy snapshots with @ in the name)
+    remotebackup ALL=NOPASSWD: /sbin/zfs destroy *@*
+    remotebackup ALL=NOPASSWD: /sbin/zfs list *
+    remotebackup ALL=NOPASSWD: /sbin/zfs send *
+    remotebackup ALL=NOPASSWD: /sbin/zfs set *
+    remotebackup ALL=NOPASSWD: /sbin/zfs snapshot *
+
 Observe how the ``--server --sender`` makes the rsync read-only.
 
 Set up the ssh key like you'd normally do::

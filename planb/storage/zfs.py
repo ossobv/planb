@@ -114,6 +114,32 @@ class ZfsStorage(PerformCommands, Storage):
         return int(self.zfs_get_properties(
             dataset_name, keys=('referenced',), snapname=snapname)[0])
 
+    def _zfs_get_key_location(self, dataset_name):
+        # XXX: temporary key location.  In the near future, we want to
+        # store these in some kind of vault so we don't keep the keys
+        # on this machine.  Further, remember that we're storing these
+        # on a write-only system.  After destroying the data, it may
+        # take a while before the keys are really-really gone from the
+        # disks.
+        key_location = '{}/{}/_key.bin'.format(
+            '/tank/_local/zfskeys', dataset_name)
+        try:
+            st = os.stat(key_location)
+        except FileNotFoundError:
+            os.makedirs(
+                os.path.dirname(key_location), mode=0o700, exist_ok=True)
+            with open('/dev/random', 'rb') as rndfp:
+                with open(key_location + '.new', 'wb') as fp:
+                    os.fchmod(fp.fileno(), 0o600)
+                    fp.write(rndfp.read(32))  # 32*8 = 256 bits
+            os.rename(key_location + '.new', key_location)
+        else:
+            if st.st_size != 32:
+                raise AssertionError(
+                    'totally unexpected {}'.format(key_location))
+
+        return 'file://{}'.format(key_location)
+
     def zfs_create(self, dataset_name):
         # For multi-slash paths, we may need to create parents as well.
         parts = dataset_name.split('/')
@@ -124,8 +150,23 @@ class ZfsStorage(PerformCommands, Storage):
                 type_ = self._perform_binary_command(cmd).rstrip('\r\n')
             except CalledProcessError:
                 # Does not exist. Create it.
-                self._perform_binary_command(('create', part))
-                self._perform_binary_command(('set', 'canmount=noauto', part))
+                key_location = self._zfs_get_key_location(part)
+                # # zfs get -Hovalue encryptionroot tank/osso-zabbix.osso.nl-zfs-noenc-test/rpool--home
+                # tank/osso-zabbix.osso.nl-zfs-noenc-test
+                #
+                # > Since compression is applied before encryption datasets may
+                # > be vulnerable to a CRIME-like attack if applications
+                # > accessing the data allow for it.
+                # (This is not deemed a problem, but copying the remark here for
+                # awareness.)
+                self._perform_binary_command((
+                    'create',
+                    '-o', 'canmount=noauto',
+                    '-o', 'encryption=on',
+                    '-o', 'keyformat=raw',
+                    '-o', 'keylocation={}'.format(key_location),
+                    part,
+                ))
             else:
                 assert type_ == 'filesystem', (dataset_name, part, type_)
 
@@ -148,10 +189,26 @@ class ZfsStorage(PerformCommands, Storage):
         # mount: only root can use "--options" option
         # cannot mount 'tank/BACKUP/example-example': Invalid argument
         # Might as well use sudo everywhere then.
-        self._perform_binary_command(('mount', dataset_name))
+        try:
+            self._perform_binary_command(('mount', dataset_name))
+        except CalledProcessError as e:
+            # cannot mount 'tank/osso-ns1.osso.nl': encryption key not loaded
+            if b'encryption key not loaded' in e.errput:
+                # Ah, we can fix. Assuming we actually have that key.
+                self._perform_binary_command((
+                    'load-key',
+                    '-L', self._zfs_get_key_location(dataset_name),
+                    dataset_name))
+            else:
+                # "Unknown" error. Abort.
+                raise
+
+            # We fixed things. Retry mount.
+            self._perform_binary_command(('mount', dataset_name))
 
     def zfs_unmount(self, dataset_name):
         self._perform_binary_command(('unmount', dataset_name))
+        self._perform_binary_command(('unload-key', dataset_name))
 
     def zfs_rename_dataset(self, old_dataset_name, new_dataset_name):
         self._perform_binary_command(

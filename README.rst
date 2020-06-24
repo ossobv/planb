@@ -67,7 +67,6 @@ For more detailed steps, see `Setting it all up`_ below.
 
 .. _Django: https://www.djangoproject.com/
 .. _`requirements.txt`: ./requirements.txt
-.. _`fix-missing-multi-email-renderer.patch`: ./contrib/fix-missing-multi-email-renderer.patch
 .. _`setup.py`: ./setup.py
 
 
@@ -455,15 +454,6 @@ Removing a fileset does not wipe the filesystem from disk, what should I do?
     --stale`` to check for *stale* filesystems.
 
     You can them remove them manually using ``zfs destroy [-r] FILESYSTEM``.
-
-Django complains about ``render()`` getting unexpected ``renderer`` keyword.
-    If you get::
-
-        Exception Type: TypeError at /planb/hostgroup/add/
-        Exception Value: render() got an unexpected keyword argument 'renderer'
-
-    The cause is probably an incompatibility in django-multi-email-field
-    with newer Django. Apply: `fix-missing-multi-email-renderer.patch`_
 
 Rsync complains about ``failed to stat`` or ``mkdir failed``.
     If rsync returns these messages::

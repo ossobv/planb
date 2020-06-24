@@ -82,32 +82,16 @@ TODO
   planb-swiftsync.* files.)
 * RFE: Standardize stdout/stderr output from Rsync/Exec success (and
   prepend "> " to output) to be more in line with failure.
-* RFE: Split off retention config into reusable config. Add "default"
-  config to hostgroup so the fileset can use that unless it is
-  overridden.
 * RFE: Add possibility to feed back snapshot size from the individual
   Transport instead of using dutree. Parsing the swiftsync listings is
   fast after all.
 * FIX: Add uwsgi-uid==djangoq-uid check?
 * FIX: try django_q>0.1 and fix the async() and await() keywords which won't
   work in python3.7 anymore
-* Alter HostGroup:
-
-  - use fs-name and human-name
-  - use asciifield for fs-name?
-* Alter Fileset:
-
-  - use fs-name and optionally human-name
-  - use asciifield for fs-name?
 * Replace the exception mails for common errors (like failing rsync) to
   use mail_admins style mail.
 * After using mail_admins style mail, we can start introducing mail digests
   instead: daily summary of backup successes and failures.
-* Split off the subparts of the Fileset to separate configs:
-  - retention-config
-  - host-status (use this as main enqueue-view?)
-* Use hostgroup+hostname in more places. Right now the friendly_name is
-  too short. Also, use unique_together, so the friendlyname can be reused.
 * Replace the "daily report" hack with a signal-receiver.
 * Clarify why there's a /contrib/ and a /planb/contrib/ directory.
 
@@ -293,7 +277,7 @@ Setting up nginx config::
         }
     }
 
-Giving *PlanB* access to ZFS tools and paths::
+Giving *PlanB* sudo access to ZFS tools and fix paths::
 
     cat >/etc/sudoers.d/planb <<EOF
     planb ALL=NOPASSWD: /sbin/zfs, /bin/chown
@@ -348,6 +332,17 @@ Don't forget a logrotate config::
             sharedscripts
     }
     EOF
+
+Create aliases to quickly mount/unmount in your ``~/.bashrc``::
+
+    alias zfs-quick-mount="zfs load-key -L \
+        "'"file:///tank/_local/zfskeys/${PWD#/}/_key.bin" "${PWD#/}" &&
+        zfs mount "${PWD#/}" && cd .'
+    alias zfs-quick-umount='cd / && if zfs umount "${OLDPWD#/}"
+        then zfs unload-key "${OLDPWD#/}"; cd "${OLDPWD}"
+        else cd "${OLDPWD}"; false; fi'
+
+.. warning:: WARNING: The example above uses local key files!
 
 
 

@@ -155,45 +155,60 @@ Now your ``zpool status`` would look somewhat like this::
       sdw        AVAIL
       sdx        AVAIL
 
+**If you're going to be using native ZFS encryption, it is recommended
+that you read** `README-zfs.rst <./README-zfs.rst>`_ **as well**.
+
 
 Setting up the project
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Setting up a virtualenv (optional)::
+*This section assumes you know a little about Python, pip and virtual
+envs. Details may vary a slight bit across distro versions.*
+
+Set up a virtualenv (optional)::
 
     mkdir -p /srv/virtualenvs
     echo 'WORKON_HOME=/srv/virtualenvs' >>~/.bashrc
     apt-get install python3-virtualenv python3-pip virtualenvwrapper
     # you may need to log in/out once after this
 
+    # you may need /usr/share/bash-completion/completions/virtualenvwrapper
+    # sources in your bashrc
     mkvirtualenv planb --python=$(which python3) --system-site-packages
     workon planb
 
     mkdir /etc/planb
     cd /etc/planb
-    pwd >$VIRTUAL_ENV/.project
+    pwd >$VIRTUAL_ENV/.project  # or the src dir, if you're going to edit a lot
 
-Installing PlanB using pip::
+Install PlanB prerequisites::
 
-    apt-get install mysql-server redis-server
+    apt-get install redis-server  # and: mysql-server or postgresql
+
+Install PlanB dependencies through apt (optional)::
+
+    apt-get install python3-redis python3-setproctitle
+    # .. and: python3-mysqldb or python3-psycopg2
+
+Install PlanB (including depedencies) from PyPI::
+
     pip3 install planb
 
-Installing PlanB without pip::
+Install PlanB (including dependencies) from git::
 
-    apt-get install mysql-server redis-server python3-mysqldb python3-redis \
-      python3-setproctitle
-    pip install git+https://github.com/ossobv/planb.git@master
+    pip3 install git+https://github.com/ossobv/planb.git@master#egg=planb
 
-Setting up a local ``planb`` user::
+Set up a local ``planb`` user::
 
     adduser planb --disabled-password --home=/var/spool/planb \
       --shell=/bin/bash --system
 
-    sudo -H -u planb ssh-keygen -b 8192
+    sudo -H -u planb ssh-keygen -t ed25519      # use elliptic curve
+    sudo -H -u planb ssh-keygen -t rsa -b 8192  # or use RSA if you're old
 
 .. note:: *You may want to back that ssh key up somewhere.*
 
-Setting up the local environment::
+Set up the local environment::
 
     cat >/etc/planb/envvars <<EOF
     USER=planb
@@ -207,7 +222,7 @@ Setting up the local environment::
           - ./envvars
           *The first file that can be loaded will be used.*
 
-Setting up the local configuration::
+Set up the local configuration::
 
     cp ${VIRTUAL_ENV:-/usr/local}/share/planb/example_settings.py \
       /etc/planb/settings.py
@@ -232,7 +247,7 @@ Set up the database and a web-user::
     planb migrate
     planb createsuperuser
 
-Setting up uwsgi ``planb.ini``::
+Set up uwsgi ``planb.ini``::
 
     [uwsgi]
     plugin = python3
@@ -259,7 +274,7 @@ Set up static path, static files and log path::
 
     install -o planb -d /var/log/planb
 
-Setting up nginx config::
+Set up nginx config::
 
     server {
         listen 80;
@@ -271,12 +286,14 @@ Setting up nginx config::
             uwsgi_pass unix:/run/uwsgi/app/planb/socket;
             include uwsgi_params;
         }
-
+        location = /favicon.ico {
+            return 404;
+        }
         location /static/ {
         }
     }
 
-Giving *PlanB* sudo access to ZFS tools and fix paths::
+Give *PlanB* sudo access to ZFS tools and fix paths::
 
     cat >/etc/sudoers.d/planb <<EOF
     planb ALL=NOPASSWD: /sbin/zfs, /bin/chown
@@ -286,7 +303,10 @@ Giving *PlanB* sudo access to ZFS tools and fix paths::
     chown planb /srv/backups
     chmod 700 /srv/backups
 
-Setting up ``qcluster`` for scheduled tasks::
+(Note that setting up a different mount point is optional. See also
+`README-zfs.rst <./README-zfs.rst>`_ for additional tips.
+
+Set up ``qcluster`` for scheduled tasks::
 
     # (in the source, this file is in rc.d)
     cp ${VIRTUAL_ENV:-/usr/local}/share/planb/planb-queue.service \
@@ -299,7 +319,7 @@ Setting up ``qcluster`` for scheduled tasks::
       systemctl start planb-queue &&
       systemctl status planb-queue
 
-Setting up the ``qcluster`` for dutree tasks. If you do not use dutree
+Set up the ``qcluster`` for dutree tasks. If you do not use dutree
 or if you want to run dutree on the default qcluster you can set
 ``Q_DUTREE_QUEUE='PlanB'`` in ``/etc/planb/settings.py``.::
 
@@ -313,7 +333,7 @@ or if you want to run dutree on the default qcluster you can set
       systemctl start planb-queue-dutree &&
       systemctl status planb-queue-dutree
 
-Installing automatic jobs::
+Install automatic jobs::
 
     planb loaddata planb_jobs
 
@@ -332,7 +352,8 @@ Don't forget a logrotate config::
     }
     EOF
 
-Create aliases to quickly mount/unmount in your ``~/.bashrc``::
+Create aliases to quickly mount/unmount the current working directory
+in your ``~/.bashrc``::
 
     alias zfs-quick-mount="zfs load-key -L \
         "'"file:///tank/_local/zfskeys/${PWD#/}/_key.bin" "${PWD#/}" &&
@@ -341,8 +362,8 @@ Create aliases to quickly mount/unmount in your ``~/.bashrc``::
         then zfs unload-key "${OLDPWD#/}"; cd "${OLDPWD}"
         else cd "${OLDPWD}"; false; fi'
 
-.. warning:: WARNING: The example above uses local key files!
-
+.. warning:: WARNING: The example above uses local key files! This will be
+             fixed/replaced in upcoming commits.
 
 
 -------------------------

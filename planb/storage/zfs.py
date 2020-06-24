@@ -32,6 +32,7 @@ class PerformCommands:
         super().ensure_defaults(config)
         config.setdefault('BINARY', '/sbin/zfs')
         config.setdefault('SUDOBIN', '/usr/bin/sudo')
+        config.setdefault('DATASETKEYS', False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -150,23 +151,30 @@ class ZfsStorage(PerformCommands, Storage):
                 type_ = self._perform_binary_command(cmd).rstrip('\r\n')
             except CalledProcessError:
                 # Does not exist. Create it.
-                key_location = self._zfs_get_key_location(part)
-                # # zfs get -Hovalue encryptionroot tank/osso-zabbix.osso.nl-zfs-noenc-test/rpool--home
-                # tank/osso-zabbix.osso.nl-zfs-noenc-test
-                #
-                # > Since compression is applied before encryption datasets may
-                # > be vulnerable to a CRIME-like attack if applications
-                # > accessing the data allow for it.
-                # (This is not deemed a problem, but copying the remark here for
-                # awareness.)
-                self._perform_binary_command((
-                    'create',
-                    '-o', 'canmount=noauto',
-                    '-o', 'encryption=on',
-                    '-o', 'keyformat=raw',
-                    '-o', 'keylocation={}'.format(key_location),
-                    part,
-                ))
+                if self.config['DATASETKEYS']:
+                    key_location = self._zfs_get_key_location(part)
+                    # > Since compression is applied before encryption
+                    # > datasets may be vulnerable to a CRIME-like attack if
+                    # > applications accessing the data allow for it.
+                    # This is not deemed a problem. Keepeing the remark here
+                    # for awareness.)
+                    #
+                    # # zfs get -Hovalue encryptionroot tank/example.com/home
+                    # tank/example.com
+                    self._perform_binary_command((
+                        'create',
+                        '-o', 'canmount=noauto',
+                        '-o', 'encryption=on',
+                        '-o', 'keyformat=raw',
+                        '-o', 'keylocation={}'.format(key_location),
+                        part,
+                    ))
+                else:
+                    self._perform_binary_command((
+                        'create',
+                        '-o', 'canmount=noauto',
+                        part,
+                    ))
             else:
                 assert type_ == 'filesystem', (dataset_name, part, type_)
 
@@ -192,8 +200,9 @@ class ZfsStorage(PerformCommands, Storage):
         try:
             self._perform_binary_command(('mount', dataset_name))
         except CalledProcessError as e:
-            # cannot mount 'tank/osso-ns1.osso.nl': encryption key not loaded
-            if b'encryption key not loaded' in e.errput:
+            # cannot mount 'tank/example.com': encryption key not loaded
+            if (b'encryption key not loaded' in e.errput
+                    and self.config['DATASETKEYS']):
                 # Ah, we can fix. Assuming we actually have that key.
                 self._perform_binary_command((
                     'load-key',
@@ -208,7 +217,8 @@ class ZfsStorage(PerformCommands, Storage):
 
     def zfs_unmount(self, dataset_name):
         self._perform_binary_command(('unmount', dataset_name))
-        self._perform_binary_command(('unload-key', dataset_name))
+        if self.config['DATASETKEYS']:
+            self._perform_binary_command(('unload-key', dataset_name))
 
     def zfs_rename_dataset(self, old_dataset_name, new_dataset_name):
         self._perform_binary_command(

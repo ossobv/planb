@@ -1,27 +1,36 @@
 #!/bin/sh -eux
 
-# Usage: .../planb-zfssync [-qlz1] root@MACHINE tank/X tank/Y rpool/abc/def
+# Usage: .../planb-zfssync [--plain|--qlz1] root@MACHINE tank/X tank/Y rpool/abc/def
 
 env >&2
 test -z "$planb_storage_name" && exit 3
 
+# We prefer sending using --raw, it will keep compression/encryption.
+# (We can sync encrypted filesystems without knowing the contents.)
+# But, --raw does not exist in ZFS 0.6/0.7; first in 0.8 (see 'zfs version').
+# Prefer raw sending (no argument), but allow --plain or --qlz1 (compressed
+# transfer of plain data).
+#
+# See: zfs send 2>&1 | grep '^[[:blank:]]*send [[]-[^]]*w[^]]*[]] '
+zfs_send_option=--raw  # (or the '-w' option)
+deflate=
+inflate=
 case "${1:-}" in
--qlz1)
+--qlz1)
+    zfs_send_option=
     deflate=qlzip1
     inflate=qlzcat1
     shift
     ;;
--*)
-    echo "ERROR: Unknown compression $1" >&2
-    exit 3
+--plain)
+    zfs_send_option=
+    shift
     ;;
-'')
-    echo "ERROR: Missing arguments.." >&2
+-*|'')
+    echo "ERROR: Unknown/missing arguments '$1'" >&2
     exit 3
     ;;
 *)
-    deflate=cat
-    inflate=cat
     ;;
 esac
 
@@ -83,13 +92,25 @@ for remotepath in "$@"; do
         src_prev=$remotepath@$recent_snapshot
         # Use "-I" instead of "-i" to send all manual snapshots too.
         # Unsure about the "--props" setting to send properties..
-        ssh $ssh_options $ssh_target "\
-            sudo zfs send -I \"$src_prev\" \"$src\" | \"$deflate\"" |
-            "$inflate" | sudo zfs recv "$dst"
+        if test -n "$deflate$inflate"; then
+            ssh $ssh_options $ssh_target "\
+                sudo zfs send $zfs_send_option -I \"$src_prev\" \"$src\" |\
+                  \"$deflate\"" | "$inflate" | sudo zfs recv "$dst"
+        else
+            ssh $ssh_options $ssh_target "\
+                sudo zfs send $zfs_send_option -I \"$src_prev\" \"$src\"" |
+                sudo zfs recv "$dst"
+        fi
     else
-        ssh $ssh_options $ssh_target "\
-            sudo zfs send \"$src\" | \"$deflate\"" |
-            "$inflate" | sudo zfs recv "$dst"
+        if test -n "$deflate$inflate"; then
+            ssh $ssh_options $ssh_target "\
+                sudo zfs send $zfs_send_option \"$src\" | \"$deflate\"" |
+                "$inflate" | sudo zfs recv "$dst"
+        else
+            ssh $ssh_options $ssh_target "\
+                sudo zfs send $zfs_send_option \"$src\"" |
+                sudo zfs recv "$dst"
+        fi
     fi
     # Disable mounting of individual filesystems on this mount point. As doing
     # so will mess up the parent mount.

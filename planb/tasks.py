@@ -418,8 +418,10 @@ class FilesetRunner:
         snapshot_size = 524288
         snapshot_size_listing = []
         for subset in dataset.get_child_datasets():
+            # Take only last bit from tank/group-host/[remote-tank/remote-file]
+            # ("remote-tank/remote-file" is "remote_2dtank-remote_2dfile")
             subset_name = systemd_unescape(
-                subset.name[len(dataset.name):].replace('_', '\\'))
+                subset.name[(len(dataset.name) + 1):].replace('_', '\\'))
 
             size = subset.get_referenced_size(snapshot)
             snapshot_size += size

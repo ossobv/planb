@@ -101,10 +101,10 @@ class ZfsStorage(PerformCommands, Storage):
             logger.warning(
                 'Error while calling: %r, %s', cmd, e.output.strip())
             values = '0\n' * len(keys)  # YUCK.. odd default
-        else:
-            output = values.split('\n')
-            assert len(output) == len(keys) + 1, (keys, repr(output))
-            output = [i.strip() for i in output[0:-1]]
+
+        output = values.split('\n')
+        assert len(output) == len(keys) + 1, (keys, repr(output))
+        output = [i.strip() for i in output[0:-1]]
 
         return output
 

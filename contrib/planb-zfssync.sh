@@ -41,6 +41,20 @@ test -n "$planb_guid"
 dataset=$(sudo zfs get -Hpo value type "$planb_storage_name")
 test "$dataset" = "filesystem"
 
+# Test that we have a working systemd-escape locally.
+test "$(systemd-escape OK/O-käy)" = 'OK-O\x2dk\xc3\xa4y'
+escape() {
+    # Escape $1 to something that is legal in ZFS. Using systemd-escape, but
+    # additionally replace the backslash ('\') with underscore ('_').
+    # (And therefore, also escape the underscore as "\x5f", which then becomes
+    # "_x5f".)
+    # We feel this is okay. We expect mostly slashes ('/'), which will get
+    # escaped to a single dash ('-').
+    # NOTE: zfs dataset names only support [A-Za-z_:-], so we may need
+    # to escape additional characters in the future.
+    systemd-escape "$1" | sed -e 's/_/\\x5f/g;s/\\/_/g'
+}
+
 contains=$(sudo zfs get -Hpo value planb:contains "$planb_storage_name")
 
 # contains shall be '-' or 'data' or 'filesystems'
@@ -81,7 +95,7 @@ done
 
 # Download snapshots.
 for remotepath in "$@"; do
-    our_path=$(echo "$remotepath" | sed -e 's#/#--#g')
+    our_path=$(escape "$remotepath")
     src=$remotepath@$target_snapshot
     dst=$planb_storage_name/$our_path
     recent_snapshot=$(sudo zfs list -d 1 -t snapshot -Hpo name \

@@ -50,6 +50,12 @@ finalize_run:
 '''
 
 
+def systemd_unescape(value):
+    r"abc\x2ddef-ghi -> abc-def/ghi"
+    parts = value.split('-')
+    return '/'.join(i.encode('ascii').decode('unicode_escape') for i in parts)
+
+
 def yaml_safe_str(value):
     if _yaml_safe_re.match(value):
         return value
@@ -412,13 +418,17 @@ class FilesetRunner:
         snapshot_size = 524288
         snapshot_size_listing = []
         for subset in dataset.get_child_datasets():
+            subset_name = systemd_unescape(
+                subset.name[len(dataset.name):].replace('_', '\\'))
+
             size = subset.get_referenced_size(snapshot)
             snapshot_size += size
             snapshot_size_listing.append(
                 '{}: {}'.format(
-                    yaml_safe_str(subset.name[len(dataset.name):]),
+                    yaml_safe_str(subset_name),
                     yaml_digits(size))
             )
+
         BackupRun.objects.filter(pk=run.pk).update(
             snapshot_size_mb=snapshot_size >> 20,
             snapshot_size_listing='\n'.join(snapshot_size_listing),

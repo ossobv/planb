@@ -50,8 +50,10 @@ escape() {
     # "_x5f".)
     # We feel this is okay. We expect mostly slashes ('/'), which will get
     # escaped to a single dash ('-').
-    # NOTE: zfs dataset names only support [A-Za-z_:-], so we may need
+    # NOTE: zfs dataset names only support [A-Za-z0-9:._-], so we may need
     # to escape additional characters in the future.
+    # See: https://docs.oracle.com/cd/E36784_01/html/E36835/gbcpt.html
+    # "ZFS Component Naming Requirements"
     systemd-escape "$1" | sed -e 's/_/\\x5f/g;s/\\/_/g'
 }
 

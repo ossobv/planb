@@ -16,6 +16,7 @@ work on other versions with slight adaptations.
 2. `Using native ZFS encryption`_
 3. `Setting up the zpool`_
 4. `Explanation of zpool attributes`_
+5. `Replacing faulty disks`_
 
 
 -------------------------
@@ -34,9 +35,10 @@ So, start with a bunch of disks. Let's say 34 10TB disks:
       65      128 9766436864 sdy
       65      144 9766436864 sdz
 
-The disks don't *need* to have the same size, but it helps. For the
-common setup, you'll use the entire disk and not a partition. (*ZFS* will
-do its own parititioning, but you don't need to worry about that.)
+The disks don't *need* to have the same size, but it helps (and hot
+spares will need to match the largest, for obvious reasons). For the common
+setup, you'll use the entire disk and not a partition. (*ZFS* will do
+its own parititioning, but you don't need to worry about that.)
 
 You will want to *triple check* which disks you're using. You don't want
 to overwrite your operating system (OS) or some other important data.
@@ -104,8 +106,9 @@ sufficient to ease my paranoia.
 
 Okay, now that the disks are shuffled. Open an editor on the created
 ``disks`` file and prepend numbers.
-``0 `` before the 10 first disks, ``1 `` before the next 10, then ``2 ``
-and lastly ``S `` for the spares. Your file now looks like this::
+``0`` (and a space) before the 10 first disks, ``1`` before the next 10,
+then ``2`` and lastly ``S`` for the spares. Your file now looks like
+this::
 
     0 scsi-SSEAGATE_ST10000NM0226_6351
     0 scsi-SSEAGATE_ST10000NM0226_0226
@@ -230,7 +233,7 @@ cache and log disks).
 Every *vdev* itself must be redundant. *If one of the vdevs fails, your
 entire pool fails.* A *minimal* safe setup would be:
 
-* One *vdev* with two *mirrored* disks.
+* one *vdev* with two *mirrored* disks.
 
 By adding more *vdevs*, *ZFS* will do a *form of striping* on those
 (i.e. more read/write speed). It makes sense to make all *vdevs* equal in
@@ -238,7 +241,7 @@ size, but it is not mandatory.
 
 Our setup uses:
 
-* Three *vdevs* with ten *raidz2* disks per *vdev* and four *spare* disks.
+* three *vdevs* with ten *raidz2* disks per *vdev* and four *spare* disks.
 
 *raidz2* is the *ZFS* equivalent of *raid6*; in our case 8 data disks and 2
 parity disks. Two disks in the same *vdev* are allowed to fail. And upon
@@ -263,3 +266,80 @@ In the create commands above, we use ``ashift=12``, ``canmount=off``,
   encryption) irrelevant on the local system.)*
 * ``encryption=aes-256-gcm``: Yes. We want the best native encryption we
   can get now.
+
+
+----------------------
+Replacing faulty disks
+----------------------
+
+When you're dealing with a DEGRADED array, you'll want to use the ``zpool
+replace`` command. Mark the failing disk offline using ``zpool offline`` and
+replace that disk with the new one.
+
+.. code-block:: console
+
+    # zpool offline tank scsi-SSEAGATE_ST10000NM0226_0123
+    # ledctl locate=/dev/disk/by-id/scsi-SSEAGATE_ST10000NM0226_0123
+
+Swap the disks, and replace:
+
+.. code-block:: console
+
+    # zpool replace tank scsi-SSEAGATE_ST10000NM0226_0123 \
+        /dev/disk/by-id/scsi-NEW_DISK
+    # ledctl locate_off=/dev/disk/by-id/scsi-NEW_DISK
+
+If you have trouble with the finding the original disk, use ``zdb`` to
+list the disks. You can then use the ``guid`` as *old* disk when
+replacing.
+
+hot spares
+~~~~~~~~~~
+
+When the *hot spares* work as intended, a failing disk will have been
+substituted by a spare already. But you'll still need to manually swap
+them out to make the array completely online.
+
+::
+
+    # zpool status
+    ...
+      NAME                                  STATE
+      tank                                  DEGRADED
+        raidz2-0                            ONLINE
+          scsi-SSEAGATE_ST10000NM0226_6351  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_0226  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_8412  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          ...
+        raidz2-1                            DEGRADED
+          spare-1                           DEGRADED
+            scsi-SSEAGATE_ST10000NM0226_0123  UNAVAIL
+            scsi-SSEAGATE_ST10000NM0226_9866  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          ...
+        raidz2-2                            ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          ...
+      spares
+        scsi-SSEAGATE_ST10000NM0226_9866    INUSE
+        scsi-SSEAGATE_ST10000NM0226_5992    AVAIL
+        scsi-SSEAGATE_ST10000NM0226_5900    AVAIL
+        scsi-SSEAGATE_ST10000NM0226_8412    AVAIL
+
+This requires some manual action:
+
+.. code-block:: console
+
+    # zpool detach tank scsi-SSEAGATE_ST10000NM0226_0123
+
+Now the array should be ONLINE again, and ``scsi-SSEAGATE_ST10000NM0226_9866``
+will be gone from the spares list.
+
+Use ``ledctl`` to find the broken disk and physically replace with a new
+one, and lastly ``zpool add tank spare NEW_DISK``.

@@ -1,21 +1,32 @@
 |PlanB|
 =======
 
-PlanB backs up your remote SSH-accessible files using rsync to a local ZFS
-storage. Manage many hosts and host groups. Automate hourly, daily,
-weekly, monthly and yearly backups with snapshots.
+PlanB backs up your remote files to a local ZFS storage. Manage many
+hosts and host groups. Automate hourly, daily, weekly, monthly and
+yearly backups with snapshots.
+
+The following data transfer methods are supported:
+
+* ssh+rsync (built-in)
+* snapshots of ZFS (encrypted) datasets (through `planb-zfssync
+  <./contrib/planb-zfssync.sh>`_)
+* snapshots of ZFS volumes (through `planb-zfssync
+  <./contrib/planb-zfssync.sh>`_)
+* copies of (large) *OpenStack Swift* containers (through `planb-swiftsync
+  <./contrib/planb-swiftsync.py>`_)
+* custom transfer (through your own custom ``transfer_exec`` script)
 
 
-------------
-How it looks
-------------
+------------------
+What is looks like
+------------------
 
-At the moment, the interface is just a Django admin interface:
+At the moment, the interface is just a *Django* admin interface:
 
 .. image:: assets/example_hosts.png
     :alt: A list of hosts configured in PlanB with most recent backup status
 
-The files are stored on ZFS storage. It uses ZFS snapshots to keep earlier
+The files are stored on *ZFS* storage. It uses *ZFS* snapshots to keep earlier
 versions of files. See this example shell transscript::
 
     # zfs list | grep mongo2
@@ -59,9 +70,9 @@ integrated in another Django project.
 
 See `requirements.txt`_ or `setup.py`_ for up-to-date dependencies/requirements.
 
-Basically, you'll need: ZFS storage, ssh and rsync, a webserver (nginx), python
-hosting (uwsgi), a database (mysql), a communication/cache bus (redis) and a
-few python packages.
+Basically, you'll need: *ZFS* storage, ssh and rsync, a webserver
+(nginx), python hosting (uwsgi), a database (mysql), a
+communication/cache bus (redis) and a few python packages.
 
 For more detailed steps, see `Setting it all up`_ below.
 
@@ -85,8 +96,6 @@ TODO
   Transport instead of using dutree. Parsing the swiftsync listings is
   fast after all.
 * FIX: Add uwsgi-uid==djangoq-uid check?
-* FIX: try django_q>0.1 and fix the async() and await() keywords which won't
-  work in python3.7 anymore
 * Replace the exception mails for common errors (like failing rsync) to
   use mail_admins style mail.
 * After using mail_admins style mail, we can start introducing mail digests
@@ -126,37 +135,38 @@ to change that consistently of course.
 Setting up a ZFS pool
 ~~~~~~~~~~~~~~~~~~~~~
 
-You should really do your own research on this. If you're lucky, your OS
-has native support for ZFS, and then this is relatively easy.
+You should really do your own research on this. If you're lucky, your
+operating system has native support for *ZFS*, and then this is
+relatively easy.
 
-We've decided to go with a striped raidz2 configuration, giving us 2x
-disk speed due to the striping, and 2 disks are allowed to fail
-simulteaneously (raidz2).
+Please read `README-zpool.rst <./README-zpool.rst>`_ for a quick
+introduction. When you're done, things should look somewhat like this:
 
-Basic setup::
+.. code-block:: console
 
-    zpool create tank raidz2 sdc sdd sde ...
-    zpool add tank raidz2 sdm sdn sdo ...
-    zpool add tank spare sdw sdx
+    # zpool status
+      pool: tank
+     state: ONLINE
+      scan: none requested
+    config:
 
-Now your ``zpool status`` would look somewhat like this::
-
-    NAME         STATE     READ WRITE CKSUM
-    tank         ONLINE       0     0     0
-      raidz2-0   ONLINE       0     0     0
-        sdc      ONLINE       0     0     0
-        sdd      ONLINE       0     0     0
-        ...
-      raidz2-1   ONLINE       0     0     0
-        sdm      ONLINE       0     0     0
-        sdn      ONLINE       0     0     0
-        ...
-    spares
-      sdw        AVAIL
-      sdx        AVAIL
-
-**If you're going to be using native ZFS encryption, it is recommended
-that you read** `README-zfs.rst <./README-zfs.rst>`_ **as well**.
+      NAME                                  STATE
+      tank                                  ONLINE
+        raidz2-0                            ONLINE
+          scsi-SSEAGATE_ST10000NM0226_6351  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_0226  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_8412  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          ...
+        raidz2-1                            ONLINE
+          scsi-SSEAGATE_ST10000NM0226_0123  ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          scsi-SSEAGATE_ST10000NM0226_...   ONLINE
+          ...
+      spares
+        scsi-SSEAGATE_ST10000NM0226_9866    AVAIL
+        scsi-SSEAGATE_ST10000NM0226_5992    AVAIL
 
 
 Setting up the project
@@ -293,7 +303,7 @@ Set up nginx config::
         }
     }
 
-Give *PlanB* sudo access to ZFS tools and fix paths::
+Give *PlanB* *sudo* access to *ZFS* tools and fix paths::
 
     cat >/etc/sudoers.d/planb <<EOF
     planb ALL=NOPASSWD: /sbin/zfs, /bin/chown
@@ -304,7 +314,7 @@ Give *PlanB* sudo access to ZFS tools and fix paths::
     chmod 700 /srv/backups
 
 (Note that setting up a different mount point is optional. See also
-`README-zfs.rst <./README-zfs.rst>`_ for additional tips.
+`README-zpool.rst <./README-zpool.rst>`_ for additional tips.
 
 Set up ``qcluster`` for scheduled tasks::
 
@@ -375,7 +385,7 @@ encrypted backups, which is beyond the scope of this document)::
 
     adduser --disabled-password remotebackup
 
-Configure sudo access using ``visudo -f /etc/sudoers.d/remotebackup``::
+Configure *sudo* access using ``visudo -f /etc/sudoers.d/remotebackup``::
 
     # Backup user needs to be able to get the files
     remotebackup ALL=NOPASSWD: /usr/bin/rsync --server --sender *
@@ -458,10 +468,10 @@ F.A.Q.
 ------
 
 Can I use the software and customize it to my own needs?
-    It is licensed under the GNU GPL version 3.0 or higher. See the LICENSE
-    file for the full text. That means: probably yes, but you may be required to
-    share any changes you make. But you were going to do that anyway, right?
-
+    It is licensed under the GNU GPL version 3.0 or higher. See the
+    LICENSE file for the full text. That means: probably yes, but you
+    may be required to share any changes you make. But you were going to
+    do that anyway, right?
 
 
 Mails for backup success are sent, but mails for failure are not.
@@ -475,6 +485,7 @@ Removing a fileset does not wipe the filesystem from disk, what should I do?
     --stale`` to check for *stale* filesystems.
 
     You can them remove them manually using ``zfs destroy [-r] FILESYSTEM``.
+
 
 Rsync complains about ``failed to stat`` or ``mkdir failed``.
     If rsync returns these messages::
@@ -534,8 +545,9 @@ Authors
 PlanB was started in 2013 as "OSSO backup" by Alex Boonstra at OSSO B.V. Since
 then, it has been evolved into *PlanB*. When it was Open Sourced by Walter
 Doekes in 2017, the old commits were dropped to ensure that any private company
-information was not disclosed.
+information was not disclosed. Since then, Harm Geerts has also been
+busy on the project.
 
 
 .. |PlanB| image:: assets/planb_head.png
-    :alt: GoCollect
+    :alt: PlanB - automating remote backups and snapshots with zfs/rsync

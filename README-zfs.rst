@@ -43,7 +43,7 @@ to overwrite your operating system (OS) or some other important data.
 (In my case, the OS is on separate *nvme* drives, so I can safely use all
 *sdX* drives.)
 
-These 34 disks will go into three *ZFS vdevs*. (Reasoning is explained below.)
+These 34 disks will go into three *ZFS vdevs* (see `vdevs and raidz2`_ below):
 
 1. 10 disks
 2. 10 disks
@@ -227,12 +227,14 @@ vdevs and raidz2
 A *ZFS pool* consists of one or more *vdevs* (and optionally spares,
 cache and log disks).
 
-Every *vdev* itself must be redundant. A minimal safe setup would be:
+Every *vdev* itself must be redundant. *If one of the vdevs fails, your
+entire pool fails.* A *minimal* safe setup would be:
 
 * One *vdev* with two *mirrored* disks.
 
-By adding more vdevs, ZFS will start to do a form of striping on those.
-It makes sense to make all vdevs equal in size, but it is not mandatory.
+By adding more *vdevs*, *ZFS* will do a *form of striping* on those
+(i.e. more read/write speed). It makes sense to make all *vdevs* equal in
+size, but it is not mandatory.
 
 Our setup uses:
 

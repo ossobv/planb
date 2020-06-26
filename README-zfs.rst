@@ -221,4 +221,43 @@ With:
 Explanation of zpool attributes
 -------------------------------
 
-FIXME
+vdevs and raidz2
+~~~~~~~~~~~~~~~~
+
+A *ZFS pool* consists of one or more *vdevs* (and optionally spares,
+cache and log disks).
+
+Every *vdev* itself must be redundant. A minimal safe setup would be:
+
+* One *vdev* with two *mirrored* disks.
+
+By adding more vdevs, ZFS will start to do a form of striping on those.
+It makes sense to make all vdevs equal in size, but it is not mandatory.
+
+Our setup uses:
+
+* Three *vdevs* with ten *raidz2* disks per *vdev* and four *spare* disks.
+
+*raidz2* is the *ZFS* equivalent of *raid6*; in our case 8 data disks and 2
+parity disks. Two disks in the same *vdev* are allowed to fail. And upon
+failure, a spare is automatically activated.
+
+zpool create options
+~~~~~~~~~~~~~~~~~~~~
+
+In the create commands above, we use ``ashift=12``, ``canmount=off``,
+``xattr=sa``, ``compression=lz4`` and ``encryption=aes-256-gcm``:
+
+* ``ashift=12``: Because most newer disks emulate having 512byte sectors
+  (the default ``ashift=9``) but in reality have 4K sectors
+  (``ashift=12``), you'll want this option for performance.
+* ``canmount=off``: Because we don't want to write in the root dataset.
+* ``xattr=sa``: Lets us add extended attributes in inodes. We don't use
+  them for now, but they can be nice to have later.
+* ``compression=lz4``: LZ4 is a relatively fast compression scheme that
+  gives you better performance, and improves the security of the
+  encryption (because of the increased entropy). *(Note that we'll
+  consider CRIME-based attacks (using partial compression to attack
+  encryption) irrelevant on the local system.)*
+* ``encryption=aes-256-gcm``: Yes. We want the best native encryption we
+  can get now.

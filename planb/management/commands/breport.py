@@ -8,7 +8,7 @@ from django.contrib.staticfiles import finders
 from django.core.mail import get_connection
 from django.core.mail.message import EmailMultiAlternatives
 from django.core.management.base import BaseCommand
-from django.db.models import F
+from django.db.models import Case, IntegerField, When
 from django.template.loader import render_to_string
 from django.template.defaultfilters import filesizeformat
 
@@ -69,7 +69,9 @@ class Command(BaseCommand):
         # Fix so we can aggregate by group below.
         qs = qs.order_by(
             'hostgroup__name', 'hostgroup__id',
-            F('first_fail').desc(nulls_last=True), '-is_enabled',
+            '-is_enabled', Case(
+                When(first_fail=None, then=1),
+                default=0, output=IntegerField()),
             'friendly_name', 'id')
 
         lastgroup = None

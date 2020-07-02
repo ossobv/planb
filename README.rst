@@ -85,6 +85,22 @@ For more detailed steps, see `Setting it all up`_ below.
 TODO
 ----
 
+* Encryption: right now, encryption keys are still a bit of a mess:
+  - stuff is stored in tank/_local; should use some kind of vault;
+  - when removing/renaming, those keys are not updated alongside;
+  - planb-zfssync.sh does not clean up snapshots created before
+    send/recv failure (e.g. because remote did not support --raw)
+  - add key rotation example scripts?
+* Docs: add documentation for sync from previous unencrypted filesets?
+* Docs: add a bit of documentation on how to work with encrypted filesets
+* Consider: move the hostgroup contents to separate filesets, so as to
+  create a more readable fileset listing. tank/HOSTGROUP/FILESET instead
+  of tank/HOSTGROUP-FILESET.
+* RFE: Add post-backup.d directory somewhere where we can place
+  post-backup-done scripts to manually do X or Y.
+* RFE: Add planb group for better permission management.
+* RFE: Also store user/group permissions on/after rsync (using xattr
+  extended attributes?).
 * BUG: Items added to /exclude list are not deleted from destination if
   they have already been backed up once. The rsync job would need some
   way to keep track of changes in include/exclude settings, and run a

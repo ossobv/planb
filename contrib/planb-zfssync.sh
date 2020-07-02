@@ -1,6 +1,12 @@
 #!/bin/sh -eux
 
 # Usage: .../planb-zfssync [--plain|--qlz1] root@MACHINE tank/X tank/Y rpool/abc/def
+#
+# KNOWN BUGS:
+# - if you have multiple filesets (in the same planb, with the same guid)
+#   backing up the same remote volume/fileset, the snapshots will conflict
+# - if you have trouble with --raw, snapshots will already have been made;
+#   and now you have a local-remote snapshot mismatch
 
 env >&2
 test -z "$planb_storage_name" && exit 3

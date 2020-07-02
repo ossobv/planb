@@ -32,37 +32,41 @@ class PerformCommands:
         super().ensure_defaults(config)
         config.setdefault('BINARY', '/sbin/zfs')
         config.setdefault('SUDOBIN', '/usr/bin/sudo')
+        config.setdefault('DATASETKEYS', False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__perform_system_binary = self.config['BINARY']
         self.__perform_sudo_binary = self.config['SUDOBIN']
 
-    def __perform_system_command(self, cmd):
+    def __perform_system_command(self, cmd, silent=False):
         """
         Do exec command, expect 0 return value, convert output to utf-8.
         """
         try:
             output = check_output(cmd)
         except CalledProcessError as e:
-            logger.info('Non-zero exit after cmd {!r}: {}'.format(
-                cmd, e))
+            msg = 'Non-zero exit after cmd {!r}: {}'.format(cmd, e)
+            if silent:
+                logger.debug(msg)
+            else:
+                logger.info(msg)
             raise
         return output.decode('utf-8')  # expect valid ascii/utf-8
 
-    def _perform_sudo_command(self, cmd):
+    def _perform_sudo_command(self, cmd, silent=False):
         """
         Do __perform_system_command, but with 'sudo'.
         """
         return self.__perform_system_command(
-            (self.__perform_sudo_binary,) + tuple(cmd))
+            (self.__perform_sudo_binary,) + tuple(cmd), silent=silent)
 
-    def _perform_binary_command(self, cmd):
+    def _perform_binary_command(self, cmd, silent=False):
         """
         Do _perform_sudo_command, but for the supplied binary.
         """
         return self._perform_sudo_command(
-            (self.__perform_system_binary,) + tuple(cmd))
+            (self.__perform_system_binary,) + tuple(cmd), silent=silent)
 
 
 class ZfsStorage(PerformCommands, Storage):
@@ -100,10 +104,10 @@ class ZfsStorage(PerformCommands, Storage):
             logger.warning(
                 'Error while calling: %r, %s', cmd, e.output.strip())
             values = '0\n' * len(keys)  # YUCK.. odd default
-        else:
-            output = values.split('\n')
-            assert len(output) == len(keys) + 1, (keys, repr(output))
-            output = [i.strip() for i in output[0:-1]]
+
+        output = values.split('\n')
+        assert len(output) == len(keys) + 1, (keys, repr(output))
+        output = [i.strip() for i in output[0:-1]]
 
         return output
 
@@ -113,6 +117,32 @@ class ZfsStorage(PerformCommands, Storage):
     def zfs_get_referenced_size(self, dataset_name, snapname=None):
         return int(self.zfs_get_properties(
             dataset_name, keys=('referenced',), snapname=snapname)[0])
+
+    def _zfs_get_key_location(self, dataset_name):
+        # XXX: temporary key location.  In the near future, we want to
+        # store these in some kind of vault so we don't keep the keys
+        # on this machine.  Further, remember that we're storing these
+        # on a write-only system.  After destroying the data, it may
+        # take a while before the keys are really-really gone from the
+        # disks.
+        key_location = '{}/{}/_key.bin'.format(
+            '/tank/_local/zfskeys', dataset_name)
+        try:
+            st = os.stat(key_location)
+        except FileNotFoundError:
+            os.makedirs(
+                os.path.dirname(key_location), mode=0o700, exist_ok=True)
+            with open('/dev/random', 'rb') as rndfp:
+                with open(key_location + '.new', 'wb') as fp:
+                    os.fchmod(fp.fileno(), 0o600)
+                    fp.write(rndfp.read(32))  # 32*8 = 256 bits
+            os.rename(key_location + '.new', key_location)
+        else:
+            if st.st_size != 32:
+                raise AssertionError(
+                    'totally unexpected {}'.format(key_location))
+
+        return 'file://{}'.format(key_location)
 
     def zfs_create(self, dataset_name):
         # For multi-slash paths, we may need to create parents as well.
@@ -124,8 +154,30 @@ class ZfsStorage(PerformCommands, Storage):
                 type_ = self._perform_binary_command(cmd).rstrip('\r\n')
             except CalledProcessError:
                 # Does not exist. Create it.
-                self._perform_binary_command(('create', part))
-                self._perform_binary_command(('set', 'canmount=noauto', part))
+                if self.config['DATASETKEYS']:
+                    key_location = self._zfs_get_key_location(part)
+                    # > Since compression is applied before encryption
+                    # > datasets may be vulnerable to a CRIME-like attack if
+                    # > applications accessing the data allow for it.
+                    # This is not deemed a problem. Keepeing the remark here
+                    # for awareness.)
+                    #
+                    # # zfs get -Hovalue encryptionroot tank/example.com/home
+                    # tank/example.com
+                    self._perform_binary_command((
+                        'create',
+                        '-o', 'canmount=noauto',
+                        '-o', 'encryption=on',
+                        '-o', 'keyformat=raw',
+                        '-o', 'keylocation={}'.format(key_location),
+                        part,
+                    ))
+                else:
+                    self._perform_binary_command((
+                        'create',
+                        '-o', 'canmount=noauto',
+                        part,
+                    ))
             else:
                 assert type_ == 'filesystem', (dataset_name, part, type_)
 
@@ -148,10 +200,28 @@ class ZfsStorage(PerformCommands, Storage):
         # mount: only root can use "--options" option
         # cannot mount 'tank/BACKUP/example-example': Invalid argument
         # Might as well use sudo everywhere then.
-        self._perform_binary_command(('mount', dataset_name))
+        try:
+            self._perform_binary_command(('mount', dataset_name), silent=True)
+        except CalledProcessError as e:
+            # cannot mount 'tank/example.com': encryption key not loaded
+            if (b'encryption key not loaded' in e.errput
+                    and self.config['DATASETKEYS']):
+                # Ah, we can fix. Assuming we actually have that key.
+                self._perform_binary_command((
+                    'load-key',
+                    '-L', self._zfs_get_key_location(dataset_name),
+                    dataset_name))
+            else:
+                # "Unknown" error. Abort.
+                raise
+
+            # We fixed things. Retry mount.
+            self._perform_binary_command(('mount', dataset_name))
 
     def zfs_unmount(self, dataset_name):
         self._perform_binary_command(('unmount', dataset_name))
+        if self.config['DATASETKEYS']:
+            self._perform_binary_command(('unload-key', dataset_name))
 
     def zfs_rename_dataset(self, old_dataset_name, new_dataset_name):
         self._perform_binary_command(

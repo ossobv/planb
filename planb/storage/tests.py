@@ -136,8 +136,7 @@ class PlanbStorageTestCase(TestCase):
                 CalledProcessError(
                     1, 'cmd', 'stdout',
                     'cannot open my_dataset: dataset does not exist'),
-                '',  # zfs_create: create dataset
-                '',  # zfs_create: set dataset opts
+                '',  # zfs_create: create dataset and set opts
                 '',  # zfs_create: mount dataset
                 tmpdir,  # zfs_create: get mountpoint
                 tmpdir,  # ensure_exists: get data path
@@ -146,7 +145,8 @@ class PlanbStorageTestCase(TestCase):
             dataset = storage.get_dataset('tank/my_dataset')
             dataset.set_dataset_type('filesystem', 'data')  # default
             dataset.ensure_exists()
-            m.assert_any_call(('create', 'tank/my_dataset'))
+            m.assert_any_call((
+                'create', '-o', 'canmount=noauto', 'tank/my_dataset'))
 
             # When a dataset is worked on it will become the workdirectory.
             m.reset_mock(side_effect=True)

@@ -35,6 +35,7 @@ PLANB_STORAGE_POOLS = {
         'BINARY': PLANB_ZFS_BIN,
         'SUDOBIN': PLANB_SUDO_BIN,
         'POOLNAME': 'tank/BACKUP',
+        'DATASETKEYS': False,  # enable for ZFS encryption per dataset (safer!)
     },
 }
 

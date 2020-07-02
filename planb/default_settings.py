@@ -177,7 +177,7 @@ LOGGING = {
         #     'port': 12221,
         # },
         'logfile': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.handlers.WatchedFileHandler',
             'formatter': 'simple',
             'filename': '/var/log/planb/core.log',

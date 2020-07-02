@@ -39,31 +39,34 @@ class PerformCommands:
         self.__perform_system_binary = self.config['BINARY']
         self.__perform_sudo_binary = self.config['SUDOBIN']
 
-    def __perform_system_command(self, cmd):
+    def __perform_system_command(self, cmd, silent=False):
         """
         Do exec command, expect 0 return value, convert output to utf-8.
         """
         try:
             output = check_output(cmd)
         except CalledProcessError as e:
-            logger.info('Non-zero exit after cmd {!r}: {}'.format(
-                cmd, e))
+            msg = 'Non-zero exit after cmd {!r}: {}'.format(cmd, e)
+            if silent:
+                logger.debug(msg)
+            else:
+                logger.info(msg)
             raise
         return output.decode('utf-8')  # expect valid ascii/utf-8
 
-    def _perform_sudo_command(self, cmd):
+    def _perform_sudo_command(self, cmd, silent=False):
         """
         Do __perform_system_command, but with 'sudo'.
         """
         return self.__perform_system_command(
-            (self.__perform_sudo_binary,) + tuple(cmd))
+            (self.__perform_sudo_binary,) + tuple(cmd), silent=silent)
 
-    def _perform_binary_command(self, cmd):
+    def _perform_binary_command(self, cmd, silent=False):
         """
         Do _perform_sudo_command, but for the supplied binary.
         """
         return self._perform_sudo_command(
-            (self.__perform_system_binary,) + tuple(cmd))
+            (self.__perform_system_binary,) + tuple(cmd), silent=silent)
 
 
 class ZfsStorage(PerformCommands, Storage):
@@ -198,7 +201,7 @@ class ZfsStorage(PerformCommands, Storage):
         # cannot mount 'tank/BACKUP/example-example': Invalid argument
         # Might as well use sudo everywhere then.
         try:
-            self._perform_binary_command(('mount', dataset_name))
+            self._perform_binary_command(('mount', dataset_name), silent=True)
         except CalledProcessError as e:
             # cannot mount 'tank/example.com': encryption key not loaded
             if (b'encryption key not loaded' in e.errput

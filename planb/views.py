@@ -12,7 +12,9 @@ class EnqueueJob(View):
         if not request.user.has_perm('planb.add_backuprun'):
             raise PermissionDenied()
         try:
-            fileset = Fileset.objects.get(id=fileset_id, is_enabled=True)
+            # Allow enqueuing disabled filesets for cases where periodic
+            # backups are not desired or possible.
+            fileset = Fileset.objects.get(id=fileset_id)
         except Fileset.DoesNotExist:
             raise PermissionDenied()
 

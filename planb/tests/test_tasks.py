@@ -63,7 +63,7 @@ class TaskTestCase(TestCase):
             self.assertEqual(call[0], RSYNC_BIN)
             self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
 
-    def test_manual_run(self):
+    def test_manual_run_is_running(self):
         fileset = FilesetFactory(storage_alias='dummy', is_running=True)
         # Manual run does nothing if the fileset is marked as running.
         with self.assertLogs('planb.tasks', level='INFO') as log, \
@@ -75,7 +75,14 @@ class TaskTestCase(TestCase):
             # If the fileset is marked as running manual_run does nothing.
             c.assert_not_called()
 
-        fileset = FilesetFactory(storage_alias='dummy')
+    def test_manual_run(self):
+        self.manual_run_on_fileset(FilesetFactory(storage_alias='dummy'))
+
+    def test_manual_run_on_disabled_fileset(self):
+        self.manual_run_on_fileset(
+            FilesetFactory(storage_alias='dummy', is_enabled=False))
+
+    def manual_run_on_fileset(self, fileset):
         RsyncConfigFactory(fileset=fileset)
         # Otherwise manual run will immediatly run the backup.
         with self.assertLogs('planb.tasks', level='INFO') as log, \

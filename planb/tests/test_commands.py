@@ -1,3 +1,4 @@
+import json
 from io import StringIO
 
 from django.core import mail
@@ -43,9 +44,15 @@ class CommandTestCase(TestCase):
         db01 = FilesetFactory(friendly_name='db01', hostgroup=hostgroup)
 
         stdout, stderr = self.run_command('blist', zabbix=True)
-        self.assertEqual(
-            '{"data": [{"{#BKNAME}": "local-db01"}, {"{#BKNAME}": '
-            '"local-web01"}]}\n', stdout)
+        decoded = json.loads(stdout)
+        for item in decoded:
+            assert item.get('{#PLANB}'), item
+            item['{#PLANB}'] = '$host'
+        expected = [
+            {'{#ID}': db01.pk, '{#NAME}': 'local-db01', '{#PLANB}': '$host'},
+            {'{#ID}': web01.pk, '{#NAME}': 'local-web01', '{#PLANB}': '$host'},
+        ]
+        self.assertEqual(expected, decoded)
 
         ExecConfigFactory(fileset=web01, transport_command='/bin/magic')
         RsyncConfigFactory(fileset=db01, host='database1.local')

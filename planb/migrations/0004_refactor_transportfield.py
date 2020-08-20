@@ -16,6 +16,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='hostconfig',
             name='transport',
-            field=planb.models.TransportChoices(choices=[(0, 'ssh (default)'), (1, 'rsync (port 873)')], default=0),
+            field=planb.transport_rsync.models.TransportChoices(choices=[(0, 'ssh (default)'), (1, 'rsync (port 873)')], default=0),
         ),
     ]

@@ -35,18 +35,6 @@ validate_blacklist_hours = RegexValidator(
         'Enter a valid value like 2,9-17 or none to disable blacklist hours'))
 
 
-class TransportChoices(models.PositiveSmallIntegerField):
-    SSH = 0
-    RSYNC = 1
-
-    def __init__(self, *args, **kwargs):
-        choices = (
-            (self.SSH, _('ssh (default)')),
-            (self.RSYNC, _('rsync (port 873)')),
-        )
-        super().__init__(default=self.SSH, choices=choices)
-
-
 class HostGroup(models.Model):
     name = models.CharField(max_length=63, unique=True)
     notify_email = MultiEmailField(

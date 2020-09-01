@@ -73,6 +73,7 @@ DATABASES = {
 for key, handler in LOGGING['handlers'].items():
     if handler['class'] == 'logging.handlers.WatchedFileHandler':
         handler['class'] = 'logging.StreamHandler'
+        handler['level'] = 'DEBUG'
         del handler['filename']
         del handler['delay']
 

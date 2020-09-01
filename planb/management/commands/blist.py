@@ -99,9 +99,12 @@ class Command(BaseCommandWithZabbix):
             if failed_at:
                 oldest_failure = min(oldest_failure, failed_at)
                 latest_failure = max(latest_failure, failed_at)
-            else:
+            elif fileset.last_ok:
                 oldest_success = min(oldest_success, fileset.last_ok)
                 latest_success = max(latest_success, fileset.last_ok)
+            else:
+                # Neither failure nor success. New fileset?
+                pass
 
         if latest_success == t0:
             latest_success = now

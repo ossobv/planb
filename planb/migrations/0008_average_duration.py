@@ -18,6 +18,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='hostconfig',
             name='average_duration',
-            field=models.PositiveIntegerField(default=0, help_text='Average duration of succesful jobs in seconds.', verbose_name='Time'),
+            field=models.PositiveIntegerField(default=0, help_text='Average duration of successful jobs in seconds.', verbose_name='Time'),
         ),
     ]

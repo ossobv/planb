@@ -157,7 +157,7 @@ class Fileset(models.Model):
         help_text=_('Estimated total backup size in MiB.'))
     average_duration = models.PositiveIntegerField(
         'Time', default=0,  # this value may vary..
-        help_text=_('Average duration of succesful jobs in seconds.'))
+        help_text=_('Average duration of successful jobs in seconds.'))
 
     do_snapshot_size_listing = models.BooleanField(
         _('Create disk usage summary'), blank=True, default=True,

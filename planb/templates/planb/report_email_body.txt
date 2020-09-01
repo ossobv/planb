@@ -37,23 +37,23 @@ backup service.
 Reports per host below
 ----------------------
 {% for fileset in filesets %}
-+-----------------------------------------------------------------------------+
-| {{ fileset.friendly_name|bold|ljust:75 }} |
-+=======================+=====================================================+
-| Total size            | {% blocktrans asvar fileset_total with size=fileset.last_successful_backuprun.total_size|filesizeformat snapshots=fileset.snapshot_count %}{{ size }} ({{ snapshots }} snapshots){% endblocktrans %}{{ fileset_total|ljust:51 }} |
-+-----------------------+-----------------------------------------------------+
-| Last snapshot size    | {% blocktrans asvar fileset_snapshot with size=fileset.last_successful_backuprun.snapshot_size|filesizeformat efficiency=fileset.snapshot_efficiency %}{{ size }} ({{ efficiency }} efficiency){% endblocktrans %}{{ fileset_snapshot|ljust:51 }} |
-+-----------------------+-----------------------------------------------------+
-| Last succesful backup | {{ fileset.last_ok|date:'Y-m-d H:i:s'|ljust:51 }} |
-+-----------------------+-----------------------------------------------------+
-| Average run time      | {{ fileset.average_duration|formatseconds|ljust:51 }} |
-+-----------------------+-----------------------------------------------------+
-| Configured retention  | {{ fileset.retention_display|ljust:51|truncatechars:51 }} |{% if not fileset.is_enabled %}
-+-----------------------+-----------------------------------------------------+
-| State                 | DISABLED                                            |{% endif %}{% if fileset.has_child_datasets %}
-+-----------------------+-----------------------------------------------------+
-| Has child datasets    | YES                                                 |{% endif %}
-+-----------------------+-----------------------------------------------------+
++------------------------------------------------------------------------------+
+| {{ fileset.friendly_name|bold|ljust:76 }} |
++========================+=====================================================+
+| Total size             | {% blocktrans asvar fileset_total with size=fileset.last_successful_backuprun.total_size|filesizeformat snapshots=fileset.snapshot_count %}{{ size }} ({{ snapshots }} snapshots){% endblocktrans %}{{ fileset_total|ljust:51 }} |
++------------------------+-----------------------------------------------------+
+| Last snapshot size     | {% blocktrans asvar fileset_snapshot with size=fileset.last_successful_backuprun.snapshot_size|filesizeformat efficiency=fileset.snapshot_efficiency %}{{ size }} ({{ efficiency }} efficiency){% endblocktrans %}{{ fileset_snapshot|ljust:51 }} |
++------------------------+-----------------------------------------------------+
+| Last successful backup | {{ fileset.last_ok|date:'Y-m-d H:i:s'|ljust:51 }} |
++------------------------+-----------------------------------------------------+
+| Average run time       | {{ fileset.average_duration|formatseconds|ljust:51 }} |
++------------------------+-----------------------------------------------------+
+| Configured retention   | {{ fileset.retention_display|ljust:51|truncatechars:51 }} |{% if not fileset.is_enabled %}
++------------------------+-----------------------------------------------------+
+| State                  | DISABLED                                            |{% endif %}{% if fileset.has_child_datasets %}
++------------------------+-----------------------------------------------------+
+| Has child datasets     | YES                                                 |{% endif %}
++------------------------+-----------------------------------------------------+
 {% if fileset.first_fail and fileset.is_enabled %}
 Last backup FAILED with error::
 

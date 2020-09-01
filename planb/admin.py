@@ -168,7 +168,7 @@ class FilesetAdmin(admin.ModelAdmin):
             .format(human.bytes(run.snapshot_size)))
         ret.append('</table>')
         return mark_safe(''.join(ret))
-    last_ok_snapshot.short_description = _('Last succesful snapshot')
+    last_ok_snapshot.short_description = _('Last successful snapshot')
 
     def first_fail_(self, object):
         if not object.first_fail:

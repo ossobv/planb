@@ -496,6 +496,39 @@ Mails for backup success are sent, but mails for failure are not.
     debug-mode.
 
 
+Where are the ssh host fingerprints (``known_hosts`` files) stored?
+    They're in ``~planb/.ssh/known_hosts.d/``. If you want to ``ssh``
+    manually, you can add this to ``~planb/.profile``::
+
+        ssh() {
+            for arg in "$@"; do
+                case $arg in
+                -*) ;;
+                *) break ;;
+                esac
+            done
+            if test -n "$arg"; then
+                host=${arg##*@}
+                /usr/bin/ssh -o HashKnownHosts=no \
+                  -o UserKnownHostsFile=$HOME/.ssh/known_hosts.d/$host "$@"
+            else
+                /usr/bin/ssh "$@"
+            fi
+        }
+
+
+Can I use a *jump host*?
+    You can add ``-e 'ssh -J jumpuser@jumphost'`` to the *rsync*
+    transport flags. Observe that the known hosts file of *target* will
+    contain the fingerprint of the *jump host*.
+
+
+Are bandwidth limits in place?
+    Yes, the default for the *rsync* transport is 10MB/s (megabyte). You
+    can lower or raise this by adding ``--bwlimit=10M`` to the transport
+    flags.
+
+
 Removing a fileset does not wipe the filesystem from disk, what should I do?
     This is done intentionally. You should periodically use ``planb slist
     --stale`` to check for *stale* filesystems.

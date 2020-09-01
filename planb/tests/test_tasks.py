@@ -58,7 +58,7 @@ class TaskTestCase(TestCase):
             m.now.return_value = make_aware(
                 datetime.datetime(2019, 1, 1, 3, 0))
             conditional_run(fileset.pk)
-            call = c.call_args.args[0]
+            call = c.call_args[0][0]
             self.assertEqual(call[0], RSYNC_BIN)
             self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
 
@@ -92,7 +92,7 @@ class TaskTestCase(TestCase):
                     message(fileset, 'Manually requested backup'),
                     message(fileset, 'Starting backup'),
                     message(fileset, 'Completed successfully')])
-            call = c.call_args.args[0]
+            call = c.call_args[0][0]
             self.assertEqual(call[0], RSYNC_BIN)
             self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
 
@@ -107,7 +107,7 @@ class TaskTestCase(TestCase):
                 log.output, [
                     message(fileset, 'Starting backup'),
                     message(fileset, 'Completed successfully')])
-            call = c.call_args.args[0]
+            call = c.call_args[0][0]
             self.assertEqual(call[0], RSYNC_BIN)
             self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
 

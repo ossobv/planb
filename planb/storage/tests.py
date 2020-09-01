@@ -1,10 +1,9 @@
 import os
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings
-
-from mock import patch
 
 from planb.common.subprocess2 import CalledProcessError
 from planb.storage import load_storage_pools

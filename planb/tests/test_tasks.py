@@ -1,10 +1,9 @@
 from contextlib import contextmanager
 import datetime
+from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
 from django.utils.timezone import make_aware
-
-from mock import Mock, patch
 
 from planb.factories import BackupRunFactory, FilesetFactory
 from planb.models import Fileset

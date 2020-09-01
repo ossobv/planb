@@ -1,8 +1,8 @@
 import datetime
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from mock import patch
 
 from planb.factories import FilesetFactory
 

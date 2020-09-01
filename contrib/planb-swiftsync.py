@@ -711,7 +711,7 @@ class SwiftSyncAdder:
 
         # Collect and sum failure count to signify when not everything is fine,
         # even though we did our best. If we're here, all threads ended
-        # succesfully, so they all have a valid failures count.
+        # successfully, so they all have a valid failures count.
         self.failures = sum(th.failures for th in threads)
 
     def _create_combined_success(self, success_fps):

@@ -101,13 +101,14 @@ if __name__ == '__main__':
         # Keep install_requires in sync with requirements.txt and
         # constraints.txt
         install_requires=[
-            'Django>=2.2,<3.1',
+            'Django>=2.2,<3.2',
             'django-q>=1.2.1,<2',
             'django-multi-email-field>=0.6.1,<0.7',
             'dutree>=1.6,<2',
             'PyYAML>=5.1.1',
             'redis>=2.10.5,<3',        # APT: python3-redis
             'setproctitle>=1.1.8,<2',  # APT: python3-setproctitle
+            'python-dateutil>=2.8.1,<3',
         ],
     )
 

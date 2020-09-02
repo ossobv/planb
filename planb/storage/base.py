@@ -3,19 +3,55 @@ import datetime
 import logging
 import re
 
+from dateutil.relativedelta import relativedelta, SU
+
 logger = logging.getLogger(__name__)
 
 # regex to get the datetime from a snapshot name.
 # the optional prefix can be ignored.
 SNAPNAME_DATETIME_RE = re.compile(r'^(?:\w+-)?(\d{8}T?\d{4}Z?)$')
 
-RETENTION_PERIOD_SECONDS = {
-    'h': 3600,
-    'd': 24 * 3600,
-    'w': 7 * 24 * 3600,
-    'm': 30 * 24 * 3600,
-    'y': 365 * 24 * 3600,
 
+class RetentionPeriod:
+    def __init__(self, clamp, delta):
+        # Clamp the desired datetime to this values.
+        self.clamp = clamp
+        # Subtract this delta to determine the next desired datetime.
+        # Ensure the delta also clamps the datetime.
+        self.delta = clamp + delta
+
+    def __call__(self, snapshot_dts, previous_dts):
+        # The snapshot_dts may be newer than the previous clamped dts
+        # resulting in the same clamped value. If the value was older it yields
+        # the correct next dts without subtracting the delta.
+        dts = snapshot_dts - self.clamp
+        # If the desired_dts is newer than the current snapshot or if we have
+        # the same datetime as the previous clamped value we have to subtract
+        # the delta value and clamp it again.
+        if dts >= snapshot_dts or (
+                previous_dts and dts == previous_dts - self.clamp):
+            dts -= self.delta
+        return dts
+
+
+RETENTION_PERIOD_SECONDS = {
+    'h': RetentionPeriod(
+        clamp=relativedelta(minute=0, second=0, microsecond=0),
+        delta=relativedelta(hours=1)),
+    'd': RetentionPeriod(
+        clamp=relativedelta(hour=0, minute=0, second=0, microsecond=0),
+        delta=relativedelta(days=1)),
+    'w': RetentionPeriod(
+        clamp=relativedelta(
+            hour=0, minute=0, second=0, microsecond=0, weekday=SU(1)),
+        delta=relativedelta(days=7)),
+    'm': RetentionPeriod(
+        clamp=relativedelta(day=1, hour=0, minute=0, second=0, microsecond=0),
+        delta=relativedelta(months=1)),
+    'y': RetentionPeriod(
+        clamp=relativedelta(
+            month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+        delta=relativedelta(years=1)),
 }
 
 
@@ -101,8 +137,8 @@ class Storage(object):
         if not snapshots:
             return []
 
-        keep_snapshots = self._get_snapshots_to_keep(
-            dataset_name, snapshots, retention_map)
+        keep_snapshots = SnapshotRetentionManager(
+            dataset_name, snapshots, retention_map).get_snapshots_to_keep()
         logger.info('[%s] Keeping snapshots: %s', dataset_name, keep_snapshots)
 
         # Delete the snapshots which are not kept.
@@ -115,37 +151,49 @@ class Storage(object):
             logger.info('[%s] Destroyed snapshot: %s', dataset_name, snapname)
         return destroyed
 
-    def _get_snapshots_to_keep(self, dataset_name, snapshots, retention_map):
-        # Go through all snapshots and decide which should be kept.
-        snapshots = list(sorted(snapshots, reverse=True))
-        latest_dts, latest_snapshot = snapshots[0]
-        # Always keep the latest snapshot.
-        keep_snapshots = {latest_snapshot}
-        for period, retention in retention_map.items():
-            next_dts = latest_dts
-            period_in_seconds = RETENTION_PERIOD_SECONDS[period]
-            for i in range(retention):
-                # Find the next best snapshot from the previous match to
-                # increase coverage on systems with irregular schedules.
-                next_dts = self._find_snapshot_for_desired_dts(
-                    dataset_name, snapshots, keep_snapshots,
-                    next_dts - datetime.timedelta(
-                        seconds=period_in_seconds))
-                if len(keep_snapshots) == len(snapshots):
-                    break
-            else:
-                continue
-            # Inner loop was broken.
-            break
-        # Return with the same ordering.
-        return [i[1] for i in snapshots if i[1] in keep_snapshots]
 
-    def _find_snapshot_for_desired_dts(
-            self, dataset_name, snapshots, keep_snapshots, desired_dts):
+class SnapshotRetentionManager:
+    def __init__(self, dataset_name, snapshots, retention_map):
+        self.dataset_name = dataset_name
+        self.snapshots = list(sorted(snapshots, reverse=True))
+        self.retention_map = retention_map
+        self.newest_dts, self.newest_snapshot = self.snapshots[0]
+        # Always keep the newest snapshot.
+        self.keep_snapshots = {self.newest_snapshot}
+
+    def get_snapshots_to_keep(self):
+        # Go through the retention configuration and decide which snapshots
+        # should be kept.
+        for period, retention in self.retention_map.items():
+            self.find_snapshots_for_retention_period(
+                period, retention, self.newest_dts)
+            if len(self.keep_snapshots) == len(self.snapshots):
+                break
+        # Return with the same ordering.
+        return [i[1] for i in self.snapshots if i[1] in self.keep_snapshots]
+
+    def find_snapshots_for_retention_period(
+            self, period, retention, snapshot_dts):
+        retention_period = RETENTION_PERIOD_SECONDS[period]
+        desired_dts = None
+        for i in range(retention):
+            # Find the next best snapshot from the previous match to
+            # increase coverage on systems with irregular schedules.
+            desired_dts = retention_period(snapshot_dts, desired_dts)
+            previous_dts = snapshot_dts
+            snapshot_dts = self.find_snapshot_for_desired_dts(
+                period, desired_dts, previous_dts)
+            if (snapshot_dts == previous_dts
+                    or len(self.keep_snapshots) == len(self.snapshots)):
+                break
+
+    def find_snapshot_for_desired_dts(self, period, desired_dts, previous_dts):
         # For each desired snapshot we need to keep the best matching snapshot
         # and the snapshot that will become the best match.
         best_difference = best_dts = best_snapshot = None
-        for i, (dts, snapname) in enumerate(snapshots[1:], -1):
+        for i, (dts, snapname) in enumerate(self.snapshots, -1):
+            if dts >= previous_dts:  # Skip snapshots newer than the previous.
+                continue
             difference = (desired_dts - dts).total_seconds()
             if (best_difference is None
                     or abs(difference) < abs(best_difference)):
@@ -153,21 +201,13 @@ class Storage(object):
                 best_snapshot = snapname
                 best_dts = dts
             elif abs(difference) > abs(best_difference):
-                if best_difference > 0:
-                    # The snapshot is going stale, include a new snapshot.
-                    fresh_snapname = snapshots[i][1]
-                    logger.debug(
-                        '[%s] Select %s as fresh match for %s',
-                        dataset_name, fresh_snapname,
-                        desired_dts.strftime('%Y%m%dT%H%MZ'))
-                    keep_snapshots.add(fresh_snapname)
                 break
         if best_snapshot is not None:
             logger.debug(
-                '[%s] Select %s as best match for %s with diff:%d',
-                dataset_name, best_snapshot,
+                '[%s] Select %s as best match for %s:%s with diff:%d',
+                self.dataset_name, best_snapshot, period,
                 desired_dts.strftime('%Y%m%dT%H%MZ'), best_difference)
-            keep_snapshots.add(best_snapshot)
+            self.keep_snapshots.add(best_snapshot)
         return best_dts
 
 

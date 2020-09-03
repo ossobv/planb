@@ -262,7 +262,7 @@ class ZfsStorage(PerformCommands, Storage):
             if '@' in snapshot:
                 # Do not include the dataset in the snapshot name.
                 snapshots.append(snapshot.split('@', 1)[1])
-        return snapshots
+        return snapshots  # Sorted by snapshot creation by zfs list.
 
     def get_label(self):
         used, available = [

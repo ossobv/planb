@@ -14,7 +14,7 @@ SNAPNAME_DATETIME_RE = re.compile(r'^(?:\w+-)?(\d{8}T?\d{4}Z?)$')
 
 class RetentionPeriod:
     def __init__(self, clamp, delta):
-        # Clamp the desired datetime to this values.
+        # Clamp the desired datetime to this value.
         self.clamp = clamp
         # Subtract this delta to determine the next desired datetime.
         # Ensure the delta also clamps the datetime.
@@ -183,7 +183,7 @@ class SnapshotRetentionManager:
             previous_dts = snapshot_dts
             snapshot_dts = self.find_snapshot_for_desired_dts(
                 period, desired_dts, previous_dts)
-            if (snapshot_dts == previous_dts
+            if (snapshot_dts is None or snapshot_dts == previous_dts
                     or len(self.keep_snapshots) == len(self.snapshots)):
                 break
 

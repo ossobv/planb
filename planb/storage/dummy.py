@@ -72,7 +72,8 @@ class DummyDataset(Dataset):
         return snapname
 
     def snapshot_list(self):
-        return self._snapshots
+        # Sort snapshots by creation date.
+        return sorted(self._snapshots, key=lambda i: i.split('-')[-1])
 
     @property
     def temp_directory(self):

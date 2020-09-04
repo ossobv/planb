@@ -1,7 +1,7 @@
-{% load rst i18n %}{% autoescape off %}Plan B backup report for "{{ hostgroup.name }}"
-=========================={{ hostgroup.name|replaceany:'=' }}=
+{% load rst i18n %}{% autoescape off %}PlanB backup report for "{{ hostgroup.name }}"
+========================={{ hostgroup.name|replaceany:'=' }}=
 
-The following report contains a listing of all Plan B based backups made
+The following report contains a listing of all PlanB based backups made
 by {{ company_name }}. Please take a moment to examine its correctness:
 
 - Are all hosts you want backed up listed?
@@ -16,7 +16,7 @@ backups.
 your final invoice may differ. All numbers in this report use binary
 prefixes:* 1 GB = 2\ :sup:`30`
 
-The following hosts are backed up using the {{ company_name }} Plan B
+The following hosts are backed up using the {{ company_name }} PlanB
 backup service.
 
 +----------------------------------+------------+------+--------------+
@@ -81,6 +81,6 @@ Available snapshots{% if fileset.has_child_datasets %} for *all* datasets{% endi
 {% endfor %}
 {% endfor %}
 | --
-| Plan B, the {{ company_name }} backup service
+| PlanB, the {{ company_name }} backup service
 | Please contact {{ company_email }} if anything is amiss
 {% endautoescape %}{# vim: set syn=django: #}

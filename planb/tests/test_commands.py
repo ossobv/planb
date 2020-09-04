@@ -96,7 +96,7 @@ class CommandTestCase(TestCase):
         attachment = message.attachments[0]
         self.assertEqual(attachment[0], 'pretty_report.html')
         self.assertIn(
-            '<title>Plan B backup report for &quot;local&quot;</title>',
+            '<title>PlanB backup report for &quot;local&quot;</title>',
             attachment[1])
         self.assertEqual(attachment[2], 'text/html')
 
@@ -206,7 +206,8 @@ notes: ""
 '''
 
 
-TEST_DUTREE_LISTING = '''/.local/share/baloo/index: 13,719,351,296
+TEST_DUTREE_LISTING = '''\
+/.local/share/baloo/index: 13,719,351,296
 /.local/share/*: 7,878,635,520
 "/.steam/steam/steamapps/common/Left 4 Dead 2/left4dead2/": 7,099,121,664
 "/.steam/steam/steamapps/common/Left 4 Dead 2/*": 6,514,282,496
@@ -229,10 +230,11 @@ local-storage                                            79.1 GB  id=1
 '''
 
 
-TEST_BREPORT = '''Plan B backup report for "local"
-================================
+TEST_BREPORT = '''\
+PlanB backup report for "local"
+===============================
 
-The following report contains a listing of all Plan B based backups made
+The following report contains a listing of all PlanB based backups made
 by Example Company. Please take a moment to examine its correctness:
 
 - Are all hosts you want backed up listed?
@@ -247,7 +249,7 @@ backups.
 your final invoice may differ. All numbers in this report use binary
 prefixes:* 1 GB = 2\\ :sup:`30`
 
-The following hosts are backed up using the Example Company Plan B
+The following hosts are backed up using the Example Company PlanB
 backup service.
 
 +----------------------------------+------------+------+--------------+
@@ -299,7 +301,7 @@ Warning: there are no snapshots available for this host.
 
 
 | --
-| Plan B, the Example Company backup service
+| PlanB, the Example Company backup service
 | Please contact support@example.com if anything is amiss
 
 '''  # noqa

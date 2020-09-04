@@ -20,7 +20,7 @@ from django_q.brokers.redis_broker import Redis
 from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
 from planb.storage import storage_pools
-from planb.storage.base import DatasetNotFound
+from planb.storage.base import DatasetNotFound, datetime_from_snapshot_name
 from planb.utils import RETENTION_PERIOD_ADVANCED
 
 
@@ -33,6 +33,50 @@ validate_retention = RegexValidator(
 validate_blacklist_hours = RegexValidator(
     r'^((\d+(?:-\d+)?,?)*|none)$', message=_(
         'Enter a valid value like 2,9-17 or none to disable blacklist hours'))
+
+
+class _DecoratedSnapshot:
+    "Snapshot name decorated with date and diff"
+    @classmethod
+    def iterator(cls, sorted_snapshots):
+        "Decorating snapshot iterator"
+        if sorted_snapshots:
+            prev = next_ = cls(sorted_snapshots[0])
+            for next_ in sorted_snapshots[1:]:
+                next_ = cls(next_, prev)
+                yield prev
+                prev = next_
+            yield next_
+
+    def __init__(self, name, prev=None):
+        self.name = name
+        self.prev = prev
+        try:
+            self.date = datetime_from_snapshot_name(name)
+        except ValueError:
+            self.date = None
+
+    def diff(self):
+        if self.date and self.prev and self.prev.date:
+            diff = self.date - self.prev.date
+            secs = diff.total_seconds()
+            return self._human_diff(secs)
+        return ''
+
+    def _human_diff(self, secs):
+        if secs < 300:      # <5m = 300s ('m' is reserved for month)
+            return '+{:.0f} second'.format(secs)
+        if secs < 18000:    # <5h
+            return '+{:.0f} hour'.format((secs + 1800) // 3600)
+        if secs < 432000:   # <5d
+            return '+{:.0f} day'.format((secs + 43200) // 86400)
+        if secs < 1728000:  # <20d
+            return '+{:.0f} week'.format((secs + 302400) // 604800)
+        month = 2629800     # 365.25 * 86400 / 12
+        return '+{:.0f} month'.format((secs + month // 2) // month)
+
+    def __str__(self):
+        return self.name
 
 
 class HostGroup(models.Model):
@@ -418,10 +462,11 @@ class Fileset(models.Model):
         except DatasetNotFound:
             return ['(dataset not found in storage {!r})'.format(
                 self.storage_alias)]
-        return sorted(
+        snapshots = sorted(
             dataset.child_dataset_snapshot_list()
             if dataset.has_child_datasets()
             else dataset.snapshot_list())
+        return _DecoratedSnapshot.iterator(snapshots)
 
     @property
     def has_child_datasets(self):

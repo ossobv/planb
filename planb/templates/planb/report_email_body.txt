@@ -75,7 +75,7 @@ Last backup FAILED with error::
 {% endfor %}{% endif %}
 Available snapshots{% if fileset.has_child_datasets %} for *all* datasets{% endif %}:
 
-{% for snapshot in fileset.snapshot_list_display %}- ``{{ snapshot }}``
+{% for snapshot in fileset.snapshot_list_display %}- ``{{ snapshot }}``{% if snapshot.diff %} {{ snapshot.diff }}{% endif %}
 {% empty %}
 {{ _('Warning: there are no snapshots available for this host.') }}
 {% endfor %}

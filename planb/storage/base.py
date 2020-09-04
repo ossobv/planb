@@ -55,6 +55,15 @@ RETENTION_PERIOD_SECONDS = {
 }
 
 
+def datetime_from_snapshot_name(snapname):
+    try:
+        dts = SNAPNAME_DATETIME_RE.match(snapname).group(1)
+        dts = parse_snapshot_datetime(dts)
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError('no match for {!r}'.format(snapname))
+    return dts
+
+
 def parse_snapshot_datetime(value):
     for pattern in (
             '%Y%m%dT%H%MZ',  # planb-newTtimeZ
@@ -122,9 +131,8 @@ class Storage(object):
             dataset_name, retention_map)
         for snapname in self.snapshot_list(dataset_name):
             try:
-                dts = SNAPNAME_DATETIME_RE.match(snapname).group(1)
-                dts = parse_snapshot_datetime(dts)
-            except (AttributeError, TypeError, ValueError):
+                dts = datetime_from_snapshot_name(snapname)
+            except ValueError:
                 logger.info(
                     '[%s] Keeping manual snapshot %s', dataset_name, snapname)
                 continue

@@ -51,29 +51,41 @@ class _DecoratedSnapshot:
     def __init__(self, name, prev=None):
         self.name = name
         self.prev = prev
+        if prev:
+            self.prev.next = self
+        self.next = None  # until the next one sets it
         try:
             self.date = datetime_from_snapshot_name(name)
         except ValueError:
             self.date = None
 
     def diff(self):
+        "Diff between this and older snapshot"
         if self.date and self.prev and self.prev.date:
             diff = self.date - self.prev.date
             secs = diff.total_seconds()
-            return self._human_diff(secs)
+            return '+{}'.format(self._human_time(secs))
         return ''
 
-    def _human_diff(self, secs):
+    def rdiff(self):
+        "Diff between this and newer snapshot"
+        if self.date and self.next and self.next.date:
+            diff = self.next.date - self.date
+            secs = diff.total_seconds()
+            return '-{}'.format(self._human_time(secs))
+        return ''
+
+    def _human_time(self, secs):
         if secs < 300:      # <5m = 300s ('m' is reserved for month)
-            return '+{:.0f} second'.format(secs)
+            return '{:.0f} second'.format(secs)
         if secs < 18000:    # <5h
-            return '+{:.0f} hour'.format((secs + 1800) // 3600)
+            return '{:.0f} hour'.format((secs + 1800) // 3600)
         if secs < 432000:   # <5d
-            return '+{:.0f} day'.format((secs + 43200) // 86400)
+            return '{:.0f} day'.format((secs + 43200) // 86400)
         if secs < 1728000:  # <20d
-            return '+{:.0f} week'.format((secs + 302400) // 604800)
+            return '{:.0f} week'.format((secs + 302400) // 604800)
         month = 2629800     # 365.25 * 86400 / 12
-        return '+{:.0f} month'.format((secs + month // 2) // month)
+        return '{:.0f} month'.format((secs + month // 2) // month)
 
     def __str__(self):
         return self.name

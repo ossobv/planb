@@ -48,6 +48,11 @@ class Command(BaseCommand):
                 if ret:
                     ret.append('')
                 ret.append('; {}'.format(hostgroup))
+                if hostgroup == '(nogroup)':
+                    # XXX: add temporary warning regarding cleanup
+                    ret.append(
+                        '; (when purging, do not forget to remove '
+                        'encryption keys from zfskeys dir)')
 
             if fileset:
                 ret.append(

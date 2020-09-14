@@ -17,11 +17,30 @@ class PlanbTestCase(TestCase):
         fileset.hostgroup.save()
         new_name = fileset.storage.name_dataset(
             fileset.hostgroup.name, fileset.friendly_name)
-        with patch.object(
-                fileset.storage._storage, '_perform_binary_command') as m:
-            m.return_value = '/' + old_name  # dataset mountpoint.
+
+        with patch.object(fileset.storage._storage,
+                          '_perform_binary_command') as mock_zfs, \
+                patch('os.mkdir') as mock_mkdir, \
+                patch('os.rmdir') as mock_rmdir:
+            mock_zfs.side_effect = [
+                '/' + old_name,     # get dataset mountpoint
+                '',                 # rename
+                '/' + new_name,     # get dataset mountpoint
+            ]
+
+            # Rename: checks mountpoints, does rename, makes dir
             fileset.rename_dataset(new_name)
-            m.assert_called_with(('rename', old_name, new_name))
+
+            mock_zfs.assert_any_call(
+                ('get', '-Ho', 'value', 'mountpoint', old_name))
+            mock_zfs.assert_any_call(
+                ('rename', old_name, new_name))
+            mock_zfs.assert_any_call(
+                ('get', '-Ho', 'value', 'mountpoint', new_name))
+
+            mock_rmdir.assert_called_with('/' + old_name)  # old mountpoint
+            mock_mkdir.assert_called_with('/' + new_name)  # new mountpoint
+
         self.assertEqual(fileset.dataset_name, new_name)
 
     def test_snapshot_create(self):

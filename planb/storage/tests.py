@@ -164,7 +164,8 @@ class PlanbStorageTestCase(TestCase):
         storage = ZfsStorage(config, alias='zfs')
 
         with patch.object(storage, '_perform_binary_command') as m, \
-                TemporaryDirectory() as tmpdir:
+                TemporaryDirectory() as tmpdir1, \
+                TemporaryDirectory() as tmpdir2:
             # The dataset will be created if it doesn't already exist.
             m.side_effect = [
                 '',  # ensure_exists: get mountpoint
@@ -175,8 +176,8 @@ class PlanbStorageTestCase(TestCase):
                     'cannot open my_dataset: dataset does not exist'),
                 '',  # zfs_create: create dataset and set opts
                 '',  # zfs_create: mount dataset
-                tmpdir,  # zfs_create: get mountpoint
-                tmpdir,  # ensure_exists: get data path
+                tmpdir1,  # zfs_create: get mountpoint
+                tmpdir1,  # ensure_exists: get data path
                 '',  # ensure_exists: unmount
             ]
             dataset = storage.get_dataset('tank/my_dataset')
@@ -188,7 +189,7 @@ class PlanbStorageTestCase(TestCase):
             # When a dataset is worked on it will become the workdirectory.
             m.reset_mock(side_effect=True)
             m.side_effect = [
-                tmpdir,  # begin_work: get mountpoint
+                tmpdir1,  # begin_work: get mountpoint
                 '',  # begin_work: mount
                 '',  # end_work: unmount
             ]
@@ -198,10 +199,17 @@ class PlanbStorageTestCase(TestCase):
             # Test dataset rename command sequence and attribute updates.
             m.reset_mock(side_effect=True)
             m.side_effect = [
-                tmpdir,  # rename_dataset: get mountpoint
-                '',  # rename_dataset: rename dataset
+                tmpdir1,  # rename_dataset: get mountpoint
+                '',       # rename_dataset: rename dataset
+                tmpdir2,  # rename_dataset: get new mountpoint
             ]
-            dataset.rename_dataset('tank/new_name')
+            with patch('os.mkdir') as mock_mkdir, \
+                    patch('os.rmdir') as mock_rmdir:
+                # Rename: checks mountpoints, does rename, makes dir
+                dataset.rename_dataset('tank/new_name')
+                mock_rmdir.assert_called_once_with(tmpdir1)
+                mock_mkdir.assert_called_once_with(tmpdir2)
+
             m.assert_any_call(
                 ('rename', 'tank/my_dataset', 'tank/new_name'))
             self.assertEqual(dataset.name, 'tank/new_name')
@@ -211,14 +219,20 @@ class PlanbStorageTestCase(TestCase):
             # same dataset.
             m.reset_mock(side_effect=True)
             m.side_effect = [
-                tmpdir,  # begin_work: get mountpoint
-                '',  # begin_work: mount
-                tmpdir,  # rename_dataset: get mountpoint
-                '',  # end_work: unmount
+                tmpdir1,    # begin_work: get mountpoint
+                '',         # begin_work: mount
+                tmpdir1,    # rename_dataset: get mountpoint
+                '',         # rename_dataset: rename
+                tmpdir2,    # rename_dataset: get mountpoint
+                '',         # end_work: unmount
             ]
             with self.assertRaises(AssertionError):
-                with dataset.workon():
+                with dataset.workon(), \
+                        patch('os.mkdir') as mock_mkdir, \
+                        patch('os.rmdir') as mock_rmdir:
                     dataset.rename_dataset('tank/other_name')
+                    mock_rmdir.assert_called_once_with(tmpdir1)
+                    mock_mkdir.assert_called_once_with(tmpdir2)
 
             # Dataset listing.
             m.reset_mock(side_effect=True)

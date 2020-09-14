@@ -111,6 +111,15 @@ class ZfsStorage(PerformCommands, Storage):
 
         return output
 
+    def zfs_set_properties(self, dataset_name, keyvalues):
+        cmd = ['set']
+        for key, value in keyvalues.items():
+            propvalue = '{}={}'.format(key, value)
+            cmd.append(propvalue)
+        cmd.append(dataset_name)
+        values = self._perform_binary_command(cmd)  # LF-separated
+        assert values == '', values
+
     def zfs_get_used_size(self, dataset_name):
         return int(self.zfs_get_properties(dataset_name, keys=('used',))[0])
 
@@ -143,6 +152,35 @@ class ZfsStorage(PerformCommands, Storage):
                     'totally unexpected {}'.format(key_location))
 
         return 'file://{}'.format(key_location)
+
+    def _zfs_update_key_location(self, dataset_name):
+        # XXX: temporary key location, has to be updated when moving datasets.
+        orig_key_format, orig_key_location = self.zfs_get_properties(
+            dataset_name, ('keyformat', 'keylocation'))
+        assert orig_key_format == 'raw', (
+            dataset_name, orig_key_format, orig_key_location)
+        assert orig_key_location.startswith('file://'), (
+            dataset_name, orig_key_format, orig_key_location)
+
+        new_key_location = 'file://{}/{}/_key.bin'.format(
+            '/tank/_local/zfskeys', dataset_name)
+        assert orig_key_location != new_key_location, (
+            dataset_name, orig_key_location, new_key_location)
+
+        orig_path = os.path.dirname(orig_key_location[7:])
+        new_path = os.path.dirname(new_key_location[7:])
+        os.rename(orig_path, new_path)
+
+        try:
+            # No need to set keyformat=raw; it's a readonly property.
+            self.zfs_set_properties(
+                dataset_name, {'keylocation': new_key_location})
+        except Exception:
+            try:
+                os.rename(new_path, orig_path)
+            except Exception:
+                logger.exception('Bad keys path state for %r', dataset_name)
+            raise
 
     def zfs_create(self, dataset_name):
         # For multi-slash paths, we may need to create parents as well.
@@ -224,8 +262,44 @@ class ZfsStorage(PerformCommands, Storage):
             self._perform_binary_command(('unload-key', dataset_name))
 
     def zfs_rename_dataset(self, old_dataset_name, new_dataset_name):
+        old_path = self.zfs_get_local_path(old_dataset_name)
+        assert old_path is not None
+
+        # Remove the directory before doing anything else.
+        try:
+            os.rmdir(old_path)  # remove if empty/not active
+        except FileNotFoundError:
+            pass  # no worries if it existed already
+
         self._perform_binary_command(
             ('rename', old_dataset_name, new_dataset_name))
+        new_path = self.zfs_get_local_path(new_dataset_name)
+
+        # Paths should be different:
+        if old_path == new_path:
+            logger.error(
+                'The paths %r for renamed dataset %r -> %r are equal',
+                old_path, old_dataset_name, new_dataset_name)
+
+        # Post-condition: we expect the path to be gone.
+        if os.path.isdir(old_path):
+            # This is an error, but it's not fatal. We already renamed the
+            # dataset, so keep going.
+            logger.error(
+                'The old path %r was not removed for renamed dataset %r -> %r',
+                old_path, old_dataset_name, new_dataset_name)
+            if old_path == new_path:
+                new_path = None
+
+        # Update ZFS secret, if we're using those.
+        if self.config['DATASETKEYS']:
+            self._zfs_update_key_location(new_dataset_name)
+
+        # Make the new directory. This is NOT required. But it's nice for
+        # the users of the system that the dirs already exist.
+        # (As this is the last action, we don't mind a fatal failure here.)
+        if new_path:
+            os.mkdir(new_path)
 
     # (old style)
 

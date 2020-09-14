@@ -509,6 +509,8 @@ Where are the ssh host fingerprints (``known_hosts`` files) stored?
             done
             if test -n "$arg"; then
                 host=${arg##*@}
+                echo "(adding: \
+        -o UserKnownHostsFile=$HOME/.ssh/known_hosts.d/$host)" >&2
                 /usr/bin/ssh -o HashKnownHosts=no \
                   -o UserKnownHostsFile=$HOME/.ssh/known_hosts.d/$host "$@"
             else
@@ -528,6 +530,25 @@ Are bandwidth limits in place?
     can lower or raise this by adding ``--bwlimit=10M`` to the transport
     flags.
 
+
+I've increased the bwlimit, but it's still slow.
+    If you notice that you're limited by ssh encryption CPU speed, you
+    can consider setting the preferred ciphers in ``~planb/.ssh/config``::
+
+        Host *
+            # The default is:
+            #
+            #   chacha20-poly1305@openssh.com,
+            #   aes128-ctr,aes192-ctr,aes256-ctr,
+            #   aes128-gcm@openssh.com,aes256-gcm@openssh.com
+            #
+            # The available ciphers may be obtained using "ssh -Q cipher".
+            # (Adding a non-existent one will yield a "Bad SSH2 cipher spec".)
+            #
+            # The AES ciphers are commonly hardware/CPU accelerated.
+            #
+            Ciphers aes128-ctr,aes128-gcm@openssh.com,aes256-ctr,\
+                aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,3des-cbc
 
 Removing a fileset does not wipe the filesystem from disk, what should I do?
     This is done intentionally. You should periodically use ``planb slist

@@ -3,6 +3,8 @@ export LC_ALL=C
 export LC_CTYPE=C
 set -u
 
+! test $(id -u) = 0 && echo "must be root" >&2 && exit 1
+
 used_keylocations=$(
     zfs list -Hokeylocation |
     sed -e '/^none$/d;/^file:\/\//!d;s/^file:\/\///' |

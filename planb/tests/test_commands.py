@@ -222,6 +222,7 @@ TEST_DUTREE_LISTING = '''\
 
 TEST_SLIST = '''; (nogroup)
 ; (when purging, do not forget to remove encryption keys from zfskeys dir)
+; (see planb-zfskeys-check contrib tool)
 cold/other_host                                         253.0 GB  id=NONE
 
 ; local

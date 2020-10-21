@@ -53,6 +53,7 @@ class Command(BaseCommand):
                     ret.append(
                         '; (when purging, do not forget to remove '
                         'encryption keys from zfskeys dir)')
+                    ret.append('; (see planb-zfskeys-check contrib tool)')
 
             if fileset:
                 ret.append(

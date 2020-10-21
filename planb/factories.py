@@ -1,3 +1,5 @@
+import random
+
 import factory
 from factory.django import DjangoModelFactory
 
@@ -56,7 +58,7 @@ class BackupRunFactory(DjangoModelFactory):
 
     @factory.lazy_attribute
     def snapshot_size_mb(self):
-        return factory.Faker('pyint', max_value=self.total_size_mb).generate()
+        return random.randint(0, self.total_size_mb)
 
     attributes = 'do_snapshot_size_listing: false'
     snapshot_size_listing = ''

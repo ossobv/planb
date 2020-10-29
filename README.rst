@@ -7,14 +7,16 @@ yearly backups with snapshots.
 
 The following data transfer methods are supported:
 
-* ssh+rsync (built-in)
+* ssh+rsync (built-in);
+* ssh+rsync of Kubernetes volume mounts (through `kubersync
+  <./contrib/kubersync.sh>`_), like Rook managed Ceph;
 * snapshots of ZFS (encrypted) datasets (through `planb-zfssync
-  <./contrib/planb-zfssync.sh>`_)
+  <./contrib/planb-zfssync.sh>`_);
 * snapshots of ZFS volumes (through `planb-zfssync
-  <./contrib/planb-zfssync.sh>`_)
+  <./contrib/planb-zfssync.sh>`_);
 * copies of (large) *OpenStack Swift* containers (through `planb-swiftsync
-  <./contrib/planb-swiftsync.py>`_)
-* custom transfer (through your own custom ``transfer_exec`` script)
+  <./contrib/planb-swiftsync.py>`_);
+* custom transfer (through your own custom ``transfer_exec`` script).
 
 
 ------------------

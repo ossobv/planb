@@ -48,5 +48,8 @@ class PlanbDssoLoginBackend(DssoLoginBackend):
                 .exclude(codename='change_backuprun')))
             group.permissions.add(*(
                 Permission.objects
+                .filter(content_type__app_label='transport_exec')))
+            group.permissions.add(*(
+                Permission.objects
                 .filter(content_type__app_label='transport_rsync')))
         return group

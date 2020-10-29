@@ -7,7 +7,7 @@
 # It works like this:
 # - you install a single k8s pod that gets the rook/ceph mounts;
 # - this k8s pod has access to the mount points, and has the rsync binary
-# - the pod does nothing, but sleep;
+# - the pod does nothing but sleep;
 # - until we exec into it, when we want to rsync.
 #
 # So, instead of calling:

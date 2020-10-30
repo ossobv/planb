@@ -55,9 +55,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backup-mount
-  namespace: $namespace
 spec:
-  progressDeadlineSeconds: 600
   replicas: 1
   revisionHistoryLimit: 3
   selector:
@@ -78,15 +76,9 @@ spec:
         command:
         - /bin/sh
         imagePullPolicy: Always
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
         volumeMounts:
         - mountPath: /cephfs-nvme1
           name: cephfs-nvme1
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      terminationGracePeriodSeconds: 30
       volumes:
       - flexVolume:
           driver: ceph.rook.io/rook

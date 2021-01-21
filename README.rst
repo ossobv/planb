@@ -401,7 +401,7 @@ Configuring a remote host
 Create a ``remotebackup`` user on the remote host (or ``encbackup`` for
 encrypted backups, which is beyond the scope of this document)::
 
-    adduser --disabled-password remotebackup
+    useradd -m remotebackup
 
 Configure *sudo* access using ``visudo -f /etc/sudoers.d/remotebackup``::
 

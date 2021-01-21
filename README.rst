@@ -399,7 +399,8 @@ Configuring a remote host
 -------------------------
 
 Create a ``remotebackup`` user on the remote host (or ``encbackup`` for
-encrypted backups, which is beyond the scope of this document)::
+backups encrypted at the source [#]_ [#]_, which is beyond the scope of
+this document)::
 
     useradd -m remotebackup
 
@@ -621,5 +622,18 @@ information was not disclosed. Since then, Harm Geerts has also been
 busy on the project.
 
 
+---------
+Footnotes
+---------
+
+.. [#] If you want your data encrypted before it gets sent to the PlanB server,
+       check out the OSSO blog:
+       `on the fly encrypted backups using gocryptfs (2020)
+       <https://www.osso.nl/blog/offsite-on-the-fly-encrypted-backups-gocryptfs/>`_
+.. [#] An older OSSO blog about on the fly encryption at the source:
+       `on the fly encrypted backups using encfs (2015)
+       <https://www.osso.nl/blog/on-the-fly-encrypted-backups/>`_
+
 .. |PlanB| image:: assets/planb_head.png
     :alt: PlanB - automating remote backups and snapshots with zfs/rsync
+

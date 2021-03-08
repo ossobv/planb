@@ -118,7 +118,10 @@ Q_CLUSTER = {
     'retry': 86400,     # an entire day (needed??)
     'catch_up': False,  # no catching up of missed scheduled tasks
     'compress': False,  # don't care about payload size
-    'save_limit': 250,  # store 250 successful jobs, drop older
+    # The save limit must exceed the amount of enabled filesets * 2 + a little.
+    # If the task result cannot be saved the hook will not trigger and
+    # this will cause the backup_done signal to be skipped.
+    'save_limit': 1000,  # store 1000 successful jobs, drop older
     'label': 'Task Queue',  # seen in Django Admin
     'scheduler': True,  # Schedule on default queue
     'redis': {

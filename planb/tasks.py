@@ -11,6 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from django_q.brokers import get_broker
+from django_q.conf import Conf as DQConf
 from django_q.tasks import async_task
 from yaml import safe_dump, safe_load
 
@@ -143,6 +144,18 @@ def finalize_run(task):
 
 class JobSpawner:
     def spawn_eligible(self):
+        enabled_filesets = Fileset.objects.filter(is_enabled=True).count()
+        # Each day the system spawns fileset * 2 (conditional_run + dutree_run)
+        # and 24 spawn_backup_jobs tasks. Add a margin of 26 to allow for an
+        # early warning.
+        # If the amount exceeds the save limit we may lose the backup_done
+        # signals for a number of backups.
+        if enabled_filesets * 2 + 50 > DQConf.SAVE_LIMIT:
+            logger.warning('Enabled filesets (%d) are close to exceeding the '
+                           'minimum django-q save limit (%d). You should '
+                           'increase the save limit', enabled_filesets,
+                           DQConf.SAVE_LIMIT)
+
         for fileset in self._enum_eligible_filesets():
             async_task(
                 'planb.tasks.conditional_run', fileset.pk,

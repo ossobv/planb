@@ -1,6 +1,6 @@
 # Keep constraints in sync with setup.py and requirements.txt
 # Use constraints to set loose dependencies.
-Django>=2.2,<3.1
+Django>=2.2,<3.2
 django-q>=1.2.1,<2
 django-multi-email-field>=0.6.1,<0.7
 

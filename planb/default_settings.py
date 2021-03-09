@@ -5,7 +5,7 @@ _DEFAULT_DIRS = tuple(
     .split(' '))
 _DEFAULT_FILES = tuple(
     (i + '*') for i in  # files need a '*' in them
-    'var/lib/dpkg/status var/lib/psdiff.db'.split(' '))
+    'var/lib/dpkg/status var/lib/psdiff.db var/log/auth'.split(' '))
 PLANB_DEFAULT_INCLUDES = ' '.join(sorted(_DEFAULT_DIRS + _DEFAULT_FILES))
 
 

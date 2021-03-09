@@ -233,6 +233,23 @@ class Config(AbstractTransport):
         return flags, remote_shell
 
     def generate_rsync_command(self):
+        def in_arg(arg, other_list):
+            if arg.startswith('--') and '=' in arg:
+                # Easy: --option=value
+                arg = arg.split('=', 1)[0]
+                arg += '='
+                if any(i.startswith(arg) for i in other_list):
+                    return True
+            elif arg.startswith('--'):
+                # Nothing to do: --option [or worse: --option value]
+                pass
+            elif arg.startswith('-'):
+                assert False, 'single dash arguments not supported'
+                # ... because we'd have to check the next argument
+                # Hard: -o value
+                # Hardest: -ovalue
+            return False
+
         rsync_flags, remote_shell = self.get_rsync_flags()
         data_dir = self.fileset.get_dataset().get_data_path()
 
@@ -252,13 +269,18 @@ class Config(AbstractTransport):
             '--chmod=Du+rwx',
             # Limit bandwidth a bit.
             '--bwlimit=10M')
+        used_simple_args = tuple(
+            arg for arg in simple_args if not in_arg(arg, rsync_flags))
+
+        transport_args = self.get_transport_args(remote_shell=remote_shell)
+
         args = (
-            simple_args
+            used_simple_args
             + rsync_flags
             + self.create_exclude_string()
             + self.create_include_string()
             + ('--exclude=*',)
-            + self.get_transport_args(remote_shell=remote_shell)
+            + transport_args
             + (data_dir,))
 
         return args

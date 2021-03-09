@@ -276,7 +276,7 @@ class Config(AbstractTransport):
 
         args = (
             used_simple_args
-            + rsync_flags
+            + tuple(arg for arg in rsync_flags if arg != '--bwlimit=')  # hacks
             + self.create_exclude_string()
             + self.create_include_string()
             + ('--exclude=*',)

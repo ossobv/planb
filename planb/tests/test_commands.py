@@ -166,6 +166,7 @@ TEST_CONFEXPORT_JSON = '''/* local-desktop */
       "var/backups",
       "var/lib/dpkg/status*",
       "var/lib/psdiff.db*",
+      "var/log/auth*",
       "var/spool/cron",
       "var/www"
     ],
@@ -198,6 +199,7 @@ paths:
     - var/backups
     - "var/lib/dpkg/status*"
     - "var/lib/psdiff.db*"
+    - "var/log/auth*"
     - var/spool/cron
     - var/www
   exclude: []

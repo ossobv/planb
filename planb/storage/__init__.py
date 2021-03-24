@@ -25,7 +25,13 @@ class StorageWrapper:
         return self._storage.get_label()
 
     def get_datasets(self):
-        return self._storage.get_datasets()
+        sets = self._storage.get_datasets()
+        # XXX: do i.get_parent_dataset() instead?
+        ds_parents = set([i.name.rsplit('/', 1)[0] for i in sets])
+        for ds in sets:
+            is_parent = bool(ds.name in ds_parents)
+            ds.set_leaf(is_leaf=(not is_parent))
+        return sets
 
     def name_dataset(self, namespace, name):
         return self._storage.name_dataset(namespace, name)

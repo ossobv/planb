@@ -128,6 +128,7 @@ class CommandTestCase(TestCase):
             dataset.set_disk_usage(60630999402)
             # a dataset not mapped to a fileset.
             dataset = storage.get_dataset('cold/other_host')
+            dataset.set_leaf(True)
             dataset.set_disk_usage(271626877324)
             stdout, stderr = self.run_command('slist')
             self.assertEqual(stdout, TEST_SLIST)

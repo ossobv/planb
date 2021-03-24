@@ -251,6 +251,48 @@ class Datasets(list):
             config = configs_by_dataset.get(dataset.name, False)
             dataset.set_database_object(config)  # of type Fileset
 
+    def keep_only_leaves(self):
+        """
+        We generally only want the leaves, except when our dataset handles one
+        or more ZFS datasets on remote.
+
+          [DEL] tank/namespace
+                tank/namespace/dataset1
+                tank/namespace/dataset2
+                tank/namespace/dataset3-zfs
+          [DEL] tank/namespace/dataset3-zfs/etc
+          [DEL] tank/namespace/dataset3-zfs/var-backups
+
+        For this to work properly, the dataset list must be fully populated and
+        load_database_config must have been called.
+
+        (If 'tank/namespace/dataset3-zfs' was not in the list, we would *not*
+        remove its two leaves.)
+        """
+        # Filter, get only leaves OR those which exist in the database.
+        datasets_in_database = [ds for ds in self if ds.exists_in_database]
+        datasets_by_name = set(ds.name for ds in datasets_in_database)
+        relevant_datasets = datasets_in_database
+        for ds in self:
+            # We already have those that exist in the database.
+            if ds.exists_in_database:
+                pass  # already in it
+            # Now we add only leaves, except for leaves that are part of an
+            # existing (in the database) dataset.
+            elif ds.is_leaf:
+                # foo/bar/baz => ['foo', 'foo/bar']
+                components = ds.name.split('/')
+                parents = [
+                    '/'.join(components[0:i])
+                    for i in range(1, len(components))]
+                # ('foo' not in datasets_by_name) and
+                # ('foo/bar' not in datasets_by_name)
+                if all(i not in datasets_by_name for i in parents):
+                    relevant_datasets.append(ds)
+
+        # Overwrite self.
+        self[:] = relevant_datasets
+
 
 class Dataset(object):
     """
@@ -280,6 +322,7 @@ class Dataset(object):
         self.name = name
         self._disk_usage = None
         self._database_object = None  # of type Fileset
+        self._is_leaf = None
 
     def __repr__(self):
         return '<{}:{}>'.format(self._storage.name, self.name)
@@ -291,6 +334,11 @@ class Dataset(object):
     def exists_in_database(self):
         assert self._database_object is not None
         return (self._database_object is not False)
+
+    @property
+    def is_leaf(self):
+        assert self._is_leaf is not None
+        return self._is_leaf
 
     @property
     def database_object(self):
@@ -308,6 +356,11 @@ class Dataset(object):
     def set_database_object(self, database_object):
         assert self._database_object is None
         self._database_object = database_object
+
+    def set_leaf(self, is_leaf):
+        assert self._is_leaf is None
+        assert isinstance(is_leaf, bool), is_leaf
+        self._is_leaf = is_leaf
 
     def get_referenced_size(self, snapname=None):
         raise NotImplementedError()

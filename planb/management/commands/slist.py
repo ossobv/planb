@@ -24,14 +24,19 @@ class Command(BaseCommand):
         for storage in storage_pools.values():
             datasets.extend(storage.get_datasets())
 
-        for exclude in set(options['exclude']):
-            datasets = [i for i in datasets if not fnmatch(i.name, exclude)]
-
+        # For the leaf/parent checks to be effective, we need the database
+        # config immediately before excluding anything.
         datasets = Datasets(datasets)
         datasets.load_database_config()
+        datasets.keep_only_leaves()
+
+        for exclude in set(options['exclude']):
+            datasets = Datasets([
+                ds for ds in datasets if not fnmatch(ds.name, exclude)])
+
         if options['stale']:
             datasets = Datasets([
-                i for i in datasets if not i.exists_in_database])
+                ds for ds in datasets if not ds.exists_in_database])
 
         datasets.sort()
         self.dump_list(datasets)

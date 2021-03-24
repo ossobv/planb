@@ -354,7 +354,7 @@ class ZfsStorage(PerformCommands, Storage):
     def get_datasets(self, parent=None):
         parent = self.poolname if parent is None else parent
         output = self._perform_binary_command((
-            'list', '-d', '1', '-t', 'filesystem,volume',
+            'list', '-r', '-t', 'filesystem,volume',
             '-Hpo', 'name,used,type,planb:contains',
             parent))
 

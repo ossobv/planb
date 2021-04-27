@@ -530,17 +530,19 @@ class SwiftSync:
                 #     10000 listings; but that will eat memory, which we don't
                 #     want.
                 marker = ''  # "start _after_ marker"
+                prev_marker = 'anything_except_the_empty_string'
                 limit = 10000
                 while True:
+                    assert marker != prev_marker, marker  # loop trap
                     resp_headers, lines = swiftconn.get_container(
                         container, full_listing=False, limit=limit,
                         marker=marker)
                     for idx, line in enumerate(lines):
                         self._make_new_list_add_line(
                             dest, fmt, swiftconn, container, line)
-                        marker = line['name']
-                    if idx + 1 < limit:
+                    if not lines or (idx + 1 < limit):
                         break
+                    marker, prev_marker = line['name'], marker
         os.rename(path_tmp, self._path_new)
 
     def _make_new_list_add_line(self, dest, fmt, swiftconn, container, line):

@@ -2,7 +2,7 @@ from contextlib import contextmanager
 import datetime
 from unittest.mock import Mock, patch
 
-from django.test import TestCase, override_settings
+from django.test import override_settings
 from django.utils.timezone import make_aware
 
 from planb.factories import BackupRunFactory, FilesetFactory
@@ -11,6 +11,7 @@ from planb.tasks import (
     FilesetRunner, conditional_run, dutree_run, finalize_run, manual_run,
     rename_run, unconditional_run)
 from planb.signals import backup_done
+from planb.tests.base import PlanbTestCase
 from planb.transport_rsync.factories import RsyncConfigFactory
 
 RSYNC_BIN = '/not/rsync'
@@ -25,7 +26,7 @@ def message(
 # These tests use the dummy storage because zfs is complicated to mock and
 # not the focus of this test.
 @override_settings(PLANB_RSYNC_BIN=RSYNC_BIN)
-class TaskTestCase(TestCase):
+class TaskTestCase(PlanbTestCase):
     maxDiff = 8192
 
     def test_runner(self):

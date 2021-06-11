@@ -4,17 +4,18 @@ from unittest.mock import patch
 
 from django.core import mail
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import override_settings
 
 from planb.factories import (
     BackupRunFactory, FilesetFactory, HostGroupFactory)
 from planb.models import Fileset
 from planb.storage.dummy import DummyStorage
+from planb.tests.base import PlanbTestCase
 from planb.transport_exec.factories import ExecConfigFactory
 from planb.transport_rsync.factories import RsyncConfigFactory
 
 
-class CommandTestCase(TestCase):
+class CommandTestCase(PlanbTestCase):
     maxDiff = None
 
     def run_command(self, *args, **kwargs):

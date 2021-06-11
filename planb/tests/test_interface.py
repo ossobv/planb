@@ -1,13 +1,13 @@
 from django.template import Context, Template
-from django.test import TestCase
 from django.utils import timezone
 
 from planb.factories import (
     BackupRunFactory, FilesetFactory, HostGroupFactory, UserFactory)
 from planb.models import BOGODATE
+from planb.tests.base import PlanbTestCase
 
 
-class InterfaceTestCase(TestCase):
+class InterfaceTestCase(PlanbTestCase):
     def test_admin_model(self):
         user = UserFactory(is_staff=True, is_superuser=True)
         self.client.force_login(user)

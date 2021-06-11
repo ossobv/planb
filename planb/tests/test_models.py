@@ -1,13 +1,14 @@
 import datetime
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import override_settings
 from django.utils import timezone
 
 from planb.factories import FilesetFactory
+from planb.tests.base import PlanbTestCase
 
 
-class PlanbTestCase(TestCase):
+class PlanbTestCase(PlanbTestCase):
     def test_rename_fileset(self):
         fileset = FilesetFactory(storage_alias='zfs')
         old_name = fileset.storage.name_dataset(

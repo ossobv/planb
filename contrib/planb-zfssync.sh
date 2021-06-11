@@ -98,20 +98,41 @@ target_snapshot=$planb_snapshot_target
 target_snapshot_prefix=${planb_snapshot_target%-*}
 test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
 
-# Make snapshots.
-for remotepath in "$@"; do
-    src=$remotepath@$target_snapshot
-    ssh $ssh_options $ssh_target "\
-        sudo zfs snapshot \"$src\" && \
-        sudo zfs set planb:owner=$planb_guid \"$src\""
-done
-
-# Download snapshots.
+# Download snapshots (make them if necessary).
 for remotepath in "$@"; do
     our_path=$(escape "$remotepath")
     dst=$planb_storage_name/$our_path
+
+    # Ensure there is a snapshot for us.
     recent_snapshot=$(sudo zfs list -d 1 -t snapshot -Hpo name \
         -S creation "$dst" | sed -e 's/.*@//;1q')
+    if test -z "$recent_snapshot"; then
+        # Nothing yet. See if there is an old snapshot we can start from
+        # remotely. This is quite useful when testing different snapshot
+        # configurations.
+        prev_target_snapshot=$(ssh $ssh_options $ssh_target "\
+            sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
+            -S creation \"$remotepath\"" | grep -E \
+            "^.*@(daily|$target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
+            sed -e 's/^[^@]*@//;s/[[:blank:]].*//;1q')
+        if test -z "$prev_target_snapshot"; then
+            # Does not exist. Create.
+            src=$remotepath@$target_snapshot
+            ssh $ssh_options $ssh_target "\
+                sudo zfs snapshot \"$src\" && \
+                sudo zfs set planb:owner=$planb_guid \"$src\""
+        else
+            # Exists, use that.
+            src=$remotepath@$prev_target_snapshot
+        fi
+    else
+        # There was a recent snapshot locally. Make a new one remotely.
+        src=$remotepath@$target_snapshot
+        ssh $ssh_options $ssh_target "\
+            sudo zfs snapshot \"$src\" && \
+            sudo zfs set planb:owner=$planb_guid \"$src\""
+    fi
+
     if test -n "$recent_snapshot"; then
         # Undo any local changes (properties?)
         sudo zfs rollback "$dst@$recent_snapshot"

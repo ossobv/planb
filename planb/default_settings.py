@@ -113,7 +113,7 @@ Q_DUTREE_WORKERS = 1
 
 Q_CLUSTER = {
     'name': 'planb',    # redis prefix AND default broker (yuck!)
-    'workers': 7,       # how many workers to process tasks simultaneously
+    'workers': 15,      # how many workers to process tasks simultaneously
     'timeout': 86300,   # almost a day
     'retry': 86400,     # an entire day (needed??)
     'catch_up': False,  # no catching up of missed scheduled tasks

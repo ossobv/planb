@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shlex
 
 from django.conf import settings
@@ -33,7 +34,14 @@ class Config(AbstractTransport):
         return reverse('admin:transport_exec_config_change', args=(self.pk,))
 
     def generate_cmd(self):
-        return shlex.split(self.transport_command.strip())
+        # shlex.split() keeps linefeeds in backslash-linefeed combo's.
+        # We don't want those. Remove any '\\\n' before we proceed.
+        # 'abc \\\n def' => ['abc', '\n', 'def']
+        # 'abc\\\ndef' => ['abc', '\ndef']
+        cmd = self.transport_command
+        no_backslash_cmd = re.sub('([^\\\\])\\\\\n', r'\1', cmd)
+        lexed = shlex.split(no_backslash_cmd)
+        return lexed
 
     def generate_env(self):
         env = {}

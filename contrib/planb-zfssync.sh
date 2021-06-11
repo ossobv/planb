@@ -104,7 +104,6 @@ done
 # Download snapshots.
 for remotepath in "$@"; do
     our_path=$(escape "$remotepath")
-    src=$remotepath@$target_snapshot
     dst=$planb_storage_name/$our_path
     recent_snapshot=$(sudo zfs list -d 1 -t snapshot -Hpo name \
         -S creation "$dst" | sed -e 's/.*@//;1q')
@@ -134,8 +133,9 @@ for remotepath in "$@"; do
                 sudo zfs recv "$dst"
         fi
     fi
-    # Disable mounting of individual filesystems on this mount point. As doing
-    # so will mess up the parent mount.
+
+    # Disable mounting of individual filesystems on this mount point.
+    # Mounting those here would mess up the parent mount.
     type=$(sudo zfs get -o value -Hp type "$dst")
     case "$type" in
     filesystem)
@@ -151,7 +151,6 @@ done
 
 # Keep only three snapshots on remote machine. Filter by planb:owner=GUID.
 for remotepath in "$@"; do
-    src=$remotepath@$target_snapshot
     ssh $ssh_options $ssh_target "\
             sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
             -S creation \"$remotepath\"" | grep -E \

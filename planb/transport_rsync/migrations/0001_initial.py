@@ -22,7 +22,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('host', models.CharField(max_length=254)),
                 ('src_dir', models.CharField(default='/', max_length=254)),
-                ('includes', planb.common.fields.FilelistField(default='data etc home root srv usr/local/bin var/backups var/lib/dpkg/status* var/lib/psdiff.db* var/spool/cron var/www', max_length=1023)),
+                ('includes', planb.common.fields.FilelistField(default='data etc home root srv usr/local/bin var/backups var/lib/dpkg/status* var/lib/psdiff.db* var/log/auth* var/spool/cron var/www', max_length=1023)),
                 ('excludes', planb.common.fields.FilelistField(blank=True, max_length=1023)),
                 ('transport', planb.transport_rsync.models.TransportChoices(choices=[(0, 'ssh (default)'), (1, 'rsync (port 873)')], default=0)),
                 ('user', models.CharField(default='root', max_length=254)),

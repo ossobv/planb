@@ -29,33 +29,53 @@ class FilelistField(models.CharField):
 
 
 class CommandFormField(forms.CharField):
+    """
+    We expect the value to be shlex.split()
+    """
     def clean(self, value):
         value = super().clean(value)
         if not value:
             return value
 
-        values = value.strip().split()
-        if not values or values[0][0] != '/':
-            raise forms.ValidationError(_(
-                'Command needs to start with a /'))
+        lines = value.strip().split('\n')
+        lines[0] = ' '.join(lines[0].strip().split())
+        lines[1:] = ['    {}'.format(
+            ' '.join(line.strip().split())) for line in lines[1:]]
 
-        if not os.access(values[0], os.X_OK, effective_ids=True):
-            raise forms.ValidationError(_(
-                'Command not found or no permissions'))
+        if len(lines) > 1:
+            if any(not line.endswith(' \\') for line in lines[0:-1]):
+                raise forms.ValidationError(_(
+                    'Multiline commands need to use space-backslash to '
+                    'continue on the next line'))
+            if lines[-1].endswith(' \\'):
+                raise forms.ValidationError(_(
+                    'Unexpected backslash on last line'))
 
-        return ' '.join(values)
+        command = lines[0].split()[0]
+        if not command or command[0] != '/':
+            raise forms.ValidationError(_(
+                'Command {!r} needs to start with a /').format(command))
+
+        if not os.access(lines[0][0], os.X_OK, effective_ids=True):
+            raise forms.ValidationError(_(
+                'Command {!r} not found or no permissions').format(command))
+
+        return '\n'.join(lines)
 
 
 class CommandField(models.CharField):
     def __init__(self, **kwargs):
-        assert kwargs.get('max_length', 254) == 254, kwargs
-        kwargs.update({'max_length': 254})
+        max_length = kwargs.get('max_length', 8000)
+        # We used to have 254, we need to accept it so migrations will work.
+        assert max_length in (254, 8000), kwargs
+        kwargs.update({'max_length': max_length})
+
         super().__init__(**kwargs)
 
     def formfield(self, **kwargs):
         return super().formfield(
             form_class=CommandFormField,
-            widget=forms.TextInput(attrs={'size': '100'}))
+            widget=forms.Textarea(attrs={'cols': '100', 'rows': '10'}))
 
 
 class MultiEmailField(models.Field):

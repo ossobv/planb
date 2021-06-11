@@ -26,7 +26,8 @@ class Config(AbstractTransport):
         db_table = TABLE_PREFIX  # or '{}_config'.format(TABLE_PREFIX)
 
     def __str__(self):
-        return 'exec transport {}'.format(self.transport_command)
+        return 'exec transport {}'.format(
+            self.transport_command.replace(' \\\n', ' '))
 
     def get_change_url(self):
         return reverse('admin:transport_exec_config_change', args=(self.pk,))

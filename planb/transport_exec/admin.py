@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.forms import modelform_factory
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext as _
 
 from planb.forms import FilesetRefForm
 
@@ -22,7 +24,7 @@ class ConfigAdmin(admin.ModelAdmin):
     )
 
     list_display = (
-        'fileset', 'transport_command',
+        'fileset', 'transport_command_',
     )
 
     search_fields = (
@@ -34,6 +36,17 @@ class ConfigAdmin(admin.ModelAdmin):
         if obj:
             return self.readonly_change_fields + self.readonly_fields
         return self.readonly_fields
+
+    def transport_command_(self, object):
+        s = object.transport_command.replace(' \\\n', ' ')
+        s = s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        parts = s.split()
+        if parts:
+            path, command = parts[0].rsplit('/', 1)
+            parts[0] = '{}/<strong>{}</strong>'.format(path, command)
+        return mark_safe(' '.join(parts))
+    transport_command_.admin_order_field = 'transport_command'
+    transport_command_.short_description = _('transport command')
 
 
 admin.site.register(Config, ConfigAdmin)

@@ -150,16 +150,18 @@ class BossoRESTPoster(BasePoster):
         }
 
 
-def daily_hostgroup_report(data_poster):
+def daily_hostgroup_report(data_poster, hostgroup_qs=None):
     """
     This could be run daily to report to REMOTE how many data each
     hostgroup has backed up.
     """
+    if hostgroup_qs is None:
+        hostgroup_qs = HostGroup.objects.all()
     today = date.today()
     today_is_first_day_of_the_month = (today.day == 1)
     first_day_of_this_month = today.replace(day=1)
 
-    for hostgroup in HostGroup.objects.order_by('name'):
+    for hostgroup in hostgroup_qs.order_by('name'):
         for fileset in (
                 # Find filesets which succeeded at least once.
                 hostgroup.filesets.exclude(last_ok=None)

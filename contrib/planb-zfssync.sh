@@ -1,6 +1,6 @@
 #!/bin/sh -eux
 
-# Usage: .../planb-zfssync [--plain|--qlz1] root@MACHINE tank/X tank/Y rpool/abc/def
+# Usage: .../planb-zfssync [--lz4|--plain|--qlz1] root@MACHINE tank/X rpool/X/Z
 #
 # KNOWN BUGS:
 # - if you have multiple filesets (in the same planb, with the same guid)
@@ -19,9 +19,14 @@ test -z "$planb_storage_name" && exit 3
 #
 # See: zfs send 2>&1 | grep '^[[:blank:]]*send [[]-[^]]*w[^]]*[]] '
 zfs_send_option=--raw  # (or the '-w' option)
+zfs_recv_option='-o readonly=on'
 deflate=
 inflate=
 case "${1:-}" in
+--lz4)
+    zfs_send_option='--compressed --large-block'
+    shift;
+    ;;
 --qlz1)
     zfs_send_option=
     deflate=qlzip1
@@ -116,21 +121,22 @@ for remotepath in "$@"; do
         if test -n "$deflate$inflate"; then
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $zfs_send_option -I \"$src_prev\" \"$src\" |\
-                  \"$deflate\"" | "$inflate" | sudo zfs recv "$dst"
+                  \"$deflate\"" | "$inflate" |
+                  sudo zfs recv $zfs_recv_option "$dst"
         else
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $zfs_send_option -I \"$src_prev\" \"$src\"" |
-                sudo zfs recv "$dst"
+                sudo zfs recv $zfs_recv_option "$dst"
         fi
     else
         if test -n "$deflate$inflate"; then
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $zfs_send_option \"$src\" | \"$deflate\"" |
-                "$inflate" | sudo zfs recv "$dst"
+                "$inflate" | sudo zfs recv $zfs_recv_option "$dst"
         else
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $zfs_send_option \"$src\"" |
-                sudo zfs recv "$dst"
+                sudo zfs recv $zfs_recv_option "$dst"
         fi
     fi
 

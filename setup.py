@@ -88,20 +88,20 @@ if __name__ == '__main__':
             'Development Status :: 4 - Beta',
             'Environment :: Web Environment',
             'Framework :: Django',
-            'Framework :: Django :: 1.11',
+            'Framework :: Django :: 2',
+            'Framework :: Django :: 3',
             'Intended Audience :: System Administrators',
             ('License :: OSI Approved :: GNU General Public License v3 '
              'or later (GPLv3+)'),
             'Operating System :: POSIX :: Linux',
             'Programming Language :: Python',
-            'Programming Language :: Python :: 3.4',
-            'Programming Language :: Python :: 3.5',
+            'Programming Language :: Python :: 3',
             'Topic :: System :: Archiving :: Backup',
         ],
         # Keep install_requires in sync with requirements.txt and
         # constraints.txt
         install_requires=[
-            'Django>=2.2,<3.2',
+            'Django>=2.2,<3.3',
             'django-q>=1.2.1,<2',
             'django-multi-email-field>=0.6.1,<0.7',
             'dutree>=1.6,<2',

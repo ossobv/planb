@@ -13,6 +13,10 @@ class DummyStorage(Storage):
         super().__init__(*args, **kwargs)
         self._datasets = {}
 
+    def close(self):
+        for dataset in self.get_datasets():
+            dataset.close()
+
     def get_datasets(self):
         return list(self._datasets.values())
 
@@ -39,6 +43,12 @@ class DummyDataset(Dataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._snapshots = []
+        self._temp_directory = None
+
+    def close(self):
+        if self._temp_directory is not None:
+            self._temp_directory.cleanup()
+            self._temp_directory = None
 
     def get_data_path(self):
         return os.path.join(self.temp_directory, 'data')
@@ -82,6 +92,6 @@ class DummyDataset(Dataset):
         The directory will be destroyed when the Dataset object with the
         _temp_directory property is destroyed.
         '''
-        if not hasattr(self, '_temp_directory'):
+        if self._temp_directory is None:
             self._temp_directory = TemporaryDirectory()
         return self._temp_directory.name

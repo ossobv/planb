@@ -91,6 +91,9 @@ class Storage(object):
         self.name = config['NAME']
         self.alias = alias
 
+    def close(self):
+        pass
+
     def get_label(self):
         return self.name
 
@@ -326,6 +329,9 @@ class Dataset(object):
 
     def __repr__(self):
         return '<{}:{}>'.format(self._storage.name, self.name)
+
+    def close(self):
+        pass
 
     def flush(self):
         self._disk_usage = None

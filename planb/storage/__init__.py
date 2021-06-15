@@ -21,6 +21,9 @@ class StorageWrapper:
     def alias(self):
         return self._storage.alias
 
+    def close(self):
+        return self._storage.close()
+
     def get_label(self):
         return self._storage.get_label()
 

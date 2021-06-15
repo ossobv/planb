@@ -1,9 +1,9 @@
 from django.contrib import admin
+from django.urls import re_path as url
 from django.views.generic.base import RedirectView
 
 from .views import EnqueueJob
 
-from django.conf.urls import url
 
 admin.autodiscover()
 admin.site.site_title = 'PlanB'

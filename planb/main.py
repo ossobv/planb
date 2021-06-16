@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 from pkg_resources import (
     get_distribution, DistributionNotFound, RequirementParseError)
-from django import get_version as get_django_version
 import os
 import sys
+
+from django import get_version as get_django_version
 
 
 def try_load_envvars(filenames):
@@ -75,7 +75,7 @@ def get_version():
     return 'PlanB {} (Django {})'.format(version, get_django_version())
 
 
-if __name__ == '__main__':
+def main():
     # Check env. If DJANGO_SETTINGS_MODULE is not set, we'll try to load
     # ${PLANB_ENVFILE}, /etc/planb/envvars or ./envvars to get USER,
     # PYTHONPATH and DJANGO_SETTINGS_MODULE.
@@ -97,3 +97,7 @@ if __name__ == '__main__':
     setattr(django, 'get_version', get_version)
     # Move to the django-admin wrapper.
     execute_from_command_line()
+
+
+if __name__ == '__main__':
+    main()

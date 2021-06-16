@@ -37,7 +37,7 @@ def version_from_changelog(changelog):
     for line in versions:
         assert line and line[0].isdigit(), line
         line = line.split(' ', 1)[0]
-        if True or all(i.isdigit() for i in line.split('.')):
+        if all(i.isdigit() for i in line.split('.')):
             version = line  # last "complete version"
             break
         incomplete = True
@@ -66,7 +66,9 @@ if __name__ == '__main__':
     setup(
         name='planb',
         version=version,
-        scripts=['scripts/planb'],
+        entry_points={
+            'console_scripts': ['planb=planb.main:main'],
+        },
         data_files=[
             ('share/doc/planb', [
                 'LICENSE', 'README.rst', 'CHANGES.rst']),

@@ -108,7 +108,8 @@ if __name__ == '__main__':
             'django-multi-email-field>=0.6.1,<0.7',
             'dutree>=1.6,<2',
             'PyYAML>=5.1.1',
-            'redis>=2.10.5,<3',        # APT: python3-redis
+            # Allow any redis version that is compatible with django-q.
+            'redis',                   # APT: python3-redis
             'setproctitle>=1.1.8,<2',  # APT: python3-setproctitle
             'python-dateutil>=2.8.1,<3',
         ],

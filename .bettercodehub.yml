@@ -7,8 +7,6 @@ languages:
   - name: python
 
     production:
-      include:
-        - /scripts/planb
       exclude:
         - /example_settings.py
         - /test_settings.py

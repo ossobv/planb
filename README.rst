@@ -20,7 +20,7 @@ The following data transfer methods are supported:
 
 
 ------------------
-What is looks like
+What it looks like
 ------------------
 
 At the moment, the interface is just a *Django* admin interface:

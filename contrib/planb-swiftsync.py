@@ -470,7 +470,16 @@ class SwiftSync:
         if not last_modified or (time() - last_modified) > (18 * 3600.0):
             self._make_new_list()
 
-        # Make the add/del lists based off cur/new.
+        # Make the add/del/utime lists based off cur/new.
+        #
+        # * The add/del lists are obvious.
+        #
+        # * The utime list is for cases when only the mtime has changed:
+        #   To avoid rewriting (duplicating) the file on COW storage (ZFS),
+        #   we'll want to check the file hash to avoid rewriting it if it's the
+        #   same.  (Useful when the source files have been moved/copied and the
+        #   X-Timestamps have thus been renewed.)
+        #
         self._make_diff_lists()
 
     def delete_from_list(self):
@@ -574,8 +583,14 @@ class SwiftSync:
 
     def _make_diff_lists(self):
         """
-        Create planb-swiftsync.add and planb-swiftsync.del based on
-        planb-swiftsync.new and planb-swiftsync.cur.
+        Create planb-swiftsync.add, planb-swiftsync.del and
+        planb-swiftsync.utime based on planb-swiftsync.new and
+        planb-swiftsync.cur.
+
+        planb-swiftsync.del:   Files that can be removed immediately.
+        planb-swiftsync.add:   Files that can be added immediately.
+        planb-swiftsync.utime: Files that have the same name and filesize, but
+                               different timestamp.
         """
         try:
             cur_fp = open(self._path_cur, 'r')
@@ -585,19 +600,25 @@ class SwiftSync:
             cur_fp = open(self._path_cur, 'r')
 
         try:
-            with open(self._path_new, 'r') as new_fp:
-                with open(self._path_del, 'w') as del_fp:
-                    os.chmod(self._path_del, 0o600)
-                    with open(self._path_add, 'w') as add_fp:
-                        os.chmod(self._path_add, 0o600)
-                        llc = _ListLineComm(cur_fp, new_fp)
-                        llc.act(
-                            # We already have it if in both:
-                            both=(lambda e: None),
-                            # Remove when only in cur_fp:
-                            leftonly=(lambda d: del_fp.write(d)),
-                            # Add when only in new_fp:
-                            rightonly=(lambda a: add_fp.write(a)))
+            with open(self._path_new, 'r') as new_fp, \
+                    open(self._path_del, 'w') as del_fp, \
+                    open(self._path_add, 'w') as add_fp, \
+                    open(self._path_utime, 'w') as utime_fp:
+                os.chmod(self._path_del, 0o600)
+                os.chmod(self._path_add, 0o600)
+                os.chmod(self._path_utime, 0o600)
+
+                llc = _ListLineComm(cur_fp, new_fp)
+                llc.act(
+                    # We already have it if in both:
+                    both=(lambda line: None),
+                    # We have it in both, but only the timestamp differs:
+                    timediff=(lambda leftline, rightline: (
+                        utime_fp.write(rightline))),
+                    # Remove when only in cur_fp:
+                    leftonly=(lambda line: del_fp.write(line)),
+                    # Add when only in new_fp:
+                    rightonly=(lambda line: add_fp.write(line)))
         finally:
             cur_fp.close()
 
@@ -606,17 +627,19 @@ class SwiftSync:
         Update planb-swiftsync.cur by adding all from added_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
-        with open(self._path_cur, 'r') as cur_fp:
-            with open(path_tmp, 'w') as tmp_fp:
-                os.chmod(path_tmp, 0o600)
-                llc = _ListLineComm(cur_fp, added_fp)
-                llc.act(
-                    # Keep it if in both:
-                    both=(lambda e: tmp_fp.write(e)),
-                    # Keep it if we already had it:
-                    leftonly=(lambda d: tmp_fp.write(d)),
-                    # Keep it if we added it now:
-                    rightonly=(lambda a: tmp_fp.write(a)))
+        with open(self._path_cur, 'r') as cur_fp, \
+                open(path_tmp, 'w') as tmp_fp:
+            os.chmod(path_tmp, 0o600)
+            llc = _ListLineComm(cur_fp, added_fp)
+            llc.act(
+                # Keep it if in both:
+                both=(lambda line: tmp_fp.write(line)),
+                # Should not happen:
+                difftime=None,
+                # Keep it if we already had it:
+                leftonly=(lambda line: tmp_fp.write(line)),
+                # Keep it if we added it now:
+                rightonly=(lambda line: tmp_fp.write(line)))
         os.rename(path_tmp, self._path_cur)
 
     def update_cur_list_from_deleted(self, deleted_fp):
@@ -624,17 +647,19 @@ class SwiftSync:
         Update planb-swiftsync.cur by removing all from deleted_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
-        with open(self._path_cur, 'r') as cur_fp:
-            with open(path_tmp, 'w') as tmp_fp:
-                os.chmod(path_tmp, 0o600)
-                llc = _ListLineComm(cur_fp, deleted_fp)
-                llc.act(
-                    # Drop it if in both (we deleted it now):
-                    both=(lambda e: None),
-                    # Keep it if we didn't touch it:
-                    leftonly=(lambda d: tmp_fp.write(d)),
-                    # This should not happen:
-                    rightonly=None)
+        with open(self._path_cur, 'r') as cur_fp, \
+                open(path_tmp, 'w') as tmp_fp:
+            os.chmod(path_tmp, 0o600)
+            llc = _ListLineComm(cur_fp, deleted_fp)
+            llc.act(
+                # Drop it if in both (we deleted it now):
+                both=(lambda e: None),
+                # Should not happen:
+                difftime=None,
+                # Keep it if we didn't touch it:
+                leftonly=(lambda d: tmp_fp.write(d)),
+                # This should not happen:
+                rightonly=None)
         os.rename(path_tmp, self._path_cur)
 
 
@@ -985,18 +1010,21 @@ class _ListLineComm:
         llc = _ListLineComm(cur_fp, new_fp)
         llc.act(
             # We already have it if in both:
-            both=(lambda e: None),
+            both=(lambda line: None),
+            # Both, but the mtime is different:
+            difftime=(lambda leftline, rightline: utime_fp.write(rightline)),
             # Remove when only in cur_fp:
-            leftonly=(lambda d: del_fp.write(d)),
+            leftonly=(lambda line: del_fp.write(line)),
             # Add when only in new_fp:
-            rightonly=(lambda a: add_fp.write(a)))
+            rightonly=(lambda line: add_fp.write(line)))
     """
     def __init__(self, left, right):
         self._left_src = left
         self._right_src = right
 
-    def act(self, both, leftonly, rightonly):
+    def act(self, both, difftime, leftonly, rightonly):
         self._act_both = both
+        self._act_difftime = difftime
         self._act_leftonly = leftonly
         self._act_rightonly = rightonly
 
@@ -1013,8 +1041,9 @@ class _ListLineComm:
 
     def _process_main(self):
         # Make local
-        act_both, act_leftonly, act_rightonly = (
-            self._act_both, self._act_leftonly, self._act_rightonly)
+        act_both, act_difftime, act_leftonly, act_rightonly = (
+            self._act_both, self._act_difftime,
+            self._act_leftonly, self._act_rightonly)
 
         left_iter, left = self._setup(self._left_src)
         right_iter, right = self._setup(self._right_src)
@@ -1034,14 +1063,20 @@ class _ListLineComm:
                     right = next(right_iter)
                 except StopIteration:
                     right = right_iter = None
-            else:
-                # They must be equal, remove/add if line is different and seek
-                # both.
+            else:  # filename and container are equal
                 if left.line == right.line:
+                    # 100% equal?
                     act_both(right.line)
+                elif left.size == right.size:
+                    # Size is equal. Then mtime must be unequal.
+                    assert left.modified != right.modified, (left, right)
+                    act_difftime(left.line, right.line)
                 else:
+                    # Size is different, mtime is irrelevant.
                     act_leftonly(left.line)
                     act_rightonly(right.line)
+
+                # Seek both to get to the next filename.
                 try:
                     left = next(left_iter)
                 except StopIteration:
@@ -1132,9 +1167,10 @@ c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
         act_both, act_left, act_right = [], [], []
         llc = _ListLineComm(a, b)
         llc.act(
-            both=(lambda e: act_both.append(e)),
-            leftonly=(lambda d: act_left.append(d)),
-            rightonly=(lambda a: act_right.append(a)))
+            both=(lambda line: act_both.append(line)),
+            difftime=None,
+            leftonly=(lambda line: act_left.append(line)),
+            rightonly=(lambda line: act_right.append(line)))
         self.assertEqual(act_both, [
             'a|2021-02-03T12:34:56.654321|1234',
             'c|2021-02-03T12:34:56.654321|1234'])
@@ -1154,18 +1190,52 @@ c|2021-02-03T12:34:56.654321|1234'''.split('\n')
         act_both, act_left, act_right = [], [], []
         llc = _ListLineComm(a, [])
         llc.act(
-            both=(lambda e: act_both.append(e)),
-            leftonly=(lambda d: act_left.append(d)),
-            rightonly=(lambda a: act_right.append(a)))
+            both=(lambda line: act_both.append(line)),
+            difftime=None,
+            leftonly=(lambda line: act_left.append(line)),
+            rightonly=(lambda line: act_right.append(line)))
         self.assertEqual((act_both, act_left, act_right), ([], a, []))
 
         act_both, act_left, act_right = [], [], []
         llc = _ListLineComm([], a)
         llc.act(
-            both=(lambda e: act_both.append(e)),
-            leftonly=(lambda d: act_left.append(d)),
-            rightonly=(lambda a: act_right.append(a)))
+            both=(lambda line: act_both.append(line)),
+            difftime=None,
+            leftonly=(lambda line: act_left.append(line)),
+            rightonly=(lambda line: act_right.append(line)))
         self.assertEqual((act_both, act_left, act_right), ([], [], a))
+
+    def test_difftime(self):
+        a = '''\
+a|2021-02-03T12:34:56.654321|1234
+b|2021-02-03T12:34:56.654321|1234
+c|2021-02-03T12:34:56.654321|1234'''.split('\n')
+        b = '''\
+a|2021-02-03T12:34:56.654322|1234
+b2|2021-02-03T12:34:56.654321|1234
+b3|2021-02-03T12:34:56.654321|1234
+c|2021-02-03T12:34:56.654322|1234
+c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
+        act_both, act_difftime, act_left, act_right = [], [], [], []
+        llc = _ListLineComm(a, b)
+        llc.act(
+            both=(lambda line: act_both.append(line)),
+            difftime=(lambda leftline, rightline: (
+                act_difftime.append((leftline, rightline)))),
+            leftonly=(lambda line: act_left.append(line)),
+            rightonly=(lambda line: act_right.append(line)))
+        self.assertEqual(act_both, [])
+        self.assertEqual(act_difftime, [
+            ('a|2021-02-03T12:34:56.654321|1234',
+             'a|2021-02-03T12:34:56.654322|1234'),
+            ('c|2021-02-03T12:34:56.654321|1234',
+             'c|2021-02-03T12:34:56.654322|1234')])
+        self.assertEqual(act_left, [
+            'b|2021-02-03T12:34:56.654321|1234'])
+        self.assertEqual(act_right, [
+            'b2|2021-02-03T12:34:56.654321|1234',
+            'b3|2021-02-03T12:34:56.654321|1234',
+            'c2|2021-02-03T12:34:56.654321|1234'])
 
 
 class Cli:

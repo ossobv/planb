@@ -12,6 +12,7 @@ from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
+from hashlib import md5
 from tempfile import NamedTemporaryFile
 from time import time
 from unittest import TestCase
@@ -312,6 +313,30 @@ class SwiftLine:
 
 
 class ListLine:
+    @classmethod
+    def from_swift_head(cls, container, path, head_dict):
+        """
+        {'server': 'nginx', 'date': 'Fri, 02 Jul 2021 13:04:35 GMT',
+         'content-type': 'image/jpg', 'content-length': '241190',
+         'etag': '7bc4ca634783b4c83cf506188cd7176b',
+         'x-object-meta-mtime': '1581604242',
+         'last-modified': 'Tue, 08 Jun 2021 07:03:34 GMT',
+         'x-timestamp': '1623135813.04310', 'accept-ranges': 'bytes',
+         'x-trans-id': 'txcxxx-xxx', 'x-openstack-request-id': 'txcxxx-xxx'}
+        """
+        size = head_dict.get('content-length')
+        assert size.isdigit(), head_dict
+        assert all(i in '0123456789.' for i in head_dict['x-timestamp']), (
+            head_dict)
+        tm = datetime.utcfromtimestamp(float(head_dict['x-timestamp']))
+        tms = tm.strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+        if container:
+            return cls('{}|{}|{}|{}\n'.format(
+                container.replace('|', '||'), path.replace('|', '||'),
+                tms, size))
+        return cls('{}|{}|{}\n'.format(path.replace('|', '||'), tms, size))
+
     def __init__(self, line):
         if '||' in line:
             raise NotImplementedError('FIXME, escapes not implemented')
@@ -371,6 +396,7 @@ class SwiftSync:
         # ^-- the unreached goal
         self._path_del = os.path.join(metadata_path, 'planb-swiftsync.del')
         self._path_add = os.path.join(metadata_path, 'planb-swiftsync.add')
+        self._path_utime = os.path.join(metadata_path, 'planb-swiftsync.utime')
 
     def get_containers(self):
         if not hasattr(self, '_get_containers'):
@@ -443,6 +469,8 @@ class SwiftSync:
             failures = 0
             failures += self.delete_from_list()
             failures += self.add_from_list()
+            failures += self.update_from_list()
+
             # If we bailed out with failures, but without an exception, we'll
             # still clear out the list. Perhaps the list was bad and we simply
             # need to fetch a clean new one (on the next run, that is).
@@ -457,7 +485,7 @@ class SwiftSync:
 
     def make_lists(self):
         """
-        Build planb-swiftsync.add, planb-swiftsync.del.
+        Build planb-swiftsync.add, planb-swiftsync.del, planb-swiftsync.utime.
         """
         log.info('Building lists')
 
@@ -501,7 +529,19 @@ class SwiftSync:
             log.info('Adding new files')
             adder = SwiftSyncAdder(self, self._path_add)
             adder.work()
-            return adder.failures  # possibly (recoverable) failures
+            return adder.failures  # (possibly recoverable) failure count
+
+        return 0  # no (recoverable) failures
+
+    def update_from_list(self):
+        """
+        Add from planb-swiftsync.del.
+        """
+        if os.path.getsize(self._path_utime):
+            log.info('Updating timestamp for updated files')
+            updater = SwiftSyncUpdater(self, self._path_utime)
+            updater.work()
+            return updater.failures  # (possibly recoverable) failure count
 
         return 0  # no (recoverable) failures
 
@@ -510,10 +550,11 @@ class SwiftSync:
         Remove planb-swiftsync.new so we'll fetch a fresh one on the next run.
         """
         os.unlink(self._path_new)
-        # Also remove add/del files; we don't need them anymore, and they take
-        # up space.
+        # Also remove add/del/utime files; we don't need them anymore, and they
+        # take up space.
         os.unlink(self._path_add)
         os.unlink(self._path_del)
+        os.unlink(self._path_utime)
         log.info('Sync done')
 
     def _make_new_list(self):
@@ -562,8 +603,7 @@ class SwiftSync:
             # only needed if this container has segments,
             # and if the apparent file size is 0.
             try:
-                obj_stat = swiftconn.head_object(
-                    container, line['name'])
+                obj_stat = swiftconn.head_object(container, line['name'])
                 # If this is still 0, then it's an empty file
                 # anyway.
                 record.size = int(obj_stat['content-length'])
@@ -613,7 +653,7 @@ class SwiftSync:
                     # We already have it if in both:
                     both=(lambda line: None),
                     # We have it in both, but only the timestamp differs:
-                    timediff=(lambda leftline, rightline: (
+                    difftime=(lambda leftline, rightline: (
                         utime_fp.write(rightline))),
                     # Remove when only in cur_fp:
                     leftonly=(lambda line: del_fp.write(line)),
@@ -632,14 +672,13 @@ class SwiftSync:
             os.chmod(path_tmp, 0o600)
             llc = _ListLineComm(cur_fp, added_fp)
             llc.act(
-                # Keep it if in both:
-                both=(lambda line: tmp_fp.write(line)),
-                # Should not happen:
-                difftime=None,
                 # Keep it if we already had it:
                 leftonly=(lambda line: tmp_fp.write(line)),
                 # Keep it if we added it now:
-                rightonly=(lambda line: tmp_fp.write(line)))
+                rightonly=(lambda line: tmp_fp.write(line)),
+                # This should not happen:
+                both=None,      # existed _and_ added?
+                difftime=None)  # existed _and_ changed?
         os.rename(path_tmp, self._path_cur)
 
     def update_cur_list_from_deleted(self, deleted_fp):
@@ -653,12 +692,31 @@ class SwiftSync:
             llc = _ListLineComm(cur_fp, deleted_fp)
             llc.act(
                 # Drop it if in both (we deleted it now):
-                both=(lambda e: None),
-                # Should not happen:
-                difftime=None,
+                both=(lambda line: None),
                 # Keep it if we didn't touch it:
-                leftonly=(lambda d: tmp_fp.write(d)),
+                leftonly=(lambda line: tmp_fp.write(line)),
                 # This should not happen:
+                difftime=None,   # existed _and_ added?
+                rightonly=None)  # deleted something which didn't exist?
+        os.rename(path_tmp, self._path_cur)
+
+    def update_cur_list_from_updated(self, updated_fp):
+        """
+        Update planb-swiftsync.cur by updating all from updated_fp.
+        """
+        path_tmp = '{}.tmp'.format(self._path_cur)
+        with open(self._path_cur, 'r') as cur_fp, \
+                open(path_tmp, 'w') as tmp_fp:
+            os.chmod(path_tmp, 0o600)
+            llc = _ListLineComm(cur_fp, updated_fp)
+            llc.act(
+                # Replace it if we updated it:
+                difftime=(lambda leftline, rightline: (
+                    tmp_fp.write(rightline))),
+                # Keep it if we didn't touch it:
+                leftonly=(lambda line: tmp_fp.write(line)),
+                # This should not happen:
+                both=None,
                 rightonly=None)
         os.rename(path_tmp, self._path_cur)
 
@@ -702,6 +760,9 @@ class SwiftSyncMultiAdder(threading.Thread):
     """
     Multithreaded SwiftSyncAdder.
     """
+    class ProcessRecordFailure(Exception):
+        pass
+
     def __init__(self, swiftsync, source, offset=0, threads=0):
         super().__init__()
         self._swiftsync = swiftsync
@@ -722,19 +783,39 @@ class SwiftSyncMultiAdder(threading.Thread):
         log.info('Started thread')
         self._success_fp = NamedTemporaryFile(delete=True, mode='w+')
         try:
-            self._add_new()
+            self._process_source_list()
         finally:
             self._success_fp.flush()
             log.info('Stopping thread')
 
-    def _add_new(self):
+    def process_record(self, record, container, dst_path):
         """
-        Add new files (from planb-swiftsync.add) and call _set_success.
+        Process a single record: download it.
+
+        If there was an error, it cleans up after itself and raises a
+        ProcessRecordFailure.
+        """
+        self._add_new_record_dir(dst_path)
+        if not self._add_new_record_download(record, container, dst_path):
+            raise self.ProcessRecordFailure()
+        if not self._add_new_record_valid(record, dst_path):
+            raise self.ProcessRecordFailure()
+
+    def process_record_success(self, record):
+        """
+        Store success in the success list.
+        """
+        self._success_fp.write(record.line)
+
+    def _process_source_list(self):
+        """
+        Process the source list, calling process_record() for each file.
         """
         # Create this swift connection first in this thread on purpose. That
         # should minimise swiftclient library MT issues.
         self._swiftconn = self._swiftsync.config.get_swift()
 
+        ProcessRecordFailure = self.ProcessRecordFailure
         translators = self._swiftsync.get_translators()
         only_container = self._swiftsync.container
         offset = self._offset
@@ -756,36 +837,27 @@ class SwiftSyncMultiAdder(threading.Thread):
 
                 # record.container is None for single_container syncs.
                 container = record.container or only_container
+                dst_path = translators[container](record.path)
+                if dst_path.endswith('/'):
+                    log.warning(
+                        ('Skipping record %r (from %r) because of trailing '
+                         'slash'), dst_path, record.container_path)
+                    failures += 1
+                    continue
 
                 # Download the file into the appropriate directory.
-                failures += self._add_new_record(
-                    record, container, translators[container])
+                try:
+                    self.process_record(record, container, dst_path)
+                except ProcessRecordFailure:
+                    failures += 1
+                else:
+                    self.process_record_success(record)
 
         # If there were one or more failures, store them so they can be used by
         # the caller.
         if failures:
             log.warning('At list EOF, got %d failures', failures)
         self.failures = failures
-
-    def _add_new_record(self, record, container, translator):
-        """
-        Download record, call _set_success() or return 1 if failed.
-        """
-        path = translator(record.path)
-        if path.endswith('/'):
-            log.warning(
-                'Skipping record %r (from %r) because of trailing slash',
-                path, record.container_path)
-            return 1
-
-        self._add_new_record_dir(path)
-        if not self._add_new_record_download(record, container, path):
-            return 1
-        if not self._add_new_record_valid(record, path):
-            return 1
-
-        self._set_success(record)
-        return 0
 
     def _add_new_record_dir(self, path):
         try:
@@ -839,11 +911,10 @@ class SwiftSyncMultiAdder(threading.Thread):
             return False
         return True
 
-    def _set_success(self, record):
-        self._success_fp.write(record.line)
-
 
 class SwiftSyncAdder:
+    worker_class = SwiftSyncMultiAdder
+
     def __init__(self, swiftsync, source):
         self._swiftsync = swiftsync
         self._source = source
@@ -852,10 +923,12 @@ class SwiftSyncAdder:
     def work(self):
         global _MT_ABORT, _MT_HAS_THREADS
 
-        log.info('Starting %d downloader threads', self._thread_count)
+        log.info(
+            '%s: Starting %d %s downloader threads', self.__class__.__name__,
+            self._thread_count, self.worker_class.__name__)
 
         threads = [
-            SwiftSyncMultiAdder(
+            self.worker_class(
                 swiftsync=self._swiftsync, source=self._source,
                 offset=idx, threads=self._thread_count)
             for idx in range(self._thread_count)]
@@ -864,7 +937,7 @@ class SwiftSyncAdder:
             try:
                 threads[0].run()
             finally:
-                self._merge_success(threads[0].take_success_file())
+                self.merge_success(threads[0].take_success_file())
         else:
             _MT_HAS_THREADS = True
             for thread in threads:
@@ -885,6 +958,42 @@ class SwiftSyncAdder:
         # even though we did our best. If we're here, all threads ended
         # successfully, so they all have a valid failures count.
         self.failures = sum(th.failures for th in threads)
+
+    def merge_success(self, success_fp):
+        """
+        Merge "add" success_fp into (the big) .cur list.
+
+        NOTE: merge_success will close success_fp.
+        """
+        if success_fp is None:
+            return
+        try:
+            size = success_fp.tell()
+            success_fp.seek(0)
+            if size:
+                log.info(
+                    '%s: Merging %d bytes of added files into current',
+                    self.__class__.__name__, size)
+                success_fp.seek(0)
+                self._swiftsync.update_cur_list_from_added(success_fp)
+        finally:
+            success_fp.close()
+
+    def _merge_multi_success(self, success_fps):
+        """
+        Merge all success_fps into cur.
+
+        This is useful because we oftentimes download only a handful of files.
+        First merge those, before we merge them into the big .cur list.
+
+        NOTE: _merge_multi_success will close all success_fps.
+        """
+        try:
+            success_fp = self._create_combined_success(success_fps)
+            self.merge_success(success_fp)
+        finally:
+            for fp in success_fps:
+                fp.close()
 
     def _create_combined_success(self, success_fps):
         """
@@ -909,16 +1018,17 @@ class SwiftSyncAdder:
                     prev_size = prev_fp.tell()
                     prev_fp.seek(0)
                     log.info(
-                        'Merging success lists (%d into %d)',
-                        added_size, prev_size)
+                        '%s: Merging success lists (%d into %d)',
+                        self.__class__.__name__, added_size, prev_size)
                     llc = _ListLineComm(prev_fp, added_fp)
                     llc.act(
-                        # Keep it if in both:
-                        both=(lambda e: combined_fp.write(e)),
+                        # Die if we encounter a file twice:
+                        both=None,
+                        difftime=None,
                         # Keep it if we already had it:
-                        leftonly=(lambda d: combined_fp.write(d)),
+                        leftonly=(lambda line: combined_fp.write(line)),
                         # Keep it if we added it now:
-                        rightonly=(lambda a: combined_fp.write(a)))
+                        rightonly=(lambda line: combined_fp.write(line)))
                     combined_fp.flush()
 
                     # We don't need left anymore. Make combined the new left.
@@ -940,25 +1050,77 @@ class SwiftSyncAdder:
 
         return combined_fp
 
-    def _merge_multi_success(self, success_fps):
+
+class SwiftSyncMultiUpdater(SwiftSyncMultiAdder):
+    """
+    Multithreaded SwiftSyncUpdater.
+    """
+    def process_record(self, record, container, dst_path):
         """
-        Merge all success_fps into cur.
+        Process a single record: download it.
 
-        This is useful because we oftentimes download only a handful of files.
-        First merge those, before we merge them into the big .cur list.
-
-        NOTE: _merge_multi_success will close all success_fps.
+        Raises ProcessRecordFailure on error.
         """
         try:
-            success_fp = self._create_combined_success(success_fps)
-            self._merge_success(success_fp)
-        finally:
-            for fp in success_fps:
-                fp.close()
+            obj_stat = self._swiftconn.head_object(container, record.path)
+        except ClientException as e:
+            log.warning(
+                'File %r %r disappeared from under us when doing a HEAD (%s)',
+                container, record.path, e)
+            raise self.ProcessRecordFailure()
 
-    def _merge_success(self, success_fp):
+        etag = str(obj_stat.get('etag'))
+        if len(etag) != 32 or any(i not in '0123456789abcdef' for i in etag):
+            log.warning(
+                'File %r %r presented bad etag: %r', container, record.path,
+                obj_stat)
+            raise self.ProcessRecordFailure()
+
+        # Note that guard against odd races, we must also check the record
+        # against this new head. This also asserts that the file size is still
+        # the same.
+        new_record = ListLine.from_swift_head(
+            record.container, record.path, obj_stat)
+        if new_record.line != record.line:
+            log.warning(
+                'File was updated in the mean time? %r != %r',
+                record.line, new_record.line)
+            raise self.ProcessRecordFailure()
+
+        # Nice, we have an etag, and we were lured here with the prospect that
+        # the file was equal to what we already had.
+        md5digest = self._md5sum(dst_path)  # should exist and succeed
+
+        # If the hash is equal, then all is awesome.
+        if md5digest == etag:
+            return
+
+        # If not, then we need to download a new file and overwrite it.
+        return super().process_record(record, container, dst_path)
+
+    def _md5sum(self, path):
+        m = md5()
+        with open(path, 'rb') as fp:
+            while True:
+                buf = fp.read(8192)
+                if not buf:
+                    break
+                m.update(buf)
+
+        hexdigest = m.hexdigest()
+        assert (
+            len(hexdigest) == 32
+            and all(i in '0123456789abcdef' for i in hexdigest)), hexdigest
+
+        return hexdigest
+
+
+class SwiftSyncUpdater(SwiftSyncAdder):
+    worker_class = SwiftSyncMultiUpdater
+
+    def merge_success(self, success_fp):
         """
-        Merge success_fp into (the big) .cur list.
+        Merge "update" success_fp into (the big) .cur list.
 
         NOTE: _merge_success will close success_fp.
         """
@@ -968,9 +1130,11 @@ class SwiftSyncAdder:
             size = success_fp.tell()
             success_fp.seek(0)
             if size:
-                log.info('Merging %d bytes of added files into current', size)
+                log.info(
+                    '%s: Merging %d bytes of updated files into current',
+                    self.__class__.__name__, size)
                 success_fp.seek(0)
-                self._swiftsync.update_cur_list_from_added(success_fp)
+                self._swiftsync.update_cur_list_from_updated(success_fp)
         finally:
             success_fp.close()
 

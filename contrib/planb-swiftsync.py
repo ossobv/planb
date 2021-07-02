@@ -698,138 +698,6 @@ class SwiftSyncDeleter:
                 success_fp.write(record.line)
 
 
-class SwiftSyncAdder:
-    def __init__(self, swiftsync, source):
-        self._swiftsync = swiftsync
-        self._source = source
-        self._thread_count = 7
-
-    def work(self):
-        global _MT_ABORT, _MT_HAS_THREADS
-
-        log.info('Starting %d downloader threads', self._thread_count)
-
-        threads = [
-            SwiftSyncMultiAdder(
-                swiftsync=self._swiftsync, source=self._source,
-                offset=idx, threads=self._thread_count)
-            for idx in range(self._thread_count)]
-
-        if self._thread_count == 1:
-            try:
-                threads[0].run()
-            finally:
-                self._merge_success(threads[0].take_success_file())
-        else:
-            _MT_HAS_THREADS = True
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-            _MT_HAS_THREADS = False
-
-            success_fps = [th.take_success_file() for th in threads]
-            success_fps = [fp for fp in success_fps if fp is not None]
-            self._merge_multi_success(success_fps)
-            del success_fps
-
-        if _MT_ABORT:
-            raise SystemExit(_MT_ABORT)
-
-        # Collect and sum failure count to signify when not everything is fine,
-        # even though we did our best. If we're here, all threads ended
-        # successfully, so they all have a valid failures count.
-        self.failures = sum(th.failures for th in threads)
-
-    def _create_combined_success(self, success_fps):
-        """
-        Merge all success_fps into a single success_fp.
-
-        Returns a new success_fp.
-        """
-        combined_fp = prev_fp = None
-        combined_fp = NamedTemporaryFile(delete=True, mode='w+')
-        try:
-            prev_fp = NamedTemporaryFile(delete=True, mode='w+')  # start blank
-
-            # Add all success_fps into combined_fp. Update prev_fp to
-            # hold combined_fp.
-            for added_fp in success_fps:
-                if added_fp is None:
-                    continue
-
-                added_size = added_fp.tell()
-                added_fp.seek(0)
-                if added_size:
-                    prev_size = prev_fp.tell()
-                    prev_fp.seek(0)
-                    log.info(
-                        'Merging success lists (%d into %d)',
-                        added_size, prev_size)
-                    llc = _ListLineComm(prev_fp, added_fp)
-                    llc.act(
-                        # Keep it if in both:
-                        both=(lambda e: combined_fp.write(e)),
-                        # Keep it if we already had it:
-                        leftonly=(lambda d: combined_fp.write(d)),
-                        # Keep it if we added it now:
-                        rightonly=(lambda a: combined_fp.write(a)))
-                    combined_fp.flush()
-
-                    # We don't need left anymore. Make combined the new left.
-                    # Create new combined where we merge the next success_fp.
-                    prev_fp.close()
-                    prev_fp, combined_fp = combined_fp, None
-                    combined_fp = NamedTemporaryFile(delete=True, mode='w+')
-
-            # We want combined_fp at this point, but it's currently in
-            # prev_fp. Note that the new combined_fp is at EOF (unseeked).
-            combined_fp.close()
-            combined_fp, prev_fp = prev_fp, None
-        except Exception:
-            if prev_fp:
-                prev_fp.close()
-            if combined_fp:
-                combined_fp.close()
-            raise
-
-        return combined_fp
-
-    def _merge_multi_success(self, success_fps):
-        """
-        Merge all success_fps into cur.
-
-        This is useful because we oftentimes download only a handful of files.
-        First merge those, before we merge them into the big .cur list.
-
-        NOTE: _merge_multi_success will close all success_fps.
-        """
-        try:
-            success_fp = self._create_combined_success(success_fps)
-            self._merge_success(success_fp)
-        finally:
-            for fp in success_fps:
-                fp.close()
-
-    def _merge_success(self, success_fp):
-        """
-        Merge success_fp into (the big) .cur list.
-
-        NOTE: _merge_success will close success_fp.
-        """
-        if success_fp is None:
-            return
-        try:
-            size = success_fp.tell()
-            success_fp.seek(0)
-            if size:
-                log.info('Merging %d bytes of added files into current', size)
-                success_fp.seek(0)
-                self._swiftsync.update_cur_list_from_added(success_fp)
-        finally:
-            success_fp.close()
-
-
 class SwiftSyncMultiAdder(threading.Thread):
     """
     Multithreaded SwiftSyncAdder.
@@ -973,6 +841,138 @@ class SwiftSyncMultiAdder(threading.Thread):
 
     def _set_success(self, record):
         self._success_fp.write(record.line)
+
+
+class SwiftSyncAdder:
+    def __init__(self, swiftsync, source):
+        self._swiftsync = swiftsync
+        self._source = source
+        self._thread_count = 7
+
+    def work(self):
+        global _MT_ABORT, _MT_HAS_THREADS
+
+        log.info('Starting %d downloader threads', self._thread_count)
+
+        threads = [
+            SwiftSyncMultiAdder(
+                swiftsync=self._swiftsync, source=self._source,
+                offset=idx, threads=self._thread_count)
+            for idx in range(self._thread_count)]
+
+        if self._thread_count == 1:
+            try:
+                threads[0].run()
+            finally:
+                self._merge_success(threads[0].take_success_file())
+        else:
+            _MT_HAS_THREADS = True
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            _MT_HAS_THREADS = False
+
+            success_fps = [th.take_success_file() for th in threads]
+            success_fps = [fp for fp in success_fps if fp is not None]
+            self._merge_multi_success(success_fps)
+            del success_fps
+
+        if _MT_ABORT:
+            raise SystemExit(_MT_ABORT)
+
+        # Collect and sum failure count to signify when not everything is fine,
+        # even though we did our best. If we're here, all threads ended
+        # successfully, so they all have a valid failures count.
+        self.failures = sum(th.failures for th in threads)
+
+    def _create_combined_success(self, success_fps):
+        """
+        Merge all success_fps into a single success_fp.
+
+        Returns a new success_fp.
+        """
+        combined_fp = prev_fp = None
+        combined_fp = NamedTemporaryFile(delete=True, mode='w+')
+        try:
+            prev_fp = NamedTemporaryFile(delete=True, mode='w+')  # start blank
+
+            # Add all success_fps into combined_fp. Update prev_fp to
+            # hold combined_fp.
+            for added_fp in success_fps:
+                if added_fp is None:
+                    continue
+
+                added_size = added_fp.tell()
+                added_fp.seek(0)
+                if added_size:
+                    prev_size = prev_fp.tell()
+                    prev_fp.seek(0)
+                    log.info(
+                        'Merging success lists (%d into %d)',
+                        added_size, prev_size)
+                    llc = _ListLineComm(prev_fp, added_fp)
+                    llc.act(
+                        # Keep it if in both:
+                        both=(lambda e: combined_fp.write(e)),
+                        # Keep it if we already had it:
+                        leftonly=(lambda d: combined_fp.write(d)),
+                        # Keep it if we added it now:
+                        rightonly=(lambda a: combined_fp.write(a)))
+                    combined_fp.flush()
+
+                    # We don't need left anymore. Make combined the new left.
+                    # Create new combined where we merge the next success_fp.
+                    prev_fp.close()
+                    prev_fp, combined_fp = combined_fp, None
+                    combined_fp = NamedTemporaryFile(delete=True, mode='w+')
+
+            # We want combined_fp at this point, but it's currently in
+            # prev_fp. Note that the new combined_fp is at EOF (unseeked).
+            combined_fp.close()
+            combined_fp, prev_fp = prev_fp, None
+        except Exception:
+            if prev_fp:
+                prev_fp.close()
+            if combined_fp:
+                combined_fp.close()
+            raise
+
+        return combined_fp
+
+    def _merge_multi_success(self, success_fps):
+        """
+        Merge all success_fps into cur.
+
+        This is useful because we oftentimes download only a handful of files.
+        First merge those, before we merge them into the big .cur list.
+
+        NOTE: _merge_multi_success will close all success_fps.
+        """
+        try:
+            success_fp = self._create_combined_success(success_fps)
+            self._merge_success(success_fp)
+        finally:
+            for fp in success_fps:
+                fp.close()
+
+    def _merge_success(self, success_fp):
+        """
+        Merge success_fp into (the big) .cur list.
+
+        NOTE: _merge_success will close success_fp.
+        """
+        if success_fp is None:
+            return
+        try:
+            size = success_fp.tell()
+            success_fp.seek(0)
+            if size:
+                log.info('Merging %d bytes of added files into current', size)
+                success_fp.seek(0)
+                self._swiftsync.update_cur_list_from_added(success_fp)
+        finally:
+            success_fp.close()
 
 
 def _comm_lineiter(fp):

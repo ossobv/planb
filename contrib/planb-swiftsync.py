@@ -309,7 +309,9 @@ class SwiftLine:
         assert obj['last_modified'][10] == 'T', obj
         self.modified = obj['last_modified']
         self.path = obj['name']
-        assert not self.path.startswith(('\\', '/', '.')), self.path
+        assert not self.path.startswith(('\\', '/', './', '../')), self.path
+        assert '/../' not in self.path, self.path  # disallow harmful path
+        assert '/./' not in self.path, self.path   # disallow awkward path
 
 
 class ListLine:

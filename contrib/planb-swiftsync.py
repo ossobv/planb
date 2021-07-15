@@ -313,6 +313,10 @@ class SwiftLine:
 
 
 class ListLine:
+    # >>> escaped_re.findall('containerx|file||name|0|1234\n')
+    # ['containerx', '|', 'file||name', '|', '0', '|', '1234\n']
+    escaped_re = re.compile(r'(?P<part>(?:[^|]|(?:[|][|]))+|[|])')
+
     @classmethod
     def from_swift_head(cls, container, path, head_dict):
         """
@@ -332,21 +336,48 @@ class ListLine:
         tms = tm.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
         if container:
+            assert '|' not in container, (
+                'unescaping can only cope with pipe in path: {!r} + {!r}'
+                .format(container, path))
             return cls('{}|{}|{}|{}\n'.format(
-                container.replace('|', '||'), path.replace('|', '||'),
+                container, path.replace('|', '||'),
                 tms, size))
+
         return cls('{}|{}|{}\n'.format(path.replace('|', '||'), tms, size))
 
     def __init__(self, line):
-        if '||' in line:
-            raise NotImplementedError('FIXME, escapes not implemented')
-        self.line = line
-        # Path may include 'container|'.
-        self.path, self._modified, self._size = line.rsplit('|', 2)
-        if '|' in self.path:
-            self.container, self.path = self.path.split('|')
+        # Line looks like: [container|]path|modified|size<LF>
+        # But path may contain double pipes.
+
+        if '||' not in line:
+            # Simple matching.
+            self.path, self._modified, self._size = line.rsplit('|', 2)
+            if '|' in self.path:
+                self.container, self.path = self.path.split('|', 1)
+            else:
+                self.container = None
+            assert '|' not in self.path, 'bad line: {!r}'.format(line)
         else:
-            self.container = None
+            # Complicated regex matching. Path may include double pipes.
+            matches = self.escaped_re.findall(line)
+            assert ''.join(matches) == line, (line, matches)
+            if len(matches) == 7:
+                path = ''.join(matches[0:3])  # move pipes to path
+                self.container, path = path.split('|', 1)
+                self._modified = matches[4]
+                self._size = matches[6]
+            elif len(matches) == 5:
+                path = matches[0]
+                self.container = None
+                self._modified = matches[2]
+                self._size = matches[4]
+            else:
+                assert False, 'bad line: {!r}'.format(line)
+            self.path = path.replace('||', '|')
+
+        assert self.container is None or self.container, (
+            'bad container in line: {!r}'.format(line))
+        self.line = line
         self.container_path = (self.container, self.path)
 
     @property
@@ -570,10 +601,10 @@ class SwiftSync:
             for container in self.get_containers():
                 assert '|' not in container, container
                 assert '{' not in container, container
-                fmt = '{}|{}|{}\n'
-                if not self.container:  # multiple containers
-                    fmt = '{}|{}'.format(container, fmt)
-
+                if self.container:  # only one container
+                    fmt = '{}|{}|{}\n'
+                else:  # multiple containers
+                    fmt = '{}|{{}}|{{}}|{{}}\n'.format(container)
                 log.info('Fetching new list for %r', container)
                 # full_listing:
                 #     if True, return a full listing, else returns a max of
@@ -1269,11 +1300,45 @@ class _ListLineComm:
 
 
 class _ListLineTest(TestCase):
+    def _eq(self, line, cont, path, mod, size):
+        ll = ListLine(line)
+        self.assertEqual(ll.container, cont)
+        self.assertEqual(ll.container_path, (cont, path))
+        self.assertEqual(ll.path, path)
+        self.assertEqual(ll.modified, mod)
+        self.assertEqual(ll.size, size)
+
     def test_pipe_in_path(self):
+        self._eq(
+            'containerx|path/to||esc|2021-02-03T12:34:56.654321|1234',
+            'containerx', 'path/to|esc', 1612355696654321000, 1234)
+        self._eq(
+            'path/to||esc|2021-02-03T12:34:56.654321|1234',
+            None, 'path/to|esc', 1612355696654321000, 1234)
+        self._eq(
+            '||path/with/starting/pipe|2021-02-03T12:34:56.654321|1234',
+            None, '|path/with/starting/pipe', 1612355696654321000, 1234)
+        self._eq(
+            'path/with/ending/pipe|||2021-02-03T12:34:56.654321|1234',
+            None, 'path/with/ending/pipe|', 1612355696654321000, 1234)
+        self._eq(
+            '||path/with/both|||2021-02-03T12:34:56.654321|1234',
+            None, '|path/with/both|', 1612355696654321000, 1234)
+        self._eq(
+            'container|||||pipefest|||2021-02-03T12:34:56.654321|1234',
+            'container', '||pipefest|', 1612355696654321000, 1234)
         self.assertRaises(
-            NotImplementedError,
-            ListLine,
-            'containerx|path/to||esc|2021-02-03T12:34:56.654321|1234')
+            Exception,
+            ListLine, 'too|few')
+        self.assertRaises(
+            AssertionError,
+            ListLine, 'lots|of|unescaped|2021-02-03T12:34:56.654321|1234')
+        self.assertRaises(
+            AssertionError,
+            ListLine, 'lots|of|one||escaped|2021-02-03T12:34:56.654321|1234')
+        self.assertRaises(
+            AssertionError,
+            ListLine, '|emptycontainer|2021-02-03T12:34:56.654321|1234')
 
     def test_with_container(self):
         ll = ListLine(

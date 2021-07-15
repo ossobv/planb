@@ -56,12 +56,13 @@ class Config(AbstractTransport):
     #   Invalid or incomplete multibyte or wide character (84)
     # Solution, add: --iconv=utf8,latin1
     flags = models.CharField(
-        max_length=511, default='-az --numeric-ids --stats --delete',
+        max_length=511, blank=True, default='',
         help_text=_(
-            'Default "-az --delete", add "--no-perms --chmod=D0700,F600" '
+            'Default "", add "--no-perms --chmod=D0700,F600" '
             'for (windows) hosts without permission bits, add '
             '"--iconv=utf8,latin1" for hosts with files with legacy (Latin-1) '
-            'encoding.'))
+            'encoding, add "--bwlimit=" for hosts with no bandwidth limit, '
+            'add "--compress-choice=lz4" for newer compression.'))
 
     class Meta:
         db_table = TABLE_PREFIX  # or '{}_config'.format(TABLE_PREFIX)
@@ -255,6 +256,22 @@ class Config(AbstractTransport):
 
         simple_args = (
             settings.PLANB_RSYNC_BIN,
+            '--delete',
+            '--stats',
+            # -a, --archive; equals -rlptgoD (no -H,-A,-X)
+            '--recursive',  # -r
+            '--links',      # -l
+            # > rsync 3.2.3 is affected by lack of:
+            # > https://github.com/WayneD/rsync/commit/
+            # >   9dd62525f3b98d692e031f22c02be8f775966503
+            # > see: https://bugs.gentoo.org/777483
+            # '--perms' <-- not '-p', because issue in 3.2.3 with lchmod
+            '--times',      # -t
+            # '--group' <-- not '-g'
+            # '--owner' <-- not '-o'
+            # '--numeric-ids' <-- only useful if we use group/owner
+            '--devices',    # -D (won't work without root though)
+            '--specials',   # -D
             # Work around rsync bug in 3.1.0. Possibly not needed when
             # we (also) use --whole-file.
             # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
@@ -267,7 +284,7 @@ class Config(AbstractTransport):
             # could set up dir structures where files inside cannot be
             # accessible anymore. Make sure our user has rwx access.
             '--chmod=Du+rwx',
-            # Limit bandwidth a bit.
+            # Limit bandwidth a bit by default.
             '--bwlimit=10M')
         used_simple_args = tuple(
             arg for arg in simple_args if not in_arg(arg, rsync_flags))

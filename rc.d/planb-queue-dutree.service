@@ -1,6 +1,6 @@
 [Unit]
 Description=PlanB DuTree Queue server
-After=network.target mysql.service redis-server.service
+After=network.target mysql.service postgresql.service redis-server.service
 
 [Service]
 Type=simple

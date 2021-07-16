@@ -175,7 +175,11 @@ class Config(AbstractTransport):
         return ' '.join(args)
 
     def get_transport_ssh_uri(self):
-        return '{o.user}@{o.host}:{o.src_dir}'.format(o=self)
+        src_dir = (
+            self.src_dir
+            if self.src_dir.endswith('/')
+            else '{}/'.format(self.src_dir))
+        return '{o.user}@{o.host}:{src_dir}'.format(o=self, src_dir=src_dir)
 
     def get_transport_rsync_uri(self):
         return '{o.host}::{o.src_dir}'.format(o=self)

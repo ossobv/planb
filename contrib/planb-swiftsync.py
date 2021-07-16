@@ -87,12 +87,15 @@ log = logging.getLogger()
 def _signal_handler(signo, _stack_frame):
     global _MT_ABORT, _MT_HAS_THREADS
     _MT_ABORT = signo
+    log.info('Got signal %d', signo)
     if not _MT_HAS_THREADS:
         # If we have no threads, we can abort immediately.
+        log.info('Killing self because of signal %d', signo)
         sys.exit(128 + signo)  # raises SystemExit()
 _MT_ABORT = 0                   # noqa -- aborting?
 _MT_HAS_THREADS = False         # do we have threads at all?
 
+signal.signal(signal.SIGHUP, _signal_handler)
 signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
 signal.signal(signal.SIGQUIT, _signal_handler)

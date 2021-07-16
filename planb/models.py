@@ -1,7 +1,5 @@
 from datetime import datetime
 import logging
-import signal
-import sys
 
 from django.apps import apps
 from django.conf import settings
@@ -136,7 +134,6 @@ class FilesetLock(object):
     def __init__(self, fileset_id, timeout=86400):
         self._fileset_id = fileset_id
         self._is_acquired = False
-        self._default_handler = signal.SIG_DFL
         self.timeout = timeout
 
     @cached_property
@@ -166,23 +163,12 @@ class FilesetLock(object):
     def acquire(self, blocking=None):
         assert not self._is_acquired
         self._is_acquired = self.lock.acquire(blocking=blocking)
-        if self._is_acquired:
-            self._default_handler = signal.signal(
-                signal.SIGTERM, self._signal_handler)
         return self._is_acquired
 
     def release(self):
         assert self._is_acquired
         self.lock.release()
-        signal.signal(signal.SIGTERM, self._default_handler)
         self._is_acquired = False
-
-    def _signal_handler(self, signal, frame):
-        logger.info(
-            '[fileset:%s] Received signal=%s, cleaning up lock.',
-            self._fileset_id, signal)
-        self.release()
-        sys.exit(signal)
 
 
 class Fileset(models.Model):

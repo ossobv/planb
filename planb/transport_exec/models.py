@@ -2,11 +2,14 @@ import logging
 import os
 import re
 import shlex
+from signal import SIGHUP, SIGINT, SIGTERM, SIGQUIT
 
 from django.conf import settings
 from django.db import connections
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+
+from pysigset import SIG_SETMASK, SIGSET, sigprocmask, suspended_signals
 
 from planb.common.fields import CommandField
 from planb.common.subprocess2 import CalledProcessError, argsjoin, check_output
@@ -88,14 +91,18 @@ class Config(AbstractTransport):
         connections.close_all()
 
         stderr = []
-        try:
-            # FIXME: do we want timeout handling here?
-            output = check_output(
-                cmd, env=env, return_stderr=stderr).decode('utf-8')
-        except CalledProcessError as e:
-            logger.warning(
-                'Failure during exec %r: %s', argsjoin(cmd), str(e))
-            raise
+        with suspended_signals(SIGHUP, SIGINT, SIGQUIT, SIGTERM):
+            try:
+                # FIXME: do we want timeout handling here?
+                output = check_output(
+                    cmd, env=env, return_stderr=stderr, preexec_fn=(
+                        # Disable suspended_signals from parent:
+                        lambda: sigprocmask(SIG_SETMASK, SIGSET(), 0))
+                    ).decode('utf-8')
+            except CalledProcessError as e:
+                logger.warning(
+                    'Failure during exec %r: %s', argsjoin(cmd), str(e))
+                raise
 
         logger.info(
             'Exec success for %s transport:\n\n(stdout)\n\n%s\n(stderr)\n\n%s',

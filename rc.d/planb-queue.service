@@ -7,6 +7,10 @@ Type=simple
 EnvironmentFile=/etc/planb/envvars
 ExecStartPre=/srv/virtualenvs/planb/bin/planb bqueueflush
 ExecStart=/srv/virtualenvs/planb/bin/planb bqcluster --queue=main
+# control-group is default
+KillMode=control-group
+# We shouldn't reach this, but make it long, just in case.
+TimeoutStopSec=900
 User=planb
 Group=nogroup
 

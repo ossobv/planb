@@ -6,6 +6,7 @@ django-multi-email-field
 
 redis
 setproctitle
+pysigset
 python-dateutil
 
 dutree

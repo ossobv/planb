@@ -84,18 +84,19 @@ class CalledProcessError(OrigCalledProcessError):
         return '\n\n'.join(ret)
 
 
-def check_call(cmd, *, env=None, shell=False, timeout=None):
+def check_call(cmd, *, env=None, preexec_fn=None, shell=False, timeout=None):
     """
     Same as check_output, but discards output.
 
     Note that stdout/stderr are still captured so we have more
     informative exceptions.
     """
-    check_output(cmd, env=env, shell=shell, timeout=timeout)
+    check_output(
+        cmd, env=env, preexec_fn=preexec_fn, shell=shell, timeout=timeout)
 
 
-def check_output(cmd, *, env=None, return_stderr=None, shell=False,
-                 timeout=None):
+def check_output(cmd, *, env=None, preexec_fn=None, return_stderr=None,
+                 shell=False, timeout=None):
     """
     Run command with arguments and return its output.
 
@@ -112,7 +113,8 @@ def check_output(cmd, *, env=None, return_stderr=None, shell=False,
     fp, ret, stdout, stderr = None, -1, '', ''
     try:
         fp = Popen(
-            cmd, stdin=None, stdout=PIPE, stderr=PIPE, env=env, shell=shell)
+            cmd, stdin=None, stdout=PIPE, stderr=PIPE, env=env,
+            preexec_fn=preexec_fn, shell=shell)
         stdout, stderr = fp.communicate()
         ret = fp.wait()
         fp = None

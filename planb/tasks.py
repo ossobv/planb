@@ -1,5 +1,6 @@
 import logging
 import re
+import signal
 import time
 
 from dutree import Scanner
@@ -49,6 +50,43 @@ unconditional_run:
 finalize_run:
  - sends the planb.signals.backup_done signal.
 '''
+
+
+if not DQConf.SIGNAL_NAMES:
+    # Bug in django_q.conf that imports signal function instead of signal
+    # module and then tries to get the global SIG* names.
+    DQConf.SIGNAL_NAMES = dict(
+        (getattr(signal, n), n)
+        for n in dir(signal)
+        if n.startswith("SIG") and "_" not in n
+    )
+
+
+class handle_exit_signals:
+    @staticmethod
+    def signal_as_systemexit(signum, frame):
+        """
+        By default, SIGTERM does not cause an exception and will therefore not
+        trickle up through contexthandlers. We want clean exits on SIGTERM, so
+        we'll raise the exception ourselves.
+        """
+        # signal.signal(signum, signal.SIG_IGN)  # ignore further invocations?
+        raise SystemExit(128 | signum)
+
+    all_signals = (
+        signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM)
+
+    def __enter__(self):
+        # Make sure we exit using an exception (and thus the context handler).
+        self._prev_handlers = []
+        for signum in self.all_signals:
+            self._prev_handlers.append(
+                signal.signal(signum, self.signal_as_systemexit))
+
+    def __exit__(self, type, value, traceback):
+        # Reset the original handler.
+        for idx, signum in enumerate(self.all_signals):
+            signal.signal(signum, self._prev_handlers[idx])
 
 
 def systemd_unescape(value):
@@ -107,38 +145,38 @@ def spawn_backup_jobs():
 
 # Async called task:
 def conditional_run(fileset_id):
-    with FilesetRunner(fileset_id) as runner:
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.conditional_run()
 
 
 # Async called task:
 def manual_run(fileset_id):
-    with FilesetRunner(fileset_id) as runner:
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.manual_run()
 
 
 # Async called task:
 def unconditional_run(fileset_id):
-    with FilesetRunner(fileset_id) as runner:
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.unconditional_run()
 
 
 # Async called task:
 def dutree_run(fileset_id, run_id):
-    with FilesetRunner(fileset_id) as runner:
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.dutree_run(run_id)
 
 
 # Async called task:
 def rename_run(fileset_id, old_dataset_name, new_dataset_name):
-    with FilesetRunner(fileset_id) as runner:
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.rename_run(old_dataset_name, new_dataset_name)
 
 
 # Async called task:
 def finalize_run(task):
     fileset_id = task.args[0]
-    with FilesetRunner(fileset_id) as runner:
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.finalize_run(task.success, task.result)
 
 

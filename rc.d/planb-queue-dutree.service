@@ -6,6 +6,10 @@ After=network.target mysql.service redis-server.service
 Type=simple
 EnvironmentFile=/etc/planb/envvars
 ExecStart=/srv/virtualenvs/planb/bin/planb bqcluster --queue=dutree
+# control-group is default
+KillMode=control-group
+# We shouldn't reach this, but make it long, just in case.
+TimeoutStopSec=900
 User=planb
 Group=nogroup
 

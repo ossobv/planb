@@ -128,7 +128,14 @@ class Command(BaseCommand):
             'total_size': sum(i.total_size for i in filesets),
         }
 
-        return render_to_string('planb/report_email_body.txt', context)
+        try:
+            rendered = render_to_string('planb/report_email_body.txt', context)
+        except Exception as e:
+            raise ValueError(
+                'Render issue in hostgroup {} in one of filesets: {}'.format(
+                    hostgroup, ', '.join(str(i.id) for i in filesets))) from e
+
+        return rendered
 
     def generate_html(self, text):
         cmd = ['rst2html']

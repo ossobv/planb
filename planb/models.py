@@ -572,11 +572,17 @@ class BackupRun(models.Model):
 
         list_ = []
         for line in self.snapshot_size_listing.splitlines():
-            path, size = line.rsplit(':', 1)
-            if path[0] == path[-1] == '"':
-                path = path[1:-1]
-            size = int(size.replace(',', ''))
-            list_.append((path, size))
+            try:
+                path, size = line.rsplit(':', 1)
+                if path[0] == path[-1] == '"':
+                    path = path[1:-1]
+                size = int(size.replace(',', ''))
+                list_.append((path, size))
+            except Exception as e:
+                raise ValueError(
+                    'Parse error in snapshot_size_listing line {!r} '
+                    'in backuprun {} for fileset {}'.format(
+                        line, self, self.fileset_id)) from e
         return list_
 
     def __str__(self):

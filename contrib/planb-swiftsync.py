@@ -808,6 +808,10 @@ class SwiftSyncMultiAdder(threading.Thread):
 
         self._success_fp = None
 
+        # If there were one or more failures, store them so they can be used by
+        # the caller.
+        self.failures = 0
+
     def take_success_file(self):
         """
         You're allowed to take ownership of the file... once.
@@ -856,7 +860,6 @@ class SwiftSyncMultiAdder(threading.Thread):
         only_container = self._swiftsync.container
         offset = self._offset
         threads = self._threads
-        failures = 0
 
         # Loop over the planb-swiftsync.add file, but only do our own files.
         with open(self._source, 'r') as add_fp:
@@ -878,22 +881,19 @@ class SwiftSyncMultiAdder(threading.Thread):
                     log.warning(
                         ('Skipping record %r (from %r) because of trailing '
                          'slash'), dst_path, record.container_path)
-                    failures += 1
+                    self.failures += 1
                     continue
 
                 # Download the file into the appropriate directory.
                 try:
                     self.process_record(record, container, dst_path)
                 except ProcessRecordFailure:
-                    failures += 1
+                    self.failures += 1
                 else:
                     self.process_record_success(record)
 
-        # If there were one or more failures, store them so they can be used by
-        # the caller.
-        if failures:
-            log.warning('At list EOF, got %d failures', failures)
-        self.failures = failures
+        if self.failures:
+            log.warning('At list EOF, got %d failures', self.failures)
 
     def _add_new_record_dir(self, path):
         try:
@@ -924,11 +924,14 @@ class SwiftSyncMultiAdder(threading.Thread):
             log.warning(
                 'Download failure for %r (from %r): %s',
                 path, record.container_path, e)
-            try:
-                # FIXME: also remove directories we just created?
-                os.unlink(path)
-            except FileNotFoundError:
+            if isinstance(e, IsADirectoryError):
                 pass
+            else:
+                try:
+                    # FIXME: also remove directories we just created?
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
             return False
         return True
 

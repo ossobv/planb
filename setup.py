@@ -67,7 +67,7 @@ if __name__ == '__main__':
         name='planb',
         version=version,
         entry_points={
-            'console_scripts': ['planb=planb.main:main'],
+            'console_scripts': ['planb=planb'],
         },
         data_files=[
             ('share/doc/planb', [

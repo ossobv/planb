@@ -1,3 +1,30 @@
+from django.conf import settings
+
+
+class lazysetting:
+    def __init__(self, name, default=None):
+        self.name = name
+        self.default = default
+
+    def deconstruct(self):
+        kwargs = {
+            'name': self.name,
+        }
+        if self.default is not None:
+            kwargs['default'] = self.default
+        return (
+            f'{self.__class__.__module__}.{self.__class__.__name__}',
+            [],
+            kwargs
+        )
+
+    def __call__(self):
+        return getattr(settings, self.name, self.default)
+
+    def __repr__(self):
+        return f'lazysetting({self.name!r}, {self.default!r})'
+
+
 def hour_period_advanced(d1, d2):
     if d1 > d2:
         return False

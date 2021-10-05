@@ -11,6 +11,7 @@ from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (
     CalledProcessError, argsjoin, check_output)
 from planb.transport import AbstractTransport
+from planb.utils import lazysetting
 
 from .apps import TABLE_PREFIX
 from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
@@ -35,18 +36,20 @@ class Config(AbstractTransport):
 
     src_dir = models.CharField(max_length=254, default='/')
     includes = FilelistField(
-        max_length=1023, default=settings.PLANB_DEFAULT_INCLUDES)
+        max_length=1023, default=lazysetting('PLANB_DEFAULT_INCLUDES'))
     excludes = FilelistField(
         max_length=1023, blank=True)
 
     transport = TransportChoices()
-    user = models.CharField(max_length=254, default='root')
+    user = models.CharField(
+        max_length=254, default=lazysetting(
+            'PLANB_RSYNC_USER', 'remotebackup'))
 
-    use_sudo = models.BooleanField(default=False)
-    use_ionice = models.BooleanField(default=False)
+    use_sudo = models.BooleanField(default=True)
+    use_ionice = models.BooleanField(default=True)
 
     rsync_path = models.CharField(
-        max_length=31, default=settings.PLANB_RSYNC_BIN)
+        max_length=31, default=lazysetting('PLANB_RSYNC_BIN'))
     ionice_path = models.CharField(
         max_length=31, default='/usr/bin/ionice', blank=True)
 

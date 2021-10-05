@@ -1,7 +1,7 @@
 from django import template
 from django.urls import reverse
 
-from planb.models import BOGODATE, Fileset
+from planb.models import BOGODATE, BackupRun, Fileset
 
 register = template.Library()
 
@@ -25,7 +25,10 @@ class GlobalMessagesNode(template.Node):
             backup_failures.pop()
 
         for fileset in backup_failures:
-            error = fileset.last_backuprun.error_text.split('\n', 1)[0]
+            try:
+                error = fileset.last_backuprun.error_text.split('\n', 1)[0]
+            except BackupRun.DoesNotExist:
+                error = 'Unknown error, BackupRun is gone'
             url = reverse("admin:planb_fileset_change", args=(fileset.pk,))
 
             warnings.append(

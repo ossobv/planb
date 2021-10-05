@@ -4,7 +4,9 @@
 {% block title %}{{ title }} | {{ site_title|default:_('PlanB untitled project') }}{% endblock %}
 
 {% block messages %}
+{% if user.is_authenticated %}
 {% global_messages %}
+{% endif %}
 {{ block.super }}
 {% endblock %}
 

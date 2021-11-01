@@ -13,7 +13,20 @@ REMOTE_CMD="/usr/bin/ssh $ssh_target"  # options?
 LOCAL_PREFIX="$1"; shift  # "tank" both local and remote
 REMOTE_PREFIX="$LOCAL_PREFIX"
 
+ARGV0=manual-zfssync
+MAILTO=root
+
 export LC_ALL=C
+
+log_mail() {
+    local subject="$1"
+    echo "$subject" >&2
+    (
+        echo "$subject"
+        echo
+        cat
+    ) | mail -s "[$ARGV0] $subject" $MAILTO
+}
 
 remote_to_local_path() {
     local remote="$1"
@@ -63,7 +76,10 @@ _recv() {
         local theirsnaps
         oursnaps=$(zfs list -H -d 1 -t snapshot -S creation -o name "$local" |
             sed -e '/@planb-/!d;s/[^@]*@/@/')
-        test -z "$oursnaps" && echo "critical: Impossible" >&2 && exit 2
+        if test -z "$oursnaps"; then
+            log_mail "Impossible: no local snapshots (zfs:$local)" </dev/null
+            exit 2
+        fi
         theirsnaps=$($REMOTE_CMD \
             "zfs list -H -d 1 -t snapshot -S creation -o name \"$remote\"" |
             sed -e '/@planb-/!d;s/[^@]*@/@/')
@@ -79,7 +95,13 @@ _recv() {
             echo "info: We already have $remote$remotesnap" >&2
             return
         fi
-        test -z "$commonsnap" && echo "critical: No common snap" >&2 && exit 2
+        if test -z "$commonsnap"; then
+            (
+                echo "$oursnaps" | sed -e 's/^/- /'
+                echo "$theirsnaps" | sed -e 's/^/+ /'
+            ) | log_mail "Problem: no common snapshots (zfs:$local)"
+            return
+        fi
 
         # howmany holds how many snapshots we want.
         if test "$howmany" -ne -1; then
@@ -113,21 +135,33 @@ _recv() {
  $remote${commonsnap:-@(void)}..${remotesnap#*@}" >&2
     $REMOTE_CMD "sudo zfs send $flags $remote_arg" |
         pv --average-rate --bytes --eta --progress --eta \
-            --size "$size" --width 72 | zfs recv "$local"
+            --size "$size" --width 72 | zfs recv -F "$local"
 }
+
+recv_initial_and_some_incrementals() {
+    local remotepath="$1"
+    local err=0
+    if ! recv_initial "$remotepath"; then
+        err=1
+    else
+        # Fetch two incrementals immediately. To avoid the
+        # problematic case when a snapshot is about to get
+        # destroyed.
+        recv_incrementals "$remotepath" 2 || err=2
+    fi
+    if test $err -ne 0; then
+        log_mail "Problem: init/inc ($err) error (peer-zfs:$remotepath)" \
+            </dev/null
+        false
+    fi
+}
+
 
 init() {
     local remotepath
     for remotepath in "$@"; do
         if ! we_have_this_dataset "$remotepath"; then
-            if recv_initial "$remotepath"; then
-                # Fetch two incrementals immediately. In case the oldest snapshot
-                # is about to get destroyed.
-                recv_incrementals "$remotepath" 2 ||
-                    echo "sad times.. continuing.." >&2
-            else
-                echo "sad times.. continuing.." >&2
-            fi
+            recv_initial_and_some_incrementals "$remotepath" || true
         fi
     done
 }
@@ -136,17 +170,14 @@ init_and_increment() {
     local remotepath
     for remotepath in "$@"; do
         if we_have_this_dataset "$remotepath"; then
-            recv_incrementals "$remotepath" 1 ||
-                echo "sad times.. continuing.." >&2
-        else
-            if recv_initial "$remotepath"; then
-                # Fetch two incrementals immediately. In case the oldest snapshot
-                # is about to get destroyed.
-                recv_incrementals "$remotepath" 2 ||
-                    echo "sad times.. continuing.." >&2
-            else
-                echo "sad times.. continuing.." >&2
+            # Fetch three snapshots
+            if ! recv_incrementals "$remotepath" 3; then
+                log_mail "Problem: inc ($err) error (peer-zfs:$remotepath)" \
+                    </dev/null
             fi
+        else
+            # Fetch the initial plus some snapshots
+            recv_initial_and_some_incrementals "$remotepath" || true
         fi
     done
 }

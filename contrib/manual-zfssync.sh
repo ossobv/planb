@@ -135,7 +135,7 @@ _recv() {
  $remote${commonsnap:-@(void)}..${remotesnap#*@}" >&2
     $REMOTE_CMD "sudo zfs send $flags $remote_arg" |
         pv --average-rate --bytes --eta --progress --eta \
-            --size "$size" --width 72 | zfs recv -F "$local"
+            --size "$size" --width 72 | zfs recv "$local"
 }
 
 recv_initial_and_some_incrementals() {

@@ -1,6 +1,6 @@
 #!/bin/sh -eu
 
-# Usage: .../manual-zfssync USER@MACHINE destprefix sources...
+# Usage: .../manual-zfssync USER@MACHINE destprefix [--init|--prune] sources...
 
 # Right now:
 # - assuming you're running this as root
@@ -11,19 +11,26 @@ ssh_target="$1"; shift  # remotebackup@DEST
 REMOTE_CMD="/usr/bin/ssh $ssh_target"  # options?
 
 LOCAL_PREFIX="$1"; shift  # "tank" both local and remote
-PATH_STRIP=1  # remote "tank/abc/def" -> "abc/def"
+REMOTE_PREFIX="$LOCAL_PREFIX"
+
+export LC_ALL=C
 
 remote_to_local_path() {
-    local remote="$remotepath"
-    for i in $(seq $PATH_STRIP); do
-        remote=${remote#*/}
-        test -z "$remote" && echo "error: Path strip too far" && exit 2
-    done
-    echo "$LOCAL_PREFIX/$remote"
+    local remote="$1"
+    # for i in $(seq $PATH_STRIP); do
+    #     remote=${remote#*/}
+    #     test -z "$remote" && echo "error: Path strip too far" && exit 2
+    # done
+    echo "$LOCAL_PREFIX/${remote#$REMOTE_PREFIX/}"
+}
+
+local_to_remote_path() {
+    local local="$1"
+    echo "$REMOTE_PREFIX/${local#$LOCAL_PREFIX/}"
 }
 
 we_have_this_dataset() {
-    local remote="$remotepath"
+    local remote="$1"
     local local=$(remote_to_local_path "$remote")
     zfs get name "$local" >/dev/null 2>&1
 }
@@ -144,5 +151,91 @@ init_and_increment() {
     done
 }
 
-#init_and_increment "$@"
-init "$@"
+prune() {
+    if test -n "$*"; then
+        echo "Unexpected args for prune..." >&2
+        exit 1
+    fi
+    local dataset
+    local ourdatasets
+    ourdatasets=$(
+        zfs list -Honame -r -t filesystem "$LOCAL_PREFIX" &&
+        zfs list -Honame -r -t volume "$LOCAL_PREFIX" ) || exit 1
+    ourdatasets=$(echo "$ourdatasets" | sort |
+        grep -vE "^$LOCAL_PREFIX(/_local)?\$")
+    for dataset in $ourdatasets; do
+        if ! prune_dataset "$dataset"; then
+            echo "Failure during $dataset .. continuing" >&2
+        fi
+    done
+}
+
+prune_dataset() {
+    local local="$1"
+    local remote=$(local_to_remote_path "$local")
+    local oursnaps
+    local theirsnaps
+    oursnaps=$(zfs list -H -d 1 -t snapshot -S creation -o name "$local" |
+        sed -e '/@planb-/!d;s/[^@]*@/@/')
+    if test -z "$oursnaps"; then
+        echo "critical: Impossible $local" >&2
+        false
+        return
+    fi
+    theirsnaps=$($REMOTE_CMD \
+        "zfs list -H -d 1 -t snapshot -S creation -o name \"$remote\"" |
+        sed -e '/@planb-/!d;s/[^@]*@/@/')
+    local ourtmp=$(mktemp)
+    local theirtmp=$(mktemp)
+    echo "$oursnaps" >"$ourtmp"
+    echo "$theirsnaps" >"$theirtmp"
+    local diffsnaps="$(
+        diff --minimal -U1000 "$ourtmp" "$theirtmp" |
+        sed -e '1,4d')"
+    rm "$ourtmp" "$theirtmp"
+    if test -z "$diffsnaps"; then
+        # No difference.. all done.
+        echo "Nothing to prune for (local $local)"
+        return
+    fi
+    if ! echo "$diffsnaps" | grep -q '^ '; then
+        echo "No common snapshots (local $local):" >&2
+        echo "$diffsnaps"
+        echo "($local)"
+        false
+        return
+    fi
+    local prunesnaps="$(
+        echo "$diffsnaps" | sed -e '/^-/!d;s/^-//' |
+        sed -e '1,30d' | tac)"  # keep 30 extra, del oldest first
+    local prunecount="$(echo "$prunesnaps" | wc -l)"
+    test -z "$prunesnaps" && return
+    echo "Pruning $prunecount snapshots from $local..."
+    local snap
+    local n=0
+    for snap in $prunesnaps; do
+        n=$((n+1))
+        echo -n " $n"
+        zfs destroy "$local$snap"
+    done
+    echo .
+}
+
+
+case "$1" in
+--prune)
+    shift
+    prune "$@"
+    ;;
+--init)
+    shift
+    init "$@"
+    ;;
+-*)
+    echo "Unexpected option $1" >&2
+    exit 1
+    ;;
+*)
+    init_and_increment "$@"
+    ;;
+esac

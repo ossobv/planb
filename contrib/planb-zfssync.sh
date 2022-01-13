@@ -1,6 +1,11 @@
 #!/bin/sh -eux
 
-# Usage: .../planb-zfssync [--lz4|--plain|--qlz1] root@MACHINE tank/X rpool/X/Z
+# Usage: .../planb-zfssync [--lz4|--plain|--qlz1] root@MACHINE DISKS..
+#
+# Where DISKS are one or more of:
+#   tank/X
+#   rpool/X/Z
+#   rpool/X:renamed-to-something
 #
 # KNOWN BUGS:
 # - if you have multiple filesets (in the same planb, with the same guid)
@@ -99,8 +104,18 @@ target_snapshot_prefix=${planb_snapshot_target%-*}
 test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
 
 # Download snapshots (make them if necessary).
-for remotepath in "$@"; do
-    our_path=$(escape "$remotepath")
+for remotepath_localpath in "$@"; do
+    # The paths to backup may be:
+    #   rpool/a/b/c
+    # or:
+    #   rpool/a/b/c:pretty-name
+    if test "${remotepath_localpath#*:}" != "$remotepath_localpath"; then
+        remotepath=${remotepath_localpath%%:*}
+        our_path=${remotepath_localpath#*:}
+    else
+        remotepath=$remotepath_localpath
+        our_path=$(escape "$remotepath")
+    fi
     dst=$planb_storage_name/$our_path
 
     # Ensure there is a snapshot for us.

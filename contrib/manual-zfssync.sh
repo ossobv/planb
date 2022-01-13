@@ -34,7 +34,12 @@ remote_to_local_path() {
     #     remote=${remote#*/}
     #     test -z "$remote" && echo "error: Path strip too far" && exit 2
     # done
-    echo "$LOCAL_PREFIX/${remote#$REMOTE_PREFIX/}"
+    # Special case: _local contains keys
+    if test "$remote" = "tank/_local"; then
+        echo "tank/_local-at-${ssh_target##*@}"
+    else
+        echo "$LOCAL_PREFIX/${remote#$REMOTE_PREFIX/}"
+    fi
 }
 
 local_to_remote_path() {
@@ -62,27 +67,42 @@ _recv() {
     local howmany="$2"
     flags="--raw --props"
 
+    local theirsnaps
     local remotesnap
     local commonsnap=""
+
+    theirsnaps=$(timeout -s9 120s $REMOTE_CMD \
+        "sudo zfs list -H -d 1 -t snapshot -S creation -o name '$remote'" |
+        sed -e '/@planb-/!d;s/[^@]*@/@/')
+
+    # Special hackery for tank/_local. Because it is not auto-snapshotted, we
+    # need to manually make some.
+    if test "$remote" = tank/_local; then
+        local newsnap="@planb-$(TZ=UTC date +%Y%m%dT%H%M%SZ)"
+        remotesnap=$(echo "$theirsnaps" | head -n1)
+        timeout -s9 120s $REMOTE_CMD \
+            "if sudo zfs diff -H '$remote$remotesnap' | grep -q ^; then \
+             sudo zfs snapshot '$remote$newsnap'; fi"
+        remotesnap=
+        theirsnaps=$(timeout -s9 120s $REMOTE_CMD \
+            "sudo zfs list -H -d 1 -t snapshot -S creation -o name '$remote'" |
+            sed -e '/@planb-/!d;s/[^@]*@/@/')
+    fi
+
     if test "$howmany" = init; then
         # Take oldest remote snapshot as a starting point. Don't try to do all
         # data immediately.
-        remotesnap=$($REMOTE_CMD \
-            "zfs list -H -d 1 -t snapshot -s creation -o name \"$remote\"" |
-            sed -ne '/@planb-/{p;q}')
+        remotesnap=$(echo "$theirsnaps" | tail -n1)
+        test -n "$remotesnap" && remotesnap="${remote}${remotesnap}"
     else
         # Take their snapshots and ours. And find the first match.
         local oursnaps
-        local theirsnaps
         oursnaps=$(zfs list -H -d 1 -t snapshot -S creation -o name "$local" |
             sed -e '/@planb-/!d;s/[^@]*@/@/')
         if test -z "$oursnaps"; then
             log_mail "Impossible: no local snapshots (zfs:$local)" </dev/null
             exit 2
         fi
-        theirsnaps=$($REMOTE_CMD \
-            "zfs list -H -d 1 -t snapshot -S creation -o name \"$remote\"" |
-            sed -e '/@planb-/!d;s/[^@]*@/@/')
         remotesnap="$(echo "$theirsnaps" | head -n1)"
         local match
         for match in $oursnaps; do
@@ -122,7 +142,7 @@ _recv() {
     remote_arg="\"$remotesnap\""
     test -n "$commonsnap" && remote_arg="-I \"$commonsnap\" $remote_arg"
 
-    sizestr=$($REMOTE_CMD \
+    sizestr=$(timeout -s9 300s $REMOTE_CMD \
         "sudo zfs send $flags --dryrun --parsable $remote_arg")
     size=$(echo "$sizestr" |
         sed -e '/^size[[:blank:]]/!d;s/^size[[:blank:]]\+//')
@@ -172,7 +192,7 @@ init_and_increment() {
         if we_have_this_dataset "$remotepath"; then
             # Fetch three snapshots
             if ! recv_incrementals "$remotepath" 3; then
-                log_mail "Problem: inc ($err) error (peer-zfs:$remotepath)" \
+                log_mail "Problem: inc error (peer-zfs:$remotepath)" \
                     </dev/null
             fi
         else
@@ -213,8 +233,8 @@ prune_dataset() {
         false
         return
     fi
-    theirsnaps=$($REMOTE_CMD \
-        "zfs list -H -d 1 -t snapshot -S creation -o name \"$remote\"" |
+    theirsnaps=$(timeout -s9 120s $REMOTE_CMD \
+        "sudo zfs list -H -d 1 -t snapshot -S creation -o name '$remote'" |
         sed -e '/@planb-/!d;s/[^@]*@/@/')
     local ourtmp=$(mktemp)
     local theirtmp=$(mktemp)
@@ -253,13 +273,15 @@ prune_dataset() {
 }
 
 
-case "$1" in
+case "${1:-}" in
 --prune)
     shift
     prune "$@"
     ;;
 --init)
     shift
+    # Special case: _local contains keys
+    init "tank/_local"
     init "$@"
     ;;
 -*)
@@ -267,6 +289,8 @@ case "$1" in
     exit 1
     ;;
 *)
+    # Special case: _local contains keys
+    init_and_increment "tank/_local"
     init_and_increment "$@"
     ;;
 esac

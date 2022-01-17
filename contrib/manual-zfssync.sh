@@ -78,7 +78,7 @@ _recv() {
     # Special hackery for tank/_local. Because it is not auto-snapshotted, we
     # need to manually make some.
     if test "$remote" = tank/_local; then
-        local newsnap="@planb-$(TZ=UTC date +%Y%m%dT%H%M%SZ)"
+        local newsnap="@planb-$(TZ=UTC date +%Y%m%dT%H%MZ)"
         remotesnap=$(echo "$theirsnaps" | head -n1)
         timeout -s9 120s $REMOTE_CMD \
             "if sudo zfs diff -H '$remote$remotesnap' | grep -q ^; then \

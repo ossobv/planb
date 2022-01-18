@@ -151,11 +151,40 @@ _recv() {
         false
         return
     fi
-    echo "info: Retrieving $size bytes from\
- $remote${commonsnap:-@(void)}..${remotesnap#*@}" >&2
+    echo "info: Retrieving $size bytes from" \
+         "$remote${commonsnap:-@(void)}..${remotesnap#*@}" >&2
+
+    # Fetch the data from remote.
+    #
+    # Setting atime=off so mounting (without -o ro,noatime) does not affect
+    # the mounted area. If we have atime, then a single mount is enough to
+    # break incremental transfers:
+    #
+    # > # zfs list -r -t all tank/X | tail -n3
+    # > tank/X@planb-20220117T0844Z  96.0M      -      108G  -
+    # > tank/X@planb-20220118T0103Z  98.0M      -      108G  -
+    # > tank/X@planb-20220118T0934Z     0B      -      108G  -
+    #
+    # > # zfs mount tank/X
+    # >
+    # > # zfs list -r -t all tank/X | tail -n3
+    # > tank/X@planb-20220117T0844Z  96.0M      -      108G  -
+    # > tank/X@planb-20220118T0103Z  98.0M      -      108G  -
+    # > tank/X@planb-20220118T0934Z  84.9M      -      108G  -
+    #
+    # > # zfs diff tank/X@planb-20220118T0934Z
+    # > (no change)
+    #
+    # > # ... | zfs recv
+    # > ...
+    # > cannot receive incremental stream: destination X has been modified
+    # > since most recent snapshot
+    #
+    # Also, add -u to _not_ mount the filesystem after/during recv.
     $REMOTE_CMD "sudo zfs send $flags $remote_arg" |
         pv --average-rate --bytes --eta --progress --eta \
-            --size "$size" --width 72 | zfs recv "$local"
+            --size "$size" --width 72 |
+            zfs recv -u -o atime=off -o readonly=on "$local"
 }
 
 recv_initial_and_some_incrementals() {

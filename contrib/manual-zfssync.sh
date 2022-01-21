@@ -242,7 +242,7 @@ prune() {
         zfs list -Honame -r -t filesystem "$LOCAL_PREFIX" &&
         zfs list -Honame -r -t volume "$LOCAL_PREFIX" ) || exit 1
     ourdatasets=$(echo "$ourdatasets" | sort |
-        grep -vE "^$LOCAL_PREFIX(/_local)?\$")
+        grep -vE "^$LOCAL_PREFIX(/_local(-.*)?)?\$")
     for dataset in $ourdatasets; do
         if ! prune_dataset "$dataset"; then
             echo "Failure during $dataset .. continuing" >&2

@@ -275,7 +275,7 @@ prune_dataset() {
     rm "$ourtmp" "$theirtmp"
     if test -z "$diffsnaps"; then
         # No difference.. all done.
-        echo "Nothing to prune for (local $local)"
+        echo "Nothing to prune for (local $local), no diffs"
         return
     fi
     if ! echo "$diffsnaps" | grep -q '^ '; then
@@ -288,9 +288,12 @@ prune_dataset() {
     local prunesnaps="$(
         echo "$diffsnaps" | sed -e '/^-/!d;s/^-//' |
         sed -e '1,30d' | tac)"  # keep 30 extra, del oldest first
-    local prunecount="$(echo "$prunesnaps" | wc -l)"
-    test -z "$prunesnaps" && return
-    echo "Pruning $prunecount snapshots from $local..."
+    if test -z "$prunesnaps"; then
+        local keepcount="$(echo "$diffsnaps" | grep ^- | wc -l)"
+        echo "Nothing to prune for (local $local), keeping $keepcount spare"
+        return
+    fi
+    echo "Pruning $(echo "$prunesnaps" | wc -l) snapshots from $local..."
     local snap
     local n=0
     for snap in $prunesnaps; do

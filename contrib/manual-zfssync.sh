@@ -21,11 +21,13 @@ export LC_ALL=C
 log_mail() {
     local subject="$1"
     echo "$subject" >&2
-    (
-        echo "$subject"
-        echo
-        cat
-    ) | mail -s "[$ARGV0] $subject" $MAILTO
+    if ! test -t 2; then
+        (
+            echo "$subject"
+            echo
+            cat
+        ) | mail -s "[$ARGV0] $subject" $MAILTO
+    fi
 }
 
 remote_to_local_path() {

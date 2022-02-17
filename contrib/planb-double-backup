@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+here=$(dirname "$0")
+
+USERATHOST=$1
+DESTPOOL=$2
+RESTART_EVERY=${3:-0}
+
+test -z "$USERATHOST" -o -z "$DESTPOOL" &&
+    echo "usage: $0 user@host destpool [restartsec]" >&2 && exit 1
+
+while true; do
+    DATASETS=$("$here/planb-double-backup-sources.py" "$USERATHOST")
+    test $? -ne 0 -o -z "$DATASETS" &&
+        echo "$0: problem fetching datasets" >&2 && exit 1
+
+    # Shuffle and remove all commented/blank lines (do we use comments?)
+    DATASETS=$(printf '%s' "$DATASETS" | shuf | grep '^[^#]')
+
+    echo "Starting run, attempting to sync the following datasets:"
+    echo '' $DATASETS
+    echo
+
+    "$here/manual-zfssync.sh" "$USERATHOST" "$DESTPOOL" $DATASETS
+
+    if test "$RESTART_EVERY" -eq 0; then
+        break
+    else
+        sleep "$RESTART_EVERY"
+    fi
+done

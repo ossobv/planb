@@ -1,0 +1,16 @@
+[Unit]
+Description=PlanB double backup pull job
+Documentation=https://github.com/ossobv/planb/blob/main/contrib/manual-zfssync.sh
+After=network.target
+ConditionPathExists=/etc/default/planb-double-backup
+
+[Service]
+#Environment=USERATHOST=user@host
+#Environment=DESTPOOL=tank
+Environment=RESTART_AFTER=900
+EnvironmentFile=/etc/default/planb-double-backup
+ExecStart=/srv/virtualenvs/planb/src/planb/contrib/planb-double-backup ${USERATHOST} ${DESTPOOL} ${RESTART_AFTER}
+RestartSec=1m
+
+[Install]
+WantedBy=multi-user.target

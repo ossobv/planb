@@ -65,17 +65,59 @@ recv_incrementals() {
 
 _recv() {
     local remote="$1"
-    local local=$(remote_to_local_path "$remote")
+    local local="$(remote_to_local_path "$remote")"
     local howmany="$2"
     flags="--raw --props"
+
+    # Are we looking at a filesystem with subfilesystems
+    # (planb:contains=filesystems). If so, fetch them, and act upon those.
+    local has_contained_filesystems=false
+    local children="$(timeout -s9 120s $REMOTE_CMD \
+        "test \"\$(sudo zfs get -Hovalue planb:contains '$remote')\" \
+         = filesystems && sudo zfs list -Honame -d 1 -t filesystem '$remote' \
+         | sed -e1d")"
+    if test -n "$children"; then
+        if test "$(zfs get -Hovalue planb:contains "$local" 2>/dev/null)" \
+                != filesystems; then
+            # We cannot 'zfs create -o planb:contains=filesystems "$local"'
+            # as we'll get a "encryption root's key is not loaded or provided".
+            echo "info: No local containing filesystem yet. Syncing..."
+            local newsnap="@planb-$(TZ=UTC date +%Y%m%dT%H%MZ)"
+            timeout -s9 120s $REMOTE_CMD "sudo zfs snapshot '$remote$newsnap'"
+            $REMOTE_CMD "sudo zfs send $flags '$remote$newsnap'" |
+                zfs recv -u -o atime=off -o readonly=on "$local"
+            howmany=init
+        fi
+        local child=
+        echo "info: $remote has subfilesystems:" \
+            $(echo "$children" | sed -e 's#.*/#./#')
+        for child in $children; do
+            case $child in
+                $remote/*) :;;  # sane
+                *) echo $children | log_mail "fatal $child"; exit 1;;  # insane
+            esac
+            local childlocal="$(remote_to_local_path "$child")"
+            local childhowmany="$howmany"
+            zfs list -Honame -d 0 "$childlocal" >/dev/null 2>&1 ||
+                childhowmany=init
+            _recv "$child" "$childhowmany"
+            has_contained_filesystems=true
+        done
+        test $howmany != init || howmany=3  # cannot init if we're here
+    fi
 
     local theirsnaps
     local remotesnap
     local commonsnap=""
 
+    # Get remote snapshots.
     theirsnaps=$(timeout -s9 120s $REMOTE_CMD \
         "sudo zfs list -H -d 1 -t snapshot -S creation -o name '$remote'" |
         sed -e '/@planb-/!d;s/[^@]*@/@/')
+    if test -z "$theirsnaps" && $has_contained_filesystems; then
+        # All good, we did something.
+        return
+    fi
 
     # Special hackery for tank/_local. Because it is not auto-snapshotted, we
     # need to manually make some.

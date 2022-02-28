@@ -15,6 +15,8 @@ class Command(BaseCommandWithZabbix):
     def add_arguments(self, parser):
         parser.add_argument('--summary', action='store_true', help=(
             'Show summary'))
+        parser.add_argument('--double', action='store_true', help=(
+            'Filesets with double-backup'))
 
         return super().add_arguments(parser)
 
@@ -29,6 +31,9 @@ class Command(BaseCommandWithZabbix):
             self.dump_zabbix_summary(qs)
         elif options['zabbix']:
             self.dump_zabbix_discovery(qs.filter(is_enabled=True))
+        elif options['double']:
+            # Include enabled and disabled hosts for the remote server.
+            self.dump_dataset_list(qs.filter(tags__name='double-backup'))
         else:
             self.dump_list(qs.filter(is_enabled=True))
 
@@ -55,6 +60,10 @@ class Command(BaseCommandWithZabbix):
             ret.append('')
 
         self.stdout.write('\n'.join(ret) + '\n')
+
+    def dump_dataset_list(self, qs):
+        for fileset in qs:
+            self.stdout.write(fileset.dataset_name)
 
     def dump_zabbix_discovery(self, qs):
         hostname = socket.gethostname()

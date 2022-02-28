@@ -140,10 +140,14 @@ class BossoRESTPoster(BasePoster):
             logger.error('%r returned error %r', data, error)
 
     def format_data(self, hostgroup, fileset, report_date):
+        if fileset.use_double_backup:
+            service_code = 'backup-double_size-gibibyte'
+        else:
+            service_code = 'backup-size-gibibyte'
         return {
             'relation_code': hostgroup.name,
             'item_code': fileset.friendly_name,
-            'service_code': 'backup-size-gibibyte',
+            'service_code': service_code,
             'date': report_date.strftime('%Y-%m-%d'),
             'value': round(fileset.total_size_mb / 1024, 5),  # MiB to GiB
             'unit': 'GiB',

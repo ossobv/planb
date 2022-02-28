@@ -130,6 +130,14 @@ class HostGroup(models.Model):
         ordering = ('name',)
 
 
+class Tag(models.Model):
+    name = models.CharField(max_length=63, unique=True)
+    description = models.TextField()
+
+    def __str__(self):
+        return self.name.lower()
+
+
 class FilesetLock(object):
     def __init__(self, fileset_id, timeout=86400):
         self._fileset_id = fileset_id
@@ -178,7 +186,8 @@ class Fileset(models.Model):
     hostgroup = models.ForeignKey(
         HostGroup, related_name='filesets', on_delete=models.PROTECT)
     notes = models.TextField(blank=True, help_text=_(
-        'Quick description/tips. Use the first line for labels/tags.'))
+        'Quick description/tips. The first line is shown in the list view.'))
+    tags = models.ManyToManyField(Tag, blank=True)
 
     # The storage alias is selected when adding the Fileset. Available choices
     # are selected from the storage pools in the FilesetForm.
@@ -226,6 +235,10 @@ class Fileset(models.Model):
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
+
+    @cached_property
+    def use_double_backup(self):
+        return self.tags.filter(name='double-backup').exists()
 
     @property
     def unique_name(self):

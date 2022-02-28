@@ -60,8 +60,8 @@ class HostGroupAdmin(admin.ModelAdmin):
 class FilesetAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': (
-            'friendly_name', 'hostgroup', 'storage_alias', 'dataset_name',
-            'notes', 'is_enabled',
+            'friendly_name', 'hostgroup', 'tags', 'storage_alias',
+            'dataset_name', 'notes', 'is_enabled',
         )}),
         ('Status', {'fields': (
             'first_ok', 'last_ok', 'disk_usage', 'run_time',
@@ -86,7 +86,7 @@ class FilesetAdmin(admin.ModelAdmin):
         'storage_alias',)
 
     list_display = (
-        'friendly_name', 'hostgroup', 'tags',
+        'friendly_name', 'hostgroup', 'note',
         'disk_usage', 'run_time', 'get_retention', 'get_blacklist_hours',
         'last_ok_', 'first_fail_',
         'storage_alias', 'enabled_x', 'queued_q', 'running_r',
@@ -94,7 +94,7 @@ class FilesetAdmin(admin.ModelAdmin):
     list_filter = ('is_enabled',)
     if len(settings.PLANB_STORAGE_POOLS) != 1:
         list_filter += ('storage_alias',)
-    list_filter += ('hostgroup', 'is_running', 'first_fail')
+    list_filter += ('tags', 'hostgroup', 'is_running', 'first_fail')
 
     actions = [enqueue_multiple]
     form = FilesetAdminForm
@@ -105,7 +105,7 @@ class FilesetAdmin(admin.ModelAdmin):
             return self.readonly_change_fields + self.readonly_fields
         return self.readonly_fields
 
-    def tags(self, object):
+    def note(self, object):
         "Take first line of notes"
         ret = object.notes.split('\n', 1)[0].strip()
         if len(ret) > 12:
@@ -159,12 +159,12 @@ class FilesetAdmin(admin.ModelAdmin):
         ret = ['<table>']
         for path, size in run.snapshot_size_listing_as_list():
             ret.append(
-                '<tr><td style="padding:0;"><code>{}</code></td>'
-                '<td style="padding:0;text-align:right;">{}</td></tr>'
+                '<tr><td style="padding:0 0.4em;"><code>{}</code></td>'
+                '<td style="padding:0 0.4em;text-align:right;">{}</td></tr>'
                 .format(htmlesc(path), human.bytes(size)))
         ret.append(
-            '<tr><th style="padding:0;">TOTAL</th>'
-            '<th style="padding:0;text-align:right;">{}</th></tr>'
+            '<tr><th style="padding:0 0.4em;">TOTAL</th>'
+            '<th style="padding:0 0.4em;text-align:right;">{}</th></tr>'
             .format(human.bytes(run.snapshot_size)))
         ret.append('</table>')
         return mark_safe(''.join(ret))

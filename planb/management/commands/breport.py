@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from planb.models import Fileset, HostGroup
+from planb.templatetags.planb import column_width
 
 
 class Command(BaseCommand):
@@ -102,23 +103,103 @@ class Command(BaseCommand):
 
         return subject
 
+    @staticmethod
+    def _get_nth_place_icon(pos):
+        """
+        Return icon-string; note that we need to count the character width
+
+        The emojis returned include wide characters, which take up two columns
+        in a monospaced font.
+
+        Because:
+
+            emoji characters were first developed through the use of extensions
+            of legacy East Asian encodings, such as Shift-JIS, and in such a
+            context they were treated as wide characters. While these
+            extensions have been added to Unicode or mapped to standardized
+            variation sequences, their treatment as wide characters has been
+            retained, and extended for consistency with emoji characters that
+            lack a legacy encoding.
+
+        That means that:
+
+            import unicodedata
+
+            count = (lambda s: sum(
+                2 if unicodedata.east_asian_width(ch) == 'W' else 1
+                for ch in s))
+
+            3 == count('321')
+            3 == count('32\u00b9')
+            4 == count('32\U0001F947')
+
+        See the unicode_rjust filter for a possible implementation.
+        """
+        if pos == 1:
+            # return '\u00b9'           # U+00B9 SUPERSCRIPT ONE
+            # return '\U0001F3C6'       # :trophy:
+            return '\U0001F947'         # :1st_place_medal:
+
+        if pos == 2:
+            # return chr(0x00b0 + pos)  # U+00B2
+            return '\U0001F948'         # :2nd_place_medal:
+
+        if pos == 3:
+            # return chr(0x00b0 + pos)  # U+00B3
+            return '\U0001F949'         # :3rd_place_medal
+
+        if pos >= 4:
+            return '  '  # two chars
+
+        assert False, ('we do not get here', pos)
+        return chr(0x2070 + pos)        # U+2070, U+2074..U+2079
+
+    def _make_friendly_name(self, o, rjust):
+        flags = []
+        if not o.is_enabled:
+            # flags.append('\u23fb')        # Power Symbol (single width)
+            # flags.append('\u274C')        # :cross_mark:
+            # flags.append('\U0001F6AB')    # :prohibited:
+            # flags.append('\u23f9\ufe0f')  # :stop_button: (too wide)
+            flags.append('\U0001F6D1')      # :stop_sign:
+        elif o.first_fail:
+            # flags.append('\u26a0')        # Warning Sign (single width)
+            flags.append('\u26a0\ufe0f')    # :warning:
+        if o.use_double_backup:
+            # flags.append('\u2194\ufe0f')  # :left_right_arrow: (too wide)
+            flags.append('\U0001F4A0')      # :diamond_with_a_dot:
+        flags = ''.join(flags)
+
+        name = o.friendly_name + flags
+        namelen = column_width(name)
+        if namelen < rjust:
+            name = (o.friendly_name + (' ' * (rjust - namelen)) + flags)
+        elif namelen > rjust:
+            assert rjust > 10, 'we tack on 8 to the right'
+            remove = namelen - rjust + 2
+            name = (name[0:-(remove + 8)] + '..' + name[-8:])
+
+        return name
+
     def generate_text(self, hostgroup, filesets):
+        # Create readable filename and add properties. And adjust to fit into
+        # the full column.
+        for o in filesets:
+            o.friendly_name_display = self._make_friendly_name(o, rjust=31)
+
         # Add a display size property for the summary that includes the
-        # fileset rank when ordered by total size.
-        for i, fileset in enumerate(
-                sorted(filesets, key=attrgetter('total_size'),
-                       reverse=True), 1):
-            if i < 4:
-                if i == 1:
-                    rank = '\u00b9'  # U+00B9 SUPERSCRIPT ONE
-                elif i in (2, 3):
-                    rank = chr(0x00b0 + i)  # U+00B2, U+00B3
-                else:
-                    rank = chr(0x2070 + i)  # U+2070, U+2074..U+2079
-            else:
-                rank = ' '
-            fileset.total_size_display = '{}{}'.format(
-                filesizeformat(fileset.total_size), rank)
+        # fileset rank when ordered by largest size.
+        for r, o in enumerate(sorted(
+                filesets, key=attrgetter('total_size'), reverse=True), 1):
+            o.total_size_display = (
+                filesizeformat(o.total_size) + self._get_nth_place_icon(r))
+
+        # Add an efficiency display property for the summary that includes the
+        # efficient rank when ordered by worst efficiency.
+        for r, o in enumerate(sorted(
+                filesets, key=attrgetter('snapshot_efficiency')), 1):
+            o.snapshot_efficiency_display = (
+                o.snapshot_efficiency + self._get_nth_place_icon(r))
 
         context = {
             'hostgroup': hostgroup,

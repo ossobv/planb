@@ -1,4 +1,4 @@
-{% load rst i18n %}{% autoescape off %}PlanB backup report for "{{ hostgroup.name }}"
+{% load rst i18n planb %}{% autoescape off %}PlanB backup report for "{{ hostgroup.name }}"
 ========================={{ hostgroup.name|replaceany:'=' }}=
 
 The following report contains a listing of all PlanB based backups made
@@ -19,19 +19,17 @@ prefixes:* 1 GB = 2\ :sup:`30`
 The following hosts are backed up using the {{ company_name }} PlanB
 backup service.
 
-+----------------------------------+------------+------+--------------+
-| {{ _('name')|ljust:32 }} | {{ _('disk use')|ljust:10 }} | {{ _('eff.')|ljust:4 }} | {{ _('last backup')|ljust:12 }} |
-+==================================+============+======+==============+
-{% for fileset in filesets %}| {{ fileset.friendly_name|ljust:32|truncatechars:32 }} |{% comment %}
-{% endcomment %} {{ fileset.total_size_display|rjust:10 }} |{% comment %}
-{% endcomment %} {{ fileset.snapshot_efficiency|rjust:4 }} |{% comment %}
-{% endcomment %} {{ fileset.last_ok|date:'Y-m-d'|ljust:10 }}{% comment %}
-{% endcomment %} {% if not fileset.is_enabled %}⏻{% comment %}
-{% endcomment %}{% elif fileset.first_fail %}⚠{% else %} {% endif %} |
-+----------------------------------+------------+---------------------+
++---------------------------------+-------------+-------+------------+
+| {{ _('name')|ljust:31 }} | {{ _('disk use')|ljust:11 }} | {{ _('eff.')|ljust:5 }} | {{ _('last back.')|ljust:10 }} |
++=================================+=============+=======+============+
+{% for fileset in filesets %}| {{ fileset.friendly_name_display }} |{% comment %}
+{% endcomment %} {{ fileset.total_size_display|unicode_rjust:11 }} |{% comment %}
+{% endcomment %} {{ fileset.snapshot_efficiency_display|unicode_rjust:5 }} |{% comment %}
+{% endcomment %} {{ fileset.last_ok|date:'Y-m-d'|ljust:10 }} |
++---------------------------------+-------------+-------+------------+
 {% endfor %}{% comment %}
-{% endcomment %}| {{ _('**Total**')|ljust:32 }} | {{ total_size|filesizeformat|rjust:9 }}  | {{ ''|ljust:4 }} | {{ ''|ljust:12 }} |
-+----------------------------------+------------+---------------------+
+{% endcomment %}| {{ _('**Total**')|ljust:31 }} | {{ total_size|filesizeformat|rjust:9 }}   | {{ ''|ljust:5 }} | {{ ''|ljust:10 }} |
++---------------------------------+-------------+-------+------------+
 
 ----------------------
 Reports per host below
@@ -50,7 +48,9 @@ Reports per host below
 +------------------------+-----------------------------------------------------+
 | Configured retention   | {{ fileset.retention_display|ljust:51|truncatechars:51 }} |{% if not fileset.is_enabled %}
 +------------------------+-----------------------------------------------------+
-| State                  | DISABLED                                            |{% endif %}{% if fileset.has_child_datasets %}
+| State                  | DISABLED                                            |{% endif %}
++------------------------+-----------------------------------------------------+
+| Use double backup      | {{ fileset.use_double_backup|yesno:"YES,NO"|ljust:51 }} |{% if fileset.has_child_datasets %}
 +------------------------+-----------------------------------------------------+
 | Has child datasets     | YES                                                 |{% endif %}
 +------------------------+-----------------------------------------------------+

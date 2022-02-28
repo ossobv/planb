@@ -345,18 +345,23 @@ class Fileset(models.Model):
 
     @property
     def snapshot_size(self):
-        return self.last_successful_backuprun.snapshot_size
+        try:
+            return self.last_successful_backuprun.snapshot_size
+        except BackupRun.DoesNotExist:
+            return 0
 
     @cached_property
     def snapshot_count(self):
         return len(self.snapshot_list())
 
+    @cached_property
     def snapshot_efficiency(self):
+        "Return efficiency between 0% (poor) and 99% (efficient)"
         try:
             worst_case = self.total_size / self.snapshot_count
             efficiency = (100 * (self.snapshot_size - worst_case)
                           / (self.total_size - worst_case))
-            efficiency = int(max(0, min(100, efficiency)))
+            efficiency = int(max(0, min(99, efficiency)))
             return '{:d}%'.format(efficiency)
         except (ValueError, ZeroDivisionError):
             return _('N/A')

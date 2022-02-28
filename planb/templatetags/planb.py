@@ -1,4 +1,7 @@
+from unicodedata import east_asian_width
+
 from django import template
+from django.template.defaultfilters import stringfilter
 from django.urls import reverse
 
 from planb.models import BOGODATE, BackupRun, Fileset
@@ -50,3 +53,28 @@ def global_messages(parser, token):
         {% global_messages %}
     """
     return GlobalMessagesNode()
+
+
+def column_width(s):
+    """Return total column width of the string s, taking into account that
+    Emoji use up twice the space"""
+    # > emoji characters were first developed through the use of extensions of
+    # > legacy East Asian encodings, such as Shift-JIS, and in such a context
+    # > they were treated as wide characters. While these extensions have been
+    # > added to Unicode or mapped to standardized variation sequences, their
+    # > treatment as wide characters has been retained, and extended for
+    # > consistency with emoji characters that lack a legacy encoding.
+    return sum(2 if east_asian_width(ch) == 'W' else 1 for ch in s)
+
+
+@register.filter(is_safe=True)
+@stringfilter
+def unicode_rjust(value, arg):
+    """
+    Right-align the value in a field of a given width while being aware that
+    some characters are "2 characters wide".
+    """
+    slen = len(value)
+    swidth = column_width(value)
+    assert swidth >= slen, (value, slen, swidth)
+    return value.rjust(int(arg) - (swidth - slen))

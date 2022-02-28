@@ -272,7 +272,7 @@ class Config(AbstractTransport):
             # > https://github.com/WayneD/rsync/commit/
             # >   9dd62525f3b98d692e031f22c02be8f775966503
             # > see: https://bugs.gentoo.org/777483
-            # '--perms' <-- not '-p', because issue in 3.2.3 with lchmod
+            '--perms',      # -p
             '--times',      # -t
             # '--group' <-- not '-g'
             # '--owner' <-- not '-o'
@@ -289,8 +289,8 @@ class Config(AbstractTransport):
             # Fix problems when we're not root, but we can download dirs
             # with improper perms because we're root remotely. Rsync
             # could set up dir structures where files inside cannot be
-            # accessible anymore. Make sure our user has rwx access.
-            '--chmod=Du+rwx',
+            # accessible anymore. Make sure our user has rx access.
+            '--chmod=Du+rx',
             # Limit bandwidth a bit by default.
             '--bwlimit=10M')
         used_simple_args = tuple(

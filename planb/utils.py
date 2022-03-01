@@ -13,7 +13,7 @@ class lazysetting:
         if self.default is not None:
             kwargs['default'] = self.default
         return (
-            f'{self.__class__.__module__}.{self.__class__.__name__}',
+            '{cls.__module__}.{cls.__name__}'.format(cls=self.__class__),
             [],
             kwargs
         )
@@ -22,7 +22,7 @@ class lazysetting:
         return getattr(settings, self.name, self.default)
 
     def __repr__(self):
-        return f'lazysetting({self.name!r}, {self.default!r})'
+        return 'lazysetting({self.name!r}, {self.default!r})'.format(self=self)
 
 
 def hour_period_advanced(d1, d2):

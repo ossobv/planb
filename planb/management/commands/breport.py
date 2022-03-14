@@ -199,7 +199,7 @@ class Command(BaseCommand):
         for r, o in enumerate(sorted(
                 filesets, key=attrgetter('snapshot_efficiency')), 1):
             o.snapshot_efficiency_display = (
-                o.snapshot_efficiency + self._get_nth_place_icon(r))
+                str(o.snapshot_efficiency) + self._get_nth_place_icon(r))
 
         context = {
             'hostgroup': hostgroup,

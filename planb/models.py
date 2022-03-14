@@ -89,6 +89,31 @@ class _DecoratedSnapshot:
         return self.name
 
 
+class _StrIntSorted:
+    """
+    Quick and dirty sortable string
+    """
+    def __init__(self, s, val):
+        self.s = s
+        self.val = val
+
+    def __eq__(self, other):
+        if isinstance(other, _StrIntSorted):
+            return self.val == other.val
+        return self.val == other
+
+    def __lt__(self, other):
+        if isinstance(other, _StrIntSorted):
+            return self.val < other.val
+        return self.val < other
+
+    def __repr__(self):
+        return '_StrIntSorted({!r}, {})'.format(self.s, self.val)
+
+    def __str__(self):
+        return self.s
+
+
 class HostGroup(models.Model):
     name = models.CharField(max_length=63, unique=True)
     notify_email = MultiEmailField(
@@ -362,9 +387,9 @@ class Fileset(models.Model):
             efficiency = (100 * (self.snapshot_size - worst_case)
                           / (self.total_size - worst_case))
             efficiency = int(max(0, min(99, efficiency)))
-            return '{:d}%'.format(efficiency)
+            return _StrIntSorted('{:d}%'.format(efficiency), efficiency)
         except (ValueError, ZeroDivisionError):
-            return _('N/A')
+            return _StrIntSorted('N/A', 101)  # sort above 100% efficiency
 
     @cached_property
     def last_backuprun(self):

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # regex to get the datetime from a snapshot name.
 # the optional prefix can be ignored.
-SNAPNAME_DATETIME_RE = re.compile(r'^(?:\w+-)?(\d{8}T?\d{4}Z?)$')
+SNAPNAME_DATETIME_RE = re.compile(r'^(?:planb-)?(\d{8}T\d{4}Z)$')
 
 
 class RetentionPeriod:
@@ -65,15 +65,7 @@ def datetime_from_snapshot_name(snapname):
 
 
 def parse_snapshot_datetime(value):
-    for pattern in (
-            '%Y%m%dT%H%MZ',  # planb-newTtimeZ
-            '%Y%m%dT%H%M',   # planb-veryTemporary
-            '%Y%m%d%H%M'):   # daily-oldtimestamp
-        try:
-            return datetime.datetime.strptime(value, pattern)
-        except (TypeError, ValueError):
-            pass
-    raise ValueError('Invalid timestamp')
+    return datetime.datetime.strptime(value, '%Y%m%dT%H%MZ')  # planb-dTtZ
 
 
 class DatasetNotFound(Exception):

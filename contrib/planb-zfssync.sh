@@ -128,7 +128,7 @@ for remotepath_localpath in "$@"; do
         prev_target_snapshot=$(ssh $ssh_options $ssh_target "\
             sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
             -S creation \"$remotepath\"" | grep -E \
-            "^.*@(daily|$target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
+            "^.*@($target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
             sed -e 's/^[^@]*@//;s/[[:blank:]].*//;1q')
         if test -z "$prev_target_snapshot"; then
             # Does not exist. Create.
@@ -196,7 +196,7 @@ for remotepath in "$@"; do
     ssh $ssh_options $ssh_target "\
             sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
             -S creation \"$remotepath\"" | grep -E \
-        "^.*@(daily|$target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
+        "^.*@($target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
         sed -e '1,3d' | awk '{print $1}' |
         xargs --no-run-if-empty -n1 ssh $ssh_options $ssh_target "\
             sudo zfs destroy"

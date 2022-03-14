@@ -13,6 +13,8 @@ from planb.tests.base import PlanbTestCase
 
 
 class PlanbStorageTestCase(PlanbTestCase):
+    maxDiff = None
+
     def test_config_loading(self):
         # PLANB_STORAGE_POOLS used to be a list.
         # To be fair, the user already fixed this if he can run the tests.
@@ -40,27 +42,90 @@ class PlanbStorageTestCase(PlanbTestCase):
         storage = self.get_dummy_storage()
         dataset = storage.get_dataset('my_dataset')
         dataset.ensure_exists()
-        dataset.snapshot_create('daily-202005021743')
-        dataset.snapshot_create('daily-202005031801')
-        dataset.snapshot_create('daily-202005041602')
+        dataset.snapshot_create('planb-20200502T1743Z')
+        dataset.snapshot_create('planb-20200503T1801Z')
+        dataset.snapshot_create('planb-20200504T1602Z')
         dataset.snapshot_create('hello')
         dataset.snapshot_create('planb-20200102T0912Z')
         dataset.snapshot_create('planb-20200504T1458Z')
         dataset.snapshot_create('planb-20200504T1655Z')
+        dataset.snapshot_create('archive-20200504T1458Z')
         dataset.snapshot_create('planb-20200504T1700Z')
         self.assertEqual(dataset.snapshot_list(), [
-            'planb-20200102T0912Z', 'daily-202005021743', 'daily-202005031801',
-            'daily-202005041602', 'planb-20200504T1458Z',
-            'planb-20200504T1655Z', 'planb-20200504T1700Z', 'hello',
+            'planb-20200102T0912Z',
+            'planb-20200502T1743Z',
+            'planb-20200503T1801Z',
+            'planb-20200504T1458Z',
+            'archive-20200504T1458Z',
+            'planb-20200504T1602Z',
+            'planb-20200504T1655Z',
+            'planb-20200504T1700Z',
+            'hello',
         ])
         destroyed = dataset.snapshot_rotate(
             retention_map={'h': 2, 'y': 1})
         self.assertEqual(
-            destroyed, ['planb-20200504T1655Z', 'daily-202005031801',
-                        'daily-202005021743'])
+            destroyed, ['planb-20200504T1655Z', 'planb-20200503T1801Z',
+                        'planb-20200502T1743Z'])
         self.assertEqual(dataset.snapshot_list(), [
-            'planb-20200102T0912Z', 'daily-202005041602',
-            'planb-20200504T1458Z', 'planb-20200504T1700Z', 'hello',
+            'planb-20200102T0912Z',
+            'planb-20200504T1458Z',
+            'archive-20200504T1458Z',
+            'planb-20200504T1602Z',
+            'planb-20200504T1700Z',
+            'hello',
+        ])
+
+    def test_snapshot_rotate_only_planb_prefix(self):
+        storage = self.get_dummy_storage()
+        dataset = storage.get_dataset('my_dataset')
+        dataset.ensure_exists()
+        dataset.snapshot_create('archive-20200101T0000Z')
+        dataset.snapshot_create('archive-20200201T0000Z')
+        dataset.snapshot_create('archive-20200301T0000Z')
+        dataset.snapshot_create('archive-20200401T0000Z')
+        dataset.snapshot_create('archive-20200501T0000Z')
+        dataset.snapshot_create('planb-20200601T0000Z')
+        dataset.snapshot_create('archive-20200701T0000Z')
+        dataset.snapshot_create('archive-20200801T0000Z')
+        dataset.snapshot_create('archive-20200901T0000Z')
+        dataset.snapshot_create('archive-20201001T0000Z')
+        dataset.snapshot_create('archive-20201101T0000Z')
+        dataset.snapshot_create('archive-20201201T0000Z')
+        dataset.snapshot_create('planb-20210101T0000Z')
+        dataset.snapshot_create('archive-20210201T0000Z')
+        self.assertEqual(dataset.snapshot_list(), [
+            'archive-20200101T0000Z',
+            'archive-20200201T0000Z',
+            'archive-20200301T0000Z',
+            'archive-20200401T0000Z',
+            'archive-20200501T0000Z',
+            'planb-20200601T0000Z',
+            'archive-20200701T0000Z',
+            'archive-20200801T0000Z',
+            'archive-20200901T0000Z',
+            'archive-20201001T0000Z',
+            'archive-20201101T0000Z',
+            'archive-20201201T0000Z',
+            'planb-20210101T0000Z',
+            'archive-20210201T0000Z',
+        ])
+        destroyed = dataset.snapshot_rotate(retention_map={})  # "all"
+        self.assertEqual(destroyed, ['planb-20200601T0000Z'])
+        self.assertEqual(dataset.snapshot_list(), [
+            'archive-20200101T0000Z',
+            'archive-20200201T0000Z',
+            'archive-20200301T0000Z',
+            'archive-20200401T0000Z',
+            'archive-20200501T0000Z',
+            'archive-20200701T0000Z',
+            'archive-20200801T0000Z',
+            'archive-20200901T0000Z',
+            'archive-20201001T0000Z',
+            'archive-20201101T0000Z',
+            'archive-20201201T0000Z',
+            'planb-20210101T0000Z',    # keep one though
+            'archive-20210201T0000Z',
         ])
 
     def test_snapshot_rotate_weekly(self):
@@ -119,43 +184,45 @@ class PlanbStorageTestCase(PlanbTestCase):
         storage = self.get_dummy_storage()
         dataset = storage.get_dataset('my_dataset')
         dataset.ensure_exists()
-        dataset.snapshot_create('yearly-201805310543')
-        dataset.snapshot_create('monthly-201905180010')
-        dataset.snapshot_create('yearly-201906010002')
-        dataset.snapshot_create('monthly-201906190001')
-        dataset.snapshot_create('monthly-201907190002')
-        dataset.snapshot_create('monthly-201908190002')
-        dataset.snapshot_create('monthly-201909190002')
-        dataset.snapshot_create('monthly-201910190002')
-        dataset.snapshot_create('monthly-201911190002')
-        dataset.snapshot_create('monthly-201912192303')
-        dataset.snapshot_create('monthly-202001202303')
-        dataset.snapshot_create('monthly-202002212303')
-        dataset.snapshot_create('monthly-202003222302')
-        dataset.snapshot_create('weekly-202004182202')
-        dataset.snapshot_create('monthly-202004240906')
-        dataset.snapshot_create('daily-202004252250')
-        dataset.snapshot_create('weekly-202004252249')
-        dataset.snapshot_create('daily-202004262300')
-        dataset.snapshot_create('daily-202004272228')
-        dataset.snapshot_create('daily-202004282225')
-        dataset.snapshot_create('daily-202004292212')
-        dataset.snapshot_create('daily-202004302211')
-        dataset.snapshot_create('daily-202005012211')
-        dataset.snapshot_create('daily-202005022209')
-        dataset.snapshot_create('daily-202005032209')
-        dataset.snapshot_create('weekly-202005032209')
-        dataset.snapshot_create('daily-202005042209')
-        dataset.snapshot_create('daily-202005052208')
-        dataset.snapshot_create('daily-202005062205')
-        dataset.snapshot_create('daily-202005072205')
-        dataset.snapshot_create('daily-202005082204')
-        dataset.snapshot_create('daily-202005092203')
-        dataset.snapshot_create('daily-202005102206')
+        dataset.snapshot_create('planb-20180531T0543Z')
+        dataset.snapshot_create('planb-20190518T0010Z')
+        dataset.snapshot_create('planb-20190601T0002Z')
+        dataset.snapshot_create('planb-20190619T0001Z')
+        dataset.snapshot_create('planb-20190719T0002Z')
+        dataset.snapshot_create('planb-20190819T0002Z')
+        dataset.snapshot_create('planb-20190919T0002Z')
+        dataset.snapshot_create('planb-20191019T0002Z')
+        dataset.snapshot_create('planb-20191119T0002Z')
+        dataset.snapshot_create('planb-20191219T2303Z')
+        dataset.snapshot_create('planb-20200120T2303Z')
+        dataset.snapshot_create('planb-20200221T2303Z')
+        dataset.snapshot_create('planb-20200322T2302Z')
+        dataset.snapshot_create('planb-20200418T2202Z')
+        dataset.snapshot_create('planb-20200424T0906Z')
+        dataset.snapshot_create('planb-20200425T2250Z')
+        dataset.snapshot_create('planb-20200425T2249Z')
+        dataset.snapshot_create('planb-20200426T2300Z')
+        dataset.snapshot_create('planb-20200427T2228Z')
+        dataset.snapshot_create('planb-20200428T2225Z')
+        dataset.snapshot_create('planb-20200429T2212Z')
+        dataset.snapshot_create('planb-20200430T2211Z')
+        dataset.snapshot_create('planb-20200501T2211Z')
+        dataset.snapshot_create('planb-20200502T2209Z')
+        dataset.snapshot_create('planb-20200503T2209Z')
+        dataset.snapshot_create('planb-20200503T2210Z')
+        dataset.snapshot_create('planb-20200504T2209Z')
+        dataset.snapshot_create('planb-20200505T2208Z')
+        dataset.snapshot_create('planb-20200506T2205Z')
+        dataset.snapshot_create('planb-20200507T2205Z')
+        dataset.snapshot_create('planb-20200508T2204Z')
+        dataset.snapshot_create('planb-20200509T2203Z')
+        dataset.snapshot_create('planb-20200510T2206Z')
         destroyed = dataset.snapshot_rotate(
             {'y': 2, 'm': 12, 'w': 4, 'd': 16})
         self.assertEqual(destroyed, [
-            'daily-202005032209', 'weekly-202004252249', 'yearly-201805310543',
+            'planb-20200503T2209Z',
+            'planb-20200425T2249Z',
+            'planb-20180531T0543Z',
         ])
 
     def test_zfs_storage(self):

@@ -68,7 +68,7 @@ class TaskTestCase(PlanbTestCase):
         # Manual run does nothing if the fileset is marked as running.
         with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
-            manual_run(fileset.pk)
+            manual_run(fileset.pk, custom_snapname=None)
             self.assertEqual(
                 log.output,
                 [message(fileset, 'Manually requested backup')])
@@ -87,7 +87,7 @@ class TaskTestCase(PlanbTestCase):
         # Otherwise manual run will immediatly run the backup.
         with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
-            manual_run(fileset.pk)
+            manual_run(fileset.pk, custom_snapname=None)
             self.assertEqual(
                 log.output, [
                     message(fileset, 'Manually requested backup'),

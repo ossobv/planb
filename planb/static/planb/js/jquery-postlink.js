@@ -26,12 +26,22 @@ $.fn.extend({
                     // work
                     return;
                 }
+
                 var frm = $("<form>");
                 frm.attr({'action': $(this).attr('href'), 'method': 'post', 'style': 'display:none;'});
                 if (options.csrf_protected) {
                     // changed by wjd: added a / before the > for XHTML
                     frm.append("<input type='hidden' name='csrfmiddlewaretoken' value='" + read_cookie('csrftoken') + "'/>");
                 }
+
+                // added by wjd
+                var data = $(this).data();
+                for (var key in data) {
+                    var value = data[key];
+                    // XXX: missing escaping of key/value..
+                    frm.append("<input type='hidden' name='" + key + "' value='" + value + "'/>");
+                }
+
                 frm.appendTo("body");
                 frm.submit();
                 e.preventDefault();

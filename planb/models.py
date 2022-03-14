@@ -522,10 +522,13 @@ class Fileset(models.Model):
             self._next_snapshot_name = snapname
         return self._next_snapshot_name
 
-    def snapshot_create(self):
+    def snapshot_create(self, custom_prefix=None):
         snapname = datetime.utcnow().strftime('%Y%m%dT%H%MZ')  # XXX: see yuck
-        if settings.PLANB_PREFIX:
-            snapname = '{}-{}'.format(settings.PLANB_PREFIX, snapname)
+
+        prefix = custom_prefix or settings.PLANB_PREFIX
+        if prefix:
+            snapname = '{}-{}'.format(prefix, snapname)
+
         self.get_dataset().snapshot_create(snapname)
         logger.info('[%s] Created snapshot %s', self, snapname)
         return snapname
@@ -600,6 +603,9 @@ class BackupRun(models.Model):
         blank=True,
         # This will be populated by dutree-output.
         help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'))
+    snapshot_name = models.CharField(
+        max_length=30, blank=True,
+        help_text=_('Custom snapshot name; will not be auto-deleted if set'))
 
     @property
     def total_size(self):

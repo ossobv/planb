@@ -114,12 +114,12 @@ def yaml_digits(value):
 
 
 # Sync called task; spawns async.
-def async_backup_job(fileset):
+def async_backup_job(fileset, custom_snapname=None):
     """
     Schedule the specified fileset to backup at once.
     """
     return async_task(
-        'planb.tasks.manual_run', fileset.pk,
+        'planb.tasks.manual_run', fileset.pk, custom_snapname,
         broker=get_broker(settings.Q_MAIN_QUEUE),
         q_options={'hook': 'planb.tasks.finalize_run'})
 
@@ -150,9 +150,9 @@ def conditional_run(fileset_id):
 
 
 # Async called task:
-def manual_run(fileset_id):
+def manual_run(fileset_id, custom_snapname):
     with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
-        runner.manual_run()
+        runner.manual_run(custom_snapname)
 
 
 # Async called task:
@@ -281,13 +281,14 @@ class FilesetRunner:
 
         return self.unconditional_run()
 
-    def manual_run(self):
+    def manual_run(self, custom_snapname):
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
         fileset = Fileset.objects.get(pk=self._fileset_id)
 
         # The task is delayed, but it has been scheduled/queued.
-        logger.info('[%s] Manually requested backup', fileset)
+        logger.info('[%s] Manually requested backup%s', fileset, (
+            ' (-> {})'.format(custom_snapname) if custom_snapname else ''))
         if not fileset.is_running:
             # Hack so we get success mail. (Only update first_fail if it
             # was unset.)
@@ -295,9 +296,12 @@ class FilesetRunner:
                 first_fail=BOGODATE)
 
             # Run fileset. May raise an error. Always restores queued/running.
-            self.unconditional_run()
+            self.unconditional_run(custom_snapname=custom_snapname)
 
-    def unconditional_run(self):
+    def unconditional_run(self, custom_snapname=None):
+        assert (custom_snapname or custom_snapname is None) and (
+            custom_snapname != 'planb'), custom_snapname
+
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
         fileset = Fileset.objects.get(pk=self._fileset_id)
@@ -308,7 +312,8 @@ class FilesetRunner:
         Fileset.objects.filter(pk=fileset.pk).update(is_running=True)
         t0 = time.time()
         logger.info('[%s] Starting backup', fileset)
-        run = BackupRun.objects.create(fileset_id=fileset.pk)
+        run = BackupRun.objects.create(
+            fileset_id=fileset.pk, snapshot_name=(custom_snapname or ''))
         dataset = fileset.get_dataset()
         try:
             # Lock and open dataset for work.
@@ -376,12 +381,27 @@ class FilesetRunner:
         # Update snapshots.
         setproctitle('[backing up %d: %s]: snapshots' % (
             fileset.pk, fileset.friendly_name))
+
+        # We rotate *before* creating new snapshots: the new rotate code might
+        # otherwise deem the latest backup to be superfluous and immediately
+        # remove it. That would be a shame.
         if not transport.can_rotate_snapshot:
             fileset.snapshot_rotate()
+
+        # Extra custom snapshots?
+        if run.snapshot_name:
+            # Make an extra snapshot, which we'll keep because it has a
+            # non-standard prefix.
+            # XXX: This probably/possibly conflicts with can_create_snapshot
+            # (remotely) created snapshots? Test this..
+            fileset.snapshot_create(run.snapshot_name)
+
+        # Regular snapshots?
         if transport.can_create_snapshot:
-            snapshot = planned_snapshot
+            snapshot = planned_snapshot  # created by the transport
         else:
             snapshot = fileset.snapshot_create()
+        snapshot = run.snapshot_name or snapshot  # use custom name, if avail
 
         # Close the DB connection because it may be stale.
         connection.close()

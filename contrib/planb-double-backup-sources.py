@@ -5,6 +5,7 @@
 # Right now:
 # - assuming you're running this as root
 # - remote has planb access
+import sys
 
 from argparse import ArgumentParser
 from contextlib import contextmanager
@@ -38,10 +39,18 @@ class DatasetStorage:
                 flock(lock_f, LOCK_UN)
 
     def add(self, dataset):
-        self.datasets.add(dataset)
+        if dataset not in self.datasets:
+            self.datasets.add(dataset)
+            print('+double', dataset, file=sys.stderr)
+            return True
+        return False
 
     def discard(self, dataset):
-        self.datasets.discard(dataset)
+        if dataset in self.datasets:
+            self.datasets.discard(dataset)
+            print('-double', dataset, file=sys.stderr)
+            return True
+        return False
 
     def write(self):
         with self.open('w') as f:
@@ -91,15 +100,25 @@ def main():
     storage = DatasetStorage(DBDIR / host)
 
     mutate = bool(args.add or args.discard)
+    mutated = False
     if mutate:
         for dataset in args.discard:
-            storage.discard(dataset)
+            mutated = storage.discard(dataset) or mutated
         for dataset in args.add:
-            storage.add(dataset)
-        storage.write()
+            mutated = storage.add(dataset) or mutated
     elif not args.local:
-        for dataset in get_server_datasets(args.server):
-            storage.add(dataset)
+        server_sets = get_server_datasets(args.server)
+        for dataset in server_sets:
+            mutated = storage.add(dataset) or mutated
+        local_only_set = set(storage) - set(server_sets)
+        if local_only_set:
+            print(
+                'WARNING: These do not have the double-backup flag anymore',
+                file=sys.stderr)
+            for dataset in sorted(local_only_set):
+                print('-', dataset, file=sys.stderr)
+
+    if mutated:
         storage.write()
 
     if not mutate:

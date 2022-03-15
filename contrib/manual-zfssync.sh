@@ -202,7 +202,9 @@ _recv() {
         false
         return
     fi
-    echo "info: Retrieving $size bytes from" \
+    local human_size=$(printf '%015d' $size |
+        sed -e 's/\([0-9]\{3\}\)/\1,/g;s/^[0,]*//;s/,$//')
+    echo "info: Retrieving $human_size bytes from" \
          "$remote${commonsnap:-@(void)}..${remotesnap#*@}" >&2
 
     # Fetch the data from remote.

@@ -26,6 +26,8 @@ while true; do
     if test "$RESTART_EVERY" -eq 0; then
         break
     else
+        echo "Sleeping for $RESTART_EVERY seconds"
         sleep "$RESTART_EVERY"
+        echo " --"
     fi
 done

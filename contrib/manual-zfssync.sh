@@ -7,6 +7,9 @@
 # - remote has zfs list/get powers
 # - remote has 'sudo zfs send --raw' powers
 
+# Envvars:
+# - MANUAL_ZFSSYNC_OVERWRITE_NEWER_SNAPSHOTS=1
+
 ssh_target="$1"; shift  # remotebackup@DEST
 REMOTE_CMD="/usr/bin/ssh $ssh_target"  # options?
 
@@ -109,6 +112,7 @@ _recv() {
     local theirsnaps
     local remotesnap
     local commonsnap=""
+    local newer_snapshots=""
 
     # Get remote snapshots.
     theirsnaps=$(timeout -s9 120s $REMOTE_CMD \
@@ -154,7 +158,10 @@ _recv() {
                 commonsnap=$match  # @planb-12345
                 break
             fi
+            newer_snapshots="${newer_snapshots} $match"
         done
+        newer_snapshots=${newer_snapshots# }
+
         if test "$remotesnap" = "$commonsnap"; then
             echo "info: We already have $remote$remotesnap" >&2
             return
@@ -225,10 +232,21 @@ _recv() {
     # > since most recent snapshot
     #
     # Also, add -u to _not_ mount the filesystem after/during recv.
+    local zfs_recv_force=
+    if test -n "$newer_snapshots"; then
+        if test "${MANUAL_ZFSSYNC_OVERWRITE_NEWER_SNAPSHOTS:-0}" != 0; then
+            zfs_recv_force=-F
+            echo "warning: We have newer snapshots ($newer_snapshots) after" \
+               "$remote${commonsnap:-@(void)}, adding recv -F" >&2
+        else
+            echo "warning: We have never snapshots ($newer_snapshots) after" \
+               "$remote${commonsnap:-@(void)}, expect failure" >&2
+        fi
+    fi
     $REMOTE_CMD "sudo zfs send $flags $remote_arg" |
         pv --average-rate --bytes --eta --progress --eta \
             --size "$size" --width 72 |
-            zfs recv -u -o atime=off -o readonly=on "$local"
+            zfs recv $zfs_recv_force -u -o atime=off -o readonly=on "$local"
 }
 
 recv_initial_and_some_incrementals() {

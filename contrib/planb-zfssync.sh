@@ -1,6 +1,7 @@
 #!/bin/sh -eux
 
-# Usage: .../planb-zfssync [--lz4|--plain|--qlz1] root@MACHINE DISKS..
+# Usage: .../planb-zfssync [--recursive] [--lz4|--plain|--qlz1]
+#        root@MACHINE DISKS..
 #
 # Where DISKS are one or more of:
 #   tank/X
@@ -23,10 +24,15 @@ test -z "$planb_storage_name" && exit 3
 # transfer of plain data).
 #
 # See: zfs send 2>&1 | grep '^[[:blank:]]*send [[]-[^]]*w[^]]*[]] '
+zfs_recursive=false
 zfs_send_option=--raw  # (or the '-w' option)  # XXX DO NOT USE FOR UNENCRYPTED
 zfs_recv_option='-o readonly=on'
 deflate=
 inflate=
+if test "${1:-}" = --recursive; then
+    zfs_recursive=true
+    shift
+fi
 case "${1:-}" in
 --lz4)
     zfs_send_option='--compressed --large-block'
@@ -135,9 +141,10 @@ for remotepath_localpath in "$@"; do
             sed -e 's/^[^@]*@//;s/[[:blank:]].*//;1q')
         if test -z "$prev_target_snapshot"; then
             # Does not exist. Create.
+            $zfs_recursive && tmp_opt=-r || tmp_opt=
             src=$remotepath@$target_snapshot
             ssh $ssh_options $ssh_target "\
-                sudo zfs snapshot \"$src\" && \
+                sudo zfs snapshot $tmp_opt \"$src\" && \
                 sudo zfs set planb:owner=$planb_guid \"$src\""
         else
             # Exists, use that.
@@ -145,12 +152,22 @@ for remotepath_localpath in "$@"; do
         fi
     else
         # There was a recent snapshot locally. Make a new one remotely.
+        $zfs_recursive && tmp_opt=-r || tmp_opt=
         src=$remotepath@$target_snapshot
-        ssh $ssh_options $ssh_target "\
-            sudo zfs snapshot \"$src\" && \
-            sudo zfs set planb:owner=$planb_guid \"$src\""
+        if $zfs_recursive; then
+            ssh $ssh_options $ssh_target "\
+                sudo zfs snapshot -r \"$src\" && \
+                sudo zfs list -H -o name -r -t snapshot | \
+                grep '@$target_snapshot\$' | \
+                xargs sudo zfs set planb:owner=$planb_guid"
+        else
+            ssh $ssh_options $ssh_target "\
+                sudo zfs snapshot \"$src\" && \
+                sudo zfs set planb:owner=$planb_guid \"$src\""
+        fi
     fi
 
+    $zfs_recursive && tmp_opt=-R || tmp_opt=
     if test -n "$recent_snapshot"; then
         # Undo any local changes (properties?)
         sudo zfs rollback "$dst@$recent_snapshot"
@@ -159,22 +176,24 @@ for remotepath_localpath in "$@"; do
         # Unsure about the "--props" setting to send properties..
         if test -n "$deflate$inflate"; then
             ssh $ssh_options $ssh_target "\
-                sudo zfs send $zfs_send_option -I \"$src_prev\" \"$src\" |\
-                  \"$deflate\"" | "$inflate" |
+                sudo zfs send $tmp_opt $zfs_send_option -I \"$src_prev\" \
+                  \"$src\" | \"$deflate\"" | "$inflate" |
                   sudo zfs recv $zfs_recv_option "$dst"
         else
             ssh $ssh_options $ssh_target "\
-                sudo zfs send $zfs_send_option -I \"$src_prev\" \"$src\"" |
+                sudo zfs send $tmp_opt $zfs_send_option -I \"$src_prev\" \
+                \"$src\"" |
                 sudo zfs recv $zfs_recv_option "$dst"
         fi
     else
         if test -n "$deflate$inflate"; then
             ssh $ssh_options $ssh_target "\
-                sudo zfs send $zfs_send_option \"$src\" | \"$deflate\"" |
-                "$inflate" | sudo zfs recv $zfs_recv_option "$dst"
+                sudo zfs send $tmp_opt $zfs_send_option \"$src\" | \
+                \"$deflate\"" | "$inflate" |
+                sudo zfs recv $zfs_recv_option "$dst"
         else
             ssh $ssh_options $ssh_target "\
-                sudo zfs send $zfs_send_option \"$src\"" |
+                sudo zfs send $tmp_opt $zfs_send_option \"$src\"" |
                 sudo zfs recv $zfs_recv_option "$dst"
         fi
     fi
@@ -205,10 +224,20 @@ for remotepath_localpath in "$@"; do
     else
         remotepath=$remotepath_localpath
     fi
-    ssh $ssh_options $ssh_target "\
-        sudo zfs list -d 1 -Hpo planb:owner,name -t snapshot \
-          -S creation \"$remotepath\" | \
-        grep -E '^$planb_guid[[:blank:]].*@($target_snapshot_prefix)-' | \
-        sed -e '1,3d;s/^$planb_guid[[:blank:]]//' | \
-        xargs --no-run-if-empty -d'\\n' -n1 sudo zfs destroy"
+    if $zfs_recursive; then
+        ssh $ssh_options $ssh_target "\
+            sudo zfs list -Honame -r -t filesystem,volume \"$remotepath\" | \
+            while read -r fs; do sudo zfs list -d 1 -Hpo planb:owner,name \
+                -t snapshot -S creation \"\$fs\" | \
+            grep -E '^$planb_guid[[:blank:]].*@($target_snapshot_prefix)-' | \
+            sed -e '1,3d;s/^$planb_guid[[:blank:]]//'; done | \
+            xargs --no-run-if-empty -d'\\n' -n1 sudo zfs destroy"
+    else
+        ssh $ssh_options $ssh_target "\
+            sudo zfs list -d 1 -Hpo planb:owner,name -t snapshot \
+              -S creation \"$remotepath\" | \
+            grep -E '^$planb_guid[[:blank:]].*@($target_snapshot_prefix)-' | \
+            sed -e '1,3d;s/^$planb_guid[[:blank:]]//' | \
+            xargs --no-run-if-empty -d'\\n' -n1 sudo zfs destroy"
+    fi
 done

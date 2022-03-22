@@ -195,12 +195,20 @@ for remotepath_localpath in "$@"; do
 done
 
 # Keep only three snapshots on remote machine. Filter by planb:owner=GUID.
-for remotepath in "$@"; do
+for remotepath_localpath in "$@"; do
+    # The paths to backup may be:
+    #   rpool/a/b/c
+    # or:
+    #   rpool/a/b/c:pretty-name
+    if test "${remotepath_localpath#*:}" != "$remotepath_localpath"; then
+        remotepath=${remotepath_localpath%%:*}
+    else
+        remotepath=$remotepath_localpath
+    fi
     ssh $ssh_options $ssh_target "\
-            sudo zfs list -d 1 -Hpo name,planb:owner -t snapshot \
-            -S creation \"$remotepath\"" | grep -E \
-        "^.*@($target_snapshot_prefix)-.*[[:blank:]]$planb_guid\$" |
-        sed -e '1,3d' | awk '{print $1}' |
-        xargs --no-run-if-empty -n1 ssh $ssh_options $ssh_target "\
-            sudo zfs destroy"
+        sudo zfs list -d 1 -Hpo planb:owner,name -t snapshot \
+          -S creation \"$remotepath\" | \
+        grep -E '^$planb_guid[[:blank:]].*@($target_snapshot_prefix)-' | \
+        sed -e '1,3d;s/^$planb_guid[[:blank:]]//' | \
+        xargs --no-run-if-empty -d'\\n' -n1 sudo zfs destroy"
 done

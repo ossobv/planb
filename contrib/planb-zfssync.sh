@@ -23,23 +23,26 @@ test -z "$planb_storage_name" && exit 3
 # transfer of plain data).
 #
 # See: zfs send 2>&1 | grep '^[[:blank:]]*send [[]-[^]]*w[^]]*[]] '
-zfs_send_option=--raw  # (or the '-w' option)
+zfs_send_option=--raw  # (or the '-w' option)  # XXX DO NOT USE FOR UNENCRYPTED
 zfs_recv_option='-o readonly=on'
 deflate=
 inflate=
 case "${1:-}" in
 --lz4)
     zfs_send_option='--compressed --large-block'
+    zfs_recv_option="$zfs_recv_option -x encryption"
     shift;
     ;;
 --qlz1)
     zfs_send_option=
+    zfs_recv_option="$zfs_recv_option -x encryption"
     deflate=qlzip1
     inflate=qlzcat1
     shift
     ;;
 --plain)
     zfs_send_option=
+    zfs_recv_option="$zfs_recv_option -x encryption"
     shift
     ;;
 -*|'')

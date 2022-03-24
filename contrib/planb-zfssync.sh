@@ -31,6 +31,11 @@ deflate=
 inflate=
 if test "${1:-}" = --recursive; then
     zfs_recursive=true
+    # BEWARE: Recursive sync is fragile. When it's broken, you may need to zfs
+    # rollback on dest (manually recursing) so that all snapshots are at the
+    # same point in time again (destroy newer snapshots on source).
+    # Just adding -F does not cut it.
+    #zfs_recv_option="$zfs_recv_option -F"  # force our way out of madness
     shift
 fi
 case "${1:-}" in
@@ -88,7 +93,7 @@ contains=$(sudo zfs get -Hpo value planb:contains "$planb_storage_name")
 if test "$contains" != "filesystems"; then
     # Is there something in data?
     # We should be in $planb_storage_destination == 'data', because that's
-    # where the "lock" is at. We should renamed that to.. let's say, _lock.
+    # where the "lock" is at. We should rename that to, let's say, _lock.
     test "$(find "$planb_storage_destination")" = \
         "$planb_storage_destination"  # no contents allowed!
     # Now, set the filesystems property on this.

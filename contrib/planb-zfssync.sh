@@ -119,6 +119,8 @@ test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
 
 # Download snapshots (make them if necessary).
 for remotepath_localpath in "$@"; do
+    zfs_recv_option_tmp=$zfs_recv_option
+
     # The paths to backup may be:
     #   rpool/a/b/c
     # or:
@@ -131,6 +133,29 @@ for remotepath_localpath in "$@"; do
         our_path=$(escape "$remotepath")
     fi
     dst=$planb_storage_name/$our_path
+
+    # Disable mounting of individual filesystems on this mount point.
+    # Mounting those here would mess up the parent mount.
+    type=$(sudo zfs get -o value -Hp type "$dst" 2>/dev/null ||
+        ssh $ssh_options $ssh_target \
+          "sudo zfs get -o value -Hp type '$remotepath'")
+    case "$type" in
+    filesystem)
+        # No automounting, especially not on their regular paths. Do not do
+        # this afterwards (using zfs set), as mount attempts may be done
+        # already.
+        zfs_recv_option_tmp="$zfs_recv_option\
+ -o canmount=off -o mountpoint=legacy"
+        ;;
+    volume)
+        # cannot receive incremental stream: property 'canmount' does not apply
+        #   to datasets of this type
+        ;;
+    *)
+        echo "Unexpected FS type $dst: $type" >&2
+        exit 1
+        ;;
+    esac
 
     # Ensure there is a snapshot for us.
     recent_snapshot=$(sudo zfs list -d 1 -t snapshot -Hpo name \
@@ -183,39 +208,25 @@ for remotepath_localpath in "$@"; do
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $tmp_opt $zfs_send_option -I \"$src_prev\" \
                   \"$src\" | \"$deflate\"" | "$inflate" |
-                  sudo zfs recv $zfs_recv_option "$dst"
+                  sudo zfs recv $zfs_recv_option_tmp "$dst"
         else
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $tmp_opt $zfs_send_option -I \"$src_prev\" \
                 \"$src\"" |
-                sudo zfs recv $zfs_recv_option "$dst"
+                sudo zfs recv $zfs_recv_option_tmp "$dst"
         fi
     else
         if test -n "$deflate$inflate"; then
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $tmp_opt $zfs_send_option \"$src\" | \
                 \"$deflate\"" | "$inflate" |
-                sudo zfs recv $zfs_recv_option "$dst"
+                sudo zfs recv $zfs_recv_option_tmp "$dst"
         else
             ssh $ssh_options $ssh_target "\
                 sudo zfs send $tmp_opt $zfs_send_option \"$src\"" |
-                sudo zfs recv $zfs_recv_option "$dst"
+                sudo zfs recv $zfs_recv_option_tmp "$dst"
         fi
     fi
-
-    # Disable mounting of individual filesystems on this mount point.
-    # Mounting those here would mess up the parent mount.
-    type=$(sudo zfs get -o value -Hp type "$dst")
-    case "$type" in
-    filesystem)
-        sudo zfs set canmount=off mountpoint=legacy "$dst"
-        ;;
-    volume)
-        ;;
-    *)
-        echo "Unexpected FS type $dst: $type" >&2
-        ;;
-    esac
 done
 
 # Keep only three snapshots on remote machine. Filter by planb:owner=GUID.

@@ -424,7 +424,7 @@ class SwiftSyncWorkerStatus:
     >>> sum([s, s])
     <SwiftSyncWorkerStatus({config_errors: 2, failed_fetches: 0})>
     """
-    __slots__ = ('config_errors', 'failed_fetches')
+    __slots__ = ('config_errors', 'failed_fetches', 'unhandled_errors')
 
     def __init__(self):
         for attr in self.__slots__:
@@ -588,9 +588,11 @@ class SwiftSync:
         # still clear out the list. Perhaps the list was bad and we simply
         # need to fetch a clean new one (on the next run, that is).
         self.clean_lists()
+        log.info('Sync done (status: %s)', status)
 
         if status:
             if (not status.config_errors
+                    and not status.unhandled_errors
                     and sum(tarr[1] for tarr in times) > 1800):
                 # Sync took more than 30 minutes and there were no
                 # terrible failures. Exit 0.
@@ -676,7 +678,6 @@ class SwiftSync:
         os.unlink(self._path_add)
         os.unlink(self._path_del)
         os.unlink(self._path_utime)
-        log.info('Sync done')
 
     def _make_new_list(self):
         """
@@ -902,6 +903,10 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
         self._success_fp = NamedTemporaryFile(delete=True, mode='w+')
         try:
             self._process_source_list()
+        except Exception as e:
+            self.error = e
+        else:
+            self.error = None
         finally:
             self._success_fp.flush()
             log.info('%s: Stopping thread', self.__class__.__name__)
@@ -995,6 +1000,17 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                         raise ValueError('early abort during {}'.format(
                             record.container_path))
                     out_fp.write(data)
+        except OSError as e:
+            log.error(
+                'Download failure for %r (from %r): %s',
+                path, record.container_path, e)
+            try:
+                # FIXME: also remove directories we just created?
+                os.unlink(path)
+            except (FileNotFoundError, OSError) as e2:  # ENAMETOOLONG(?)
+                log.error(
+                    'Got exception %r/%s during unlink %s', e2, e2, path)
+            raise e
         except Exception as e:
             log.warning(
                 'Download failure for %r (from %r): %s',
@@ -1007,7 +1023,7 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                     os.unlink(path)
                 except FileNotFoundError:
                     pass
-            raise self.ProcessRecordFailure()
+            raise self.ProcessRecordFailure() from e
 
     def _add_new_record_valid(self, record, path):
         os.utime(path, ns=(record.modified, record.modified))
@@ -1016,11 +1032,8 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
             log.error(
                 'Filesize mismatch for %r (from %r): %d != %d',
                 path, record.container_path, record.size, local_size)
-            try:
-                # FIXME: also remove directories we just created?
-                os.unlink(path)
-            except FileNotFoundError:
-                pass
+            # FIXME: also remove directories we just created?
+            os.unlink(path)  # this should not fail
             raise self.ProcessRecordFailure()
 
 
@@ -1136,6 +1149,11 @@ class SwiftSyncBase:
                 thread.start()
             for thread in threads:
                 thread.join()
+                if thread.error:
+                    thread.status.unhandled_errors += 1
+                    log.warning(
+                        'Got unhandled exception %s in %s', thread.error,
+                        thread.name)
             _MT_HAS_THREADS = False
 
             success_fps = [th.take_success_file() for th in threads]

@@ -409,6 +409,54 @@ class ListLine:
                 and self.path == other.path)
 
 
+class SwiftSyncWorkerStatus:
+    """
+    Status class. Is True if anything was wrong.
+
+    >>> s = SwiftSyncWorkerStatus()
+    >>> bool(s)
+    False
+    >>> s.badattr = 1
+    AttributeError
+    >>> s.config_errors += 1
+    >>> bool(s)
+    True
+    >>> sum([s, s])
+    <SwiftSyncWorkerStatus({config_errors: 2, failed_fetches: 0})>
+    """
+    __slots__ = ('config_errors', 'failed_fetches')
+
+    def __init__(self):
+        for attr in self.__slots__:
+            setattr(self, attr, 0)
+
+    def __bool__(self):
+        return any(getattr(self, attr) for attr in self.__slots__)
+
+    def __int__(self):
+        return sum(getattr(self, attr) for attr in self.__slots__)
+
+    def __add__(self, other):
+        "Add, so we can sum() these"
+        new = self.__class__()
+        for attr in self.__slots__:
+            setattr(new, attr, getattr(self, attr) + getattr(other, attr))
+        return new
+
+    def __radd__(self, other):
+        "Reverse add, to make the sum() initial element work"
+        assert other == 0, ('expected [0 + SwiftSyncWorkerStatus()]', other)
+        return self.__add__(self.__class__())
+
+    def __str__(self):
+        return '{{{}}}'.format(', '.join(
+            '{}: {}'.format(attr, getattr(self, attr))
+            for attr in self.__slots__))
+
+    def __repr__(self):
+        return '<SwiftSyncWorkerStatus({})>'.format(str(self))
+
+
 class SwiftSync:
     def __init__(self, config, container=None):
         self.config = config
@@ -508,9 +556,9 @@ class SwiftSync:
             # Do work.
             self.make_lists()
             failures = 0
-            failures += self.delete_from_list()
-            failures += self.add_from_list()
-            failures += self.update_from_list()
+            failures += int(self.delete_from_list())
+            failures += int(self.add_from_list())
+            failures += int(self.update_from_list())
 
             # If we bailed out with failures, but without an exception, we'll
             # still clear out the list. Perhaps the list was bad and we simply
@@ -564,7 +612,7 @@ class SwiftSync:
         # NOTE: We don't expect any failures here, ever. This concerns
         # only local file deletions. If they fail, then something is
         # really wrong (bad filesystem, or datalist out of sync).
-        return 0  # no (recoverable) failures
+        return SwiftSyncWorkerStatus()  # no (recoverable) failures
 
     def add_from_list(self):
         """
@@ -574,9 +622,9 @@ class SwiftSync:
             log.info('Adding new files (SwiftSyncAdder)')
             adder = SwiftSyncAdder(self, self._path_add)
             adder.work()
-            return adder.failures  # (possibly recoverable) failure count
+            return adder.status  # (possibly recoverable) failure count
 
-        return 0  # no (recoverable) failures
+        return SwiftSyncWorkerStatus()  # no (recoverable) failures
 
     def update_from_list(self):
         """
@@ -586,9 +634,9 @@ class SwiftSync:
             log.info('Updating timestamp for updated files (SwiftSyncUpdater)')
             updater = SwiftSyncUpdater(self, self._path_utime)
             updater.work()
-            return updater.failures  # (possibly recoverable) failure count
+            return updater.status  # (possibly recoverable) failure count
 
-        return 0  # no (recoverable) failures
+        return SwiftSyncWorkerStatus()  # no (recoverable) failures
 
     def clean_lists(self):
         """
@@ -819,7 +867,7 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
 
         # If there were one or more failures, store them so they can be used by
         # the caller.
-        self.failures = 0
+        self.status = SwiftSyncWorkerStatus()
 
     def run(self):
         log.info('%s: Started thread', self.__class__.__name__)
@@ -880,19 +928,19 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                     log.warning(
                         ('Skipping record %r (from %r) because of trailing '
                          'slash'), dst_path, record.container_path)
-                    self.failures += 1
+                    self.status.config_errors += 1
                     continue
 
                 # Download the file into the appropriate directory.
                 try:
                     self.process_record(record, container, dst_path)
                 except ProcessRecordFailure:
-                    self.failures += 1
+                    self.status.failed_fetches += 1
                 else:
                     self.process_record_success(record)
 
-        if self.failures:
-            log.warning('At list EOF, got %d failures', self.failures)
+        if self.status:
+            log.warning('At list EOF, got %s status', self.status)
 
     def _add_new_record_dir(self, path):
         try:
@@ -1073,7 +1121,7 @@ class SwiftSyncBase:
         # Collect and sum failure count to signify when not everything is fine,
         # even though we did our best. If we're here, all threads ended
         # successfully, so they all have a valid failures count.
-        self.failures = sum(th.failures for th in threads)
+        self.status = sum(th.status for th in threads)
 
     def merge_success(self, success_fp):
         raise NotImplementedError()

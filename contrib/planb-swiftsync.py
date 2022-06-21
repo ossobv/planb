@@ -433,6 +433,11 @@ class SwiftSync:
         self._path_del = os.path.join(metadata_path, 'planb-swiftsync.del')
         self._path_add = os.path.join(metadata_path, 'planb-swiftsync.add')
         self._path_utime = os.path.join(metadata_path, 'planb-swiftsync.utime')
+        # ^-- the work we have to do to reach the goal
+        # NOTE: For changed files, we get an entry in both del and add.
+        # Sometimes however, only the mtime is changed. For that case we
+        # use the utime list, where we check the hash before
+        # downloading/overwriting.
 
     def get_containers(self):
         if not hasattr(self, '_get_containers'):
@@ -536,13 +541,14 @@ class SwiftSync:
 
         # Make the add/del/utime lists based off cur/new.
         #
-        # * The add/del lists are obvious.
+        # * The add/del lists are obvious. Changed files get an entry in
+        #   both del and add.
         #
         # * The utime list is for cases when only the mtime has changed:
         #   To avoid rewriting (duplicating) the file on COW storage (ZFS),
-        #   we'll want to check the file hash to avoid rewriting it if it's the
-        #   same.  (Useful when the source files have been moved/copied and the
-        #   X-Timestamps have thus been renewed.)
+        #   we'll want to check the file hash to avoid rewriting it if it's
+        #   the same. (Useful when the source files have been moved/copied
+        #   and the X-Timestamps have thus been renewed.)
         #
         self._make_diff_lists()
 
@@ -551,18 +557,21 @@ class SwiftSync:
         Delete from planb-swiftsync.del.
         """
         if os.path.getsize(self._path_del):
-            log.info('Removing old files')
+            log.info('Removing old files (SwiftSyncDeleter)')
             deleter = SwiftSyncDeleter(self, self._path_del)
             deleter.work()
 
+        # NOTE: We don't expect any failures here, ever. This concerns
+        # only local file deletions. If they fail, then something is
+        # really wrong (bad filesystem, or datalist out of sync).
         return 0  # no (recoverable) failures
 
     def add_from_list(self):
         """
-        Add from planb-swiftsync.del.
+        Add from planb-swiftsync.add.
         """
         if os.path.getsize(self._path_add):
-            log.info('Adding new files')
+            log.info('Adding new files (SwiftSyncAdder)')
             adder = SwiftSyncAdder(self, self._path_add)
             adder.work()
             return adder.failures  # (possibly recoverable) failure count
@@ -571,10 +580,10 @@ class SwiftSync:
 
     def update_from_list(self):
         """
-        Add from planb-swiftsync.del.
+        Check/update from planb-swiftsync.utime.
         """
         if os.path.getsize(self._path_utime):
-            log.info('Updating timestamp for updated files')
+            log.info('Updating timestamp for updated files (SwiftSyncUpdater)')
             updater = SwiftSyncUpdater(self, self._path_utime)
             updater.work()
             return updater.failures  # (possibly recoverable) failure count
@@ -820,13 +829,13 @@ class SwiftSyncMultiAdder(threading.Thread):
         return ret
 
     def run(self):
-        log.info('Started thread')
+        log.info('%s: Started thread', self.__class__.__name__)
         self._success_fp = NamedTemporaryFile(delete=True, mode='w+')
         try:
             self._process_source_list()
         finally:
             self._success_fp.flush()
-            log.info('Stopping thread')
+            log.info('%s: Stopping thread', self.__class__.__name__)
 
     def process_record(self, record, container, dst_path):
         """
@@ -1161,7 +1170,7 @@ class SwiftSyncUpdater(SwiftSyncAdder):
         """
         Merge "update" success_fp into (the big) .cur list.
 
-        NOTE: _merge_success will close success_fp.
+        NOTE: merge_success will close success_fp.
         """
         if success_fp is None:
             return

@@ -801,9 +801,9 @@ class SwiftSyncDeleter:
                 success_fp.write(record.line)
 
 
-class SwiftSyncMultiAdder(threading.Thread):
+class SwiftSyncMultiWorkerBase(threading.Thread):
     """
-    Multithreaded SwiftSyncAdder.
+    Multithreaded SwiftSyncWorkerBase class.
     """
     class ProcessRecordFailure(Exception):
         pass
@@ -821,13 +821,6 @@ class SwiftSyncMultiAdder(threading.Thread):
         # the caller.
         self.failures = 0
 
-    def take_success_file(self):
-        """
-        You're allowed to take ownership of the file... once.
-        """
-        ret, self._success_fp = self._success_fp, None
-        return ret
-
     def run(self):
         log.info('%s: Started thread', self.__class__.__name__)
         self._success_fp = NamedTemporaryFile(delete=True, mode='w+')
@@ -837,18 +830,15 @@ class SwiftSyncMultiAdder(threading.Thread):
             self._success_fp.flush()
             log.info('%s: Stopping thread', self.__class__.__name__)
 
-    def process_record(self, record, container, dst_path):
+    def take_success_file(self):
         """
-        Process a single record: download it.
+        You're allowed to take ownership of the file... once.
+        """
+        ret, self._success_fp = self._success_fp, None
+        return ret
 
-        If there was an error, it cleans up after itself and raises a
-        ProcessRecordFailure.
-        """
-        self._add_new_record_dir(dst_path)
-        if not self._add_new_record_download(record, container, dst_path):
-            raise self.ProcessRecordFailure()
-        if not self._add_new_record_valid(record, dst_path):
-            raise self.ProcessRecordFailure()
+    def process_record(self, record, container, dst_path):
+        raise NotImplementedError()
 
     def process_record_success(self, record):
         """
@@ -941,8 +931,7 @@ class SwiftSyncMultiAdder(threading.Thread):
                     os.unlink(path)
                 except FileNotFoundError:
                     pass
-            return False
-        return True
+            raise self.ProcessRecordFailure()
 
     def _add_new_record_valid(self, record, path):
         os.utime(path, ns=(record.modified, record.modified))
@@ -956,12 +945,91 @@ class SwiftSyncMultiAdder(threading.Thread):
                 os.unlink(path)
             except FileNotFoundError:
                 pass
-            return False
-        return True
+            raise self.ProcessRecordFailure()
 
 
-class SwiftSyncAdder:
-    worker_class = SwiftSyncMultiAdder
+class SwiftSyncMultiAdder(SwiftSyncMultiWorkerBase):
+    def process_record(self, record, container, dst_path):
+        """
+        Process a single record: download it.
+
+        If there was an error, it cleans up after itself and raises a
+        ProcessRecordFailure.
+        """
+        self._add_new_record_dir(dst_path)
+        self._add_new_record_download(record, container, dst_path)
+        self._add_new_record_valid(record, dst_path)
+
+
+class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
+    """
+    Multithreaded SwiftSyncUpdater.
+    """
+    def process_record(self, record, container, dst_path):
+        """
+        Process a single record: download it.
+
+        Raises ProcessRecordFailure on error.
+        """
+        try:
+            obj_stat = self._swiftconn.head_object(container, record.path)
+        except ClientException as e:
+            log.warning(
+                'File %r %r disappeared from under us when doing a HEAD (%s)',
+                container, record.path, e)
+            raise self.ProcessRecordFailure()
+
+        etag = str(obj_stat.get('etag'))
+        if len(etag) != 32 or any(i not in '0123456789abcdef' for i in etag):
+            log.warning(
+                'File %r %r presented bad etag: %r', container, record.path,
+                obj_stat)
+            raise self.ProcessRecordFailure()
+
+        # Note that guard against odd races, we must also check the record
+        # against this new head. This also asserts that the file size is still
+        # the same.
+        new_record = ListLine.from_swift_head(
+            record.container, record.path, obj_stat)
+        if new_record.line != record.line:
+            log.warning(
+                'File was updated in the mean time? %r != %r',
+                record.line, new_record.line)
+            raise self.ProcessRecordFailure()
+
+        # Nice, we have an etag, and we were lured here with the prospect that
+        # the file was equal to what we already had.
+        md5digest = self._md5sum(dst_path)  # should exist and succeed
+
+        # If the hash is equal, then all is awesome.
+        if md5digest == etag:
+            return
+
+        # If not, then we need to download a new file and overwrite it.
+        # XXX: if this fails, we have invalid state! the file could be
+        # removed while our lists will not have it. This needs fixing.
+        self._add_new_record_download(record, container, dst_path)
+        self._add_new_record_valid(record, dst_path)
+
+    def _md5sum(self, path):
+        m = md5()
+        with open(path, 'rb') as fp:
+            while True:
+                buf = fp.read(128 * 1024)  # larger is generally better
+                if not buf:
+                    break
+                m.update(buf)
+
+        hexdigest = m.hexdigest()
+        assert (
+            len(hexdigest) == 32
+            and all(i in '0123456789abcdef' for i in hexdigest)), hexdigest
+
+        return hexdigest
+
+
+class SwiftSyncBase:
+    worker_class = NotImplemented
 
     def __init__(self, swiftsync, source):
         self._swiftsync = swiftsync
@@ -1008,24 +1076,7 @@ class SwiftSyncAdder:
         self.failures = sum(th.failures for th in threads)
 
     def merge_success(self, success_fp):
-        """
-        Merge "add" success_fp into (the big) .cur list.
-
-        NOTE: merge_success will close success_fp.
-        """
-        if success_fp is None:
-            return
-        try:
-            size = success_fp.tell()
-            success_fp.seek(0)
-            if size:
-                log.info(
-                    '%s: Merging %d bytes of added files into current',
-                    self.__class__.__name__, size)
-                success_fp.seek(0)
-                self._swiftsync.update_cur_list_from_added(success_fp)
-        finally:
-            success_fp.close()
+        raise NotImplementedError()
 
     def _merge_multi_success(self, success_fps):
         """
@@ -1099,71 +1150,31 @@ class SwiftSyncAdder:
         return combined_fp
 
 
-class SwiftSyncMultiUpdater(SwiftSyncMultiAdder):
-    """
-    Multithreaded SwiftSyncUpdater.
-    """
-    def process_record(self, record, container, dst_path):
+class SwiftSyncAdder(SwiftSyncBase):
+    worker_class = SwiftSyncMultiAdder
+
+    def merge_success(self, success_fp):
         """
-        Process a single record: download it.
+        Merge "add" success_fp into (the big) .cur list.
 
-        Raises ProcessRecordFailure on error.
+        NOTE: merge_success will close success_fp.
         """
-        try:
-            obj_stat = self._swiftconn.head_object(container, record.path)
-        except ClientException as e:
-            log.warning(
-                'File %r %r disappeared from under us when doing a HEAD (%s)',
-                container, record.path, e)
-            raise self.ProcessRecordFailure()
-
-        etag = str(obj_stat.get('etag'))
-        if len(etag) != 32 or any(i not in '0123456789abcdef' for i in etag):
-            log.warning(
-                'File %r %r presented bad etag: %r', container, record.path,
-                obj_stat)
-            raise self.ProcessRecordFailure()
-
-        # Note that guard against odd races, we must also check the record
-        # against this new head. This also asserts that the file size is still
-        # the same.
-        new_record = ListLine.from_swift_head(
-            record.container, record.path, obj_stat)
-        if new_record.line != record.line:
-            log.warning(
-                'File was updated in the mean time? %r != %r',
-                record.line, new_record.line)
-            raise self.ProcessRecordFailure()
-
-        # Nice, we have an etag, and we were lured here with the prospect that
-        # the file was equal to what we already had.
-        md5digest = self._md5sum(dst_path)  # should exist and succeed
-
-        # If the hash is equal, then all is awesome.
-        if md5digest == etag:
+        if success_fp is None:
             return
-
-        # If not, then we need to download a new file and overwrite it.
-        return super().process_record(record, container, dst_path)
-
-    def _md5sum(self, path):
-        m = md5()
-        with open(path, 'rb') as fp:
-            while True:
-                buf = fp.read(8192)
-                if not buf:
-                    break
-                m.update(buf)
-
-        hexdigest = m.hexdigest()
-        assert (
-            len(hexdigest) == 32
-            and all(i in '0123456789abcdef' for i in hexdigest)), hexdigest
-
-        return hexdigest
+        try:
+            size = success_fp.tell()
+            success_fp.seek(0)
+            if size:
+                log.info(
+                    '%s: Merging %d bytes of added files into current',
+                    self.__class__.__name__, size)
+                success_fp.seek(0)
+                self._swiftsync.update_cur_list_from_added(success_fp)
+        finally:
+            success_fp.close()
 
 
-class SwiftSyncUpdater(SwiftSyncAdder):
+class SwiftSyncUpdater(SwiftSyncBase):
     worker_class = SwiftSyncMultiUpdater
 
     def merge_success(self, success_fp):
@@ -1185,6 +1196,21 @@ class SwiftSyncUpdater(SwiftSyncAdder):
                 self._swiftsync.update_cur_list_from_updated(success_fp)
         finally:
             success_fp.close()
+
+
+def _dictsum(dicts):
+    """
+    Combine values of the dictionaries supplied by iterable dicts.
+
+    >>> _dictsum([{'a': 1, 'b': 2}, {'a': 5, 'b': 0}])
+    {'a': 6, 'b': 2}
+    """
+    it = iter(dicts)
+    first = next(it).copy()
+    for d in it:
+        for k, v in d.items():
+            first[k] += v
+    return first
 
 
 def _comm_lineiter(fp):

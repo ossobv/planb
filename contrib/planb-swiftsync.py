@@ -553,24 +553,52 @@ class SwiftSync:
             log.error('Failed to get %r lock', self._filelock)
             sys.exit(1)
         else:
-            # Do work.
-            self.make_lists()
-            failures = 0
-            failures += int(self.delete_from_list())
-            failures += int(self.add_from_list())
-            failures += int(self.update_from_list())
-
-            # If we bailed out with failures, but without an exception, we'll
-            # still clear out the list. Perhaps the list was bad and we simply
-            # need to fetch a clean new one (on the next run, that is).
-            self.clean_lists()
-
-            if failures:
-                raise SystemExit(1)
+            self._locked_sync()
         finally:
             if lock_fd is not None:
                 os.close(lock_fd)
                 os.unlink(self._filelock)
+
+    def _locked_sync(self):
+        times = []
+        status = SwiftSyncWorkerStatus()
+
+        # Do work.
+        times.append(['make_lists', time()])
+        self.make_lists()
+
+        times.append(['delete_from_list', time()])
+        status += self.delete_from_list()
+
+        times.append(['add_from_list', time()])
+        status += self.add_from_list()
+
+        times.append(['update_from_list', time()])
+        status += self.update_from_list()
+
+        # Add end-time, convert all times to relative, drop end-time.
+        times.append(['end', time()])
+        for idx, tarr in enumerate(times[0:-1]):
+            tarr[1] = times[idx + 1][1] - tarr[1]
+        times.pop()
+        log.info('Total time used: {%s}', ', '.join(
+            '{}: {:.1f}'.format(tn, tt) for tn, tt in times))
+
+        # If we bailed out with failures, but without an exception, we'll
+        # still clear out the list. Perhaps the list was bad and we simply
+        # need to fetch a clean new one (on the next run, that is).
+        self.clean_lists()
+
+        if status:
+            if (not status.config_errors
+                    and sum(tarr[1] for tarr in times) > 1800):
+                # Sync took more than 30 minutes and there were no
+                # terrible failures. Exit 0.
+                log.warning(
+                    'Not bailing out with exit 1 because this is a '
+                    'slow job. Next backup run will fix/resume')
+            else:
+                raise SystemExit(1)
 
     def make_lists(self):
         """

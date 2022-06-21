@@ -648,7 +648,7 @@ class SwiftSync:
                 log.warning(
                     'File %r %r disappeared from under us '
                     'when doing a HEAD (%s)',
-                    container.name, line['name'], e)
+                    container, line['name'], e)
                 # Skip record.
                 return
 

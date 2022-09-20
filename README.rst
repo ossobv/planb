@@ -88,11 +88,13 @@ TODO
 ----
 
 * Encryption: right now, encryption keys are still a bit of a mess:
+
   - stuff is stored in tank/_local; should use some kind of vault;
   - when removing/renaming, those keys are not updated alongside;
   - planb-zfssync.sh does not clean up snapshots created before
     send/recv failure (e.g. because remote did not support --raw)
   - add key rotation example scripts?
+
 * Docs: add documentation for sync from previous unencrypted filesets?
 * Docs: add a bit of documentation on how to work with encrypted filesets
 * Consider: move the hostgroup contents to separate filesets, so as to

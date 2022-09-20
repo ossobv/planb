@@ -2,7 +2,7 @@
 Changes
 -------
 
-v1.7_dev - *XXXX-XX-XX*
+v1.7 - *2022-09-20*
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 **Core**
@@ -15,6 +15,8 @@ v1.7_dev - *XXXX-XX-XX*
 - Add configurable blacklist hours.
 - Refactor snapshots, drop retention prefixes.
 - A backup now creates one snapshot.
+- Improve snapshot interval stability.
+- Replace custom planb script with normal python entry point.
 
 **Tasks**
 
@@ -39,6 +41,8 @@ v1.7_dev - *XXXX-XX-XX*
 - Fix compatibility with latest django-q.
 - Fix model validation with choices in django>=2.1.
 - Exclude manual backups from triggering failure.
+- Improvements and bug fixes to swiftsync
+- Improvements and bug fixes to zfssync
 
 
 v1.6.post1 - *2019-03-20*

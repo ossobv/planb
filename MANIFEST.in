@@ -1,6 +1,6 @@
 recursive-include planb *.py
 recursive-include planb *.html *.txt
 recursive-include planb/fixtures *.xml
-recursive-include/planb/status *.css *.js
+recursive-include planb/static *.css *.js
 
 global-exclude envvars settings.py

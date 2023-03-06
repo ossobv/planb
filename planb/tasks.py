@@ -1,3 +1,4 @@
+import datetime
 import logging
 import re
 import signal
@@ -13,7 +14,7 @@ from django.utils import timezone
 
 from django_q.brokers import get_broker
 from django_q.conf import Conf as DQConf
-from django_q.tasks import async_task
+from django_q.tasks import Schedule, async_task, schedule
 from yaml import safe_dump, safe_load
 
 from .models import BOGODATE, BackupRun, Fileset, FilesetLock
@@ -116,29 +117,52 @@ def yaml_digits(value):
 # Sync called task; spawns async.
 def schedule_unconditional_backup_job(fileset, custom_snapname=None):
     """
-    Schedule the specified fileset to backup at once.
+    Schedule the specified fileset to be backed up regardless.
+
+    The conditional run takes allowed times into account. The
+    unconditional run does not.
     """
-    return async_task(
-        'planb.tasks.manual_run', fileset.pk, custom_snapname,
-        broker=get_broker(settings.Q_MAIN_QUEUE),
-        q_options={'hook': 'planb.tasks.finalize_run'})
+    return _schedule_backup_job(
+        'planb.tasks.manual_run', (fileset.pk, custom_snapname),
+        after=None)
 
 
 # Sync called task; spawns async.
 def schedule_conditional_backup_job(fileset, after=None):
     """
     Schedule the specified fileset to backup soon, if allowed.
+
+    The conditional run takes allowed times into account. The
+    unconditional run does not.
     """
-    return async_task(
-        'planb.tasks.conditional_run', fileset.pk,
-        broker=get_broker(settings.Q_MAIN_QUEUE),
-        q_options={'hook': 'planb.tasks.finalize_run'})
+    assert after is None or isinstance(after, datetime.timedelta), after
+    return _schedule_backup_job(
+        'planb.tasks.conditional_run', (fileset.pk,),
+        after=after)
+
+
+def _schedule_backup_job(func_name, args, after=None):
+    assert after is None or isinstance(after, datetime.timedelta), after
+    broker = get_broker(settings.Q_MAIN_QUEUE)
+
+    if after:
+        when = datetime.datetime.now() + after
+        schedule(
+            func_name, *args,
+            broker=broker, hook='planb.tasks.finalize_run',
+            repeats=-1, next_run=when, schedule_type=Schedule.ONCE)
+        task_id = None
+    else:
+        task_id = async_task(
+            func_name, *args,
+            broker=broker, hook='planb.tasks.finalize_run')
+    return task_id
 
 
 # Sync called task; spawns async.
 def schedule_rename_job(fileset, new_namespace, new_name):
     """
-    Spawn a task to rename the fileset.
+    Schedule a task to rename the fileset.
     """
     new_dataset_name = fileset.storage.name_dataset(new_namespace, new_name)
     return async_task(
@@ -149,14 +173,14 @@ def schedule_rename_job(fileset, new_namespace, new_name):
 # Sync called task; spawns async.
 def schedule_dutree_job(fileset, backuprun):
     """
-    Spawn a task to run dutree for the fileset/backuprun.
+    Schedule a task to run dutree for the fileset/backuprun.
     """
     return async_task(
         'planb.tasks.dutree_run', fileset.pk, backuprun.pk,
         broker=get_broker(settings.Q_DUTREE_QUEUE))
 
 
-# Sync called task; spawns async.
+# Sync called task; spawns zero or more async tasks.
 def spawn_backup_jobs():
     """
     Schedule all eligible filesets to backup soon.
@@ -171,15 +195,9 @@ def conditional_run(fileset_id):
 
 
 # Async called task:
-def manual_run(fileset_id, custom_snapname):
+def manual_run(fileset_id, custom_snapname):  # a.k.a. unconditional_run
     with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.manual_run(custom_snapname)
-
-
-# Async called task:
-def unconditional_run(fileset_id):
-    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
-        runner.unconditional_run()
 
 
 # Async called task:

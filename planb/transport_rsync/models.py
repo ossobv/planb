@@ -21,6 +21,10 @@ from .rsync import RSYNC_ERR_VANISHED_SOURCE, RSYNC_EXITCODES
 logger = logging.getLogger(__name__)
 
 
+class DoNotBackupNow(RuntimeError):
+    pass
+
+
 class TransportChoices(models.PositiveSmallIntegerField):
     SSH = 0
     RSYNC = 1
@@ -166,35 +170,37 @@ class Config(AbstractTransport):
         known_hosts_file = os.path.join(known_hosts_d, self.host)
 
         args = [
-            '-o HashKnownHosts=no',
-            '-o UserKnownHostsFile={}'.format(known_hosts_file),
+            '-o', 'HashKnownHosts=no',
+            '-o', 'UserKnownHostsFile={}'.format(known_hosts_file),
         ]
         if os.path.exists(os.path.join(known_hosts_d, self.host)):
             # If the file exists, check the keys.
-            args.append('-o StrictHostKeyChecking=yes')
+            args.extend(['-o', 'StrictHostKeyChecking=yes'])
         else:
             # If the file does not exist, create it and don't care
             # about the fingerprint.
-            args.append('-o StrictHostKeyChecking=no')
+            args.extend(['-o', 'StrictHostKeyChecking=no'])
 
-        return ' '.join(args)
+        return tuple(args)
+
+    def get_transport_ssh_userhost(self):
+        return '{o.user}@{o.host}'.format(o=self)
 
     def get_transport_ssh_uri(self):
         src_dir = (
             self.src_dir
             if self.src_dir.endswith('/')
             else '{}/'.format(self.src_dir))
-        return '{o.user}@{o.host}:{src_dir}'.format(o=self, src_dir=src_dir)
+        return '{userhost}:{src_dir}'.format(
+            userhost=self.get_transport_ssh_userhost(), src_dir=src_dir)
 
     def get_transport_rsync_uri(self):
         return '{o.host}::{o.src_dir}'.format(o=self)
 
-    def get_transport_args(self, remote_shell=None):
+    def get_transport_args(self, remote_shell):
         if self.transport == TransportChoices.SSH:
-            if not remote_shell:
-                remote_shell = 'ssh'  # could also be 'ssh -l blah...'
             remote_shell = '--rsh={} {}'.format(
-                remote_shell, self.get_transport_ssh_options())
+                remote_shell, ' '.join(self.get_transport_ssh_options()))
             retval = (
                 remote_shell,
                 self.get_transport_ssh_rsync_path(),
@@ -220,6 +226,8 @@ class Config(AbstractTransport):
         remote_shell = None
 
         if self.transport == TransportChoices.SSH:
+            remote_shell = 'ssh'  # default to ssh
+
             for idx, flag in enumerate(flags):
                 if flag == '-e':
                     if (len(flags) > (idx + 1)
@@ -242,7 +250,26 @@ class Config(AbstractTransport):
         flags = tuple(flags)
         return flags, remote_shell
 
+    def generate_find_norun_command(self):
+        """
+        Returns ('ssh', 'remotehost', 'find', '/var/lib/planb/do-not-run.d'...
+        """
+        # find /var/lib/planb/do-not-run.d -type f
+        rsync_flags, remote_shell = self.get_rsync_flags()
+        remote_userhost = self.get_transport_ssh_userhost()
+
+        args = (
+            tuple(shlex.split(remote_shell))
+            + self.get_transport_ssh_options()
+            + (remote_userhost,)
+            + ('find', '/var/lib/planb/do-not-run.d', '-type', 'f')
+            + ('||', 'true'))
+        return args
+
     def generate_rsync_command(self):
+        """
+        Returns ('rsync', 'remotehost', 'args'...
+        """
         def in_arg(arg, other_list):
             if arg.startswith('--') and '=' in arg:
                 # Easy: --option=value
@@ -312,14 +339,35 @@ class Config(AbstractTransport):
         return args
 
     def run_transport(self):
-        cmd = self.generate_rsync_command()
-        logger.info(
-            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
-
         # Close all DB connections before continuing with the rsync
         # command. Since it may take a while, the connection could get
         # dropped and we'd have issues later on.
         connections.close_all()
+
+        # Check for do-not-run.d files, may raise DoNotBackupNow.
+        self._ensure_no_do_not_run_d_files()
+
+        # Do the backup.
+        self._do_actual_transport()
+
+    def _ensure_no_do_not_run_d_files(self):
+        # NOTE: We cannot place this in all transports. It is
+        # ssh-specific that we're able to do this.
+        cmd = self.generate_find_norun_command()
+        logger.info(
+            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
+        stderr = []
+        output = check_output(cmd, return_stderr=stderr).decode('utf-8')
+        if output != '':
+            output = output.strip().split('\n')
+            raise DoNotBackupNow(
+                'cannot backup %r right now, because do-not-run.d files '
+                'exist: %r' % (self.fileset.friendly_name, output))
+
+    def _do_actual_transport(self):
+        cmd = self.generate_rsync_command()
+        logger.info(
+            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
 
         stderr = []
         try:

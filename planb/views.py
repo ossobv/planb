@@ -6,7 +6,7 @@ from django.http import HttpResponseRedirect
 from django.views.generic.base import View
 
 from .models import Fileset
-from .tasks import async_backup_job
+from .tasks import schedule_unconditional_backup_job
 
 
 class EnqueueJob(View):
@@ -46,7 +46,8 @@ class EnqueueJob(View):
 
         # Spawn a single run.
         Fileset.objects.filter(pk=fileset.pk).update(is_queued=True)
-        task_id = async_backup_job(fileset, custom_snapname=custom_snapname)
+        task_id = schedule_unconditional_backup_job(
+            fileset, custom_snapname=custom_snapname)
         if custom_snapname:
             messages.add_message(
                 self.request, messages.INFO,

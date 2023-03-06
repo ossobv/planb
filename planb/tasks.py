@@ -114,7 +114,7 @@ def yaml_digits(value):
 
 
 # Sync called task; spawns async.
-def async_backup_job(fileset, custom_snapname=None):
+def schedule_unconditional_backup_job(fileset, custom_snapname=None):
     """
     Schedule the specified fileset to backup at once.
     """
@@ -125,7 +125,18 @@ def async_backup_job(fileset, custom_snapname=None):
 
 
 # Sync called task; spawns async.
-def async_rename_job(fileset, new_namespace, new_name):
+def schedule_conditional_backup_job(fileset, after=None):
+    """
+    Schedule the specified fileset to backup soon, if allowed.
+    """
+    return async_task(
+        'planb.tasks.conditional_run', fileset.pk,
+        broker=get_broker(settings.Q_MAIN_QUEUE),
+        q_options={'hook': 'planb.tasks.finalize_run'})
+
+
+# Sync called task; spawns async.
+def schedule_rename_job(fileset, new_namespace, new_name):
     """
     Spawn a task to rename the fileset.
     """
@@ -133,6 +144,16 @@ def async_rename_job(fileset, new_namespace, new_name):
     return async_task(
         'planb.tasks.rename_run', fileset.pk, fileset.dataset_name,
         new_dataset_name, broker=get_broker(settings.Q_MAIN_QUEUE))
+
+
+# Sync called task; spawns async.
+def schedule_dutree_job(fileset, backuprun):
+    """
+    Spawn a task to run dutree for the fileset/backuprun.
+    """
+    return async_task(
+        'planb.tasks.dutree_run', fileset.pk, backuprun.pk,
+        broker=get_broker(settings.Q_DUTREE_QUEUE))
 
 
 # Sync called task; spawns async.
@@ -195,10 +216,7 @@ class JobSpawner:
                            DQConf.SAVE_LIMIT)
 
         for fileset in self._enum_eligible_filesets():
-            async_task(
-                'planb.tasks.conditional_run', fileset.pk,
-                broker=get_broker(settings.Q_MAIN_QUEUE),
-                q_options={'hook': 'planb.tasks.finalize_run'})
+            schedule_conditional_backup_job(fileset)
             logger.info('[%s] Scheduled backup', fileset)
 
     def _enum_eligible_filesets(self):
@@ -360,9 +378,7 @@ class FilesetRunner:
         # And now, spawn the dutree listing when all previous work is done and
         # finalized.
         if fileset.do_snapshot_size_listing:
-            async_task(
-                'planb.tasks.dutree_run', fileset.pk, run.pk,
-                broker=get_broker(settings.Q_DUTREE_QUEUE))
+            schedule_dutree_job(fileset, run)
 
     def _unconditional_run_work(self, fileset, dataset, run, t0):
         # Set title, create log, get transport config.

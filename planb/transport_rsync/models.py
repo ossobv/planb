@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import shlex
@@ -10,11 +11,12 @@ from django.utils.translation import gettext_lazy as _
 from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (
     CalledProcessError, argsjoin, check_output)
+from planb.tasks import schedule_conditional_backup_job
 from planb.transport import AbstractTransport
 from planb.utils import lazysetting
 
 from .apps import TABLE_PREFIX
-from .rsync import RSYNC_EXITCODES, RSYNC_HARMLESS_EXITCODES
+from .rsync import RSYNC_ERR_VANISHED_SOURCE, RSYNC_EXITCODES
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +289,7 @@ class Config(AbstractTransport):
             # Don't spend time on checking/transferring partial files.
             '--whole-file',
             # Fix problems when we're not root, but we can download dirs
-            # with improper perms because we're root remotely. Rsync
+            # with improper perms because we're root remotely. rsync
             # could set up dir structures where files inside cannot be
             # accessible anymore. Make sure our user has rx access.
             '--chmod=Du+rx',
@@ -328,11 +330,23 @@ class Config(AbstractTransport):
             errstr = RSYNC_EXITCODES.get(returncode, 'Return code not matched')
             logger.warning(
                 'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e))
-            if returncode not in RSYNC_HARMLESS_EXITCODES:
+            if returncode not in (RSYNC_ERR_VANISHED_SOURCE,):
                 raise
 
+            # "Partial transfer due to vanished source files"
+            # We need to handle this with some grace. Reschedule the backup
+            # after a few hours. Possibly there are unfinished local backups.
+            # TODO: Consider whether this is sufficient. Not failing
+            # the backup may cause the wrong backup to be kept over
+            # a new one which might be better...
+            logger.info(
+                'rsync exited with code %s for %s; rescheduling in +2h...',
+                returncode, self.fileset.friendly_name)
+            schedule_conditional_backup_job(
+                self.fileset, after=datetime.timedelta(hours=2))
+
         logger.info(
-            'Rsync exited with code %s for %s:'
+            'rsync exited with code %s for %s:'
             '\n\n(stdout)\n\n%s\n(stderr)\n\n%s',
             returncode, self.fileset.friendly_name, output,
             b'\n'.join(stderr).decode('utf-8', 'replace'))

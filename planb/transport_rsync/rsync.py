@@ -24,7 +24,4 @@ RSYNC_EXITCODES = {
     255: 'Unspecified error',
 }
 
-# Don't choke on these exitcodes.
-RSYNC_HARMLESS_EXITCODES = (
-    24,  # Partial transfer due to vanished source files
-)
+RSYNC_ERR_VANISHED_SOURCE = 24  # Partial transfer due to vanished source files

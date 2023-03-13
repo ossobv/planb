@@ -488,6 +488,14 @@ class Fileset(models.Model):
 
         return True
 
+    def get_backup_interval(self):
+        order = 'hdwmy'
+        times = (3600, 86400, 7 * 86400, 30 * 86400, 365 * 86400)
+        for period in sorted(self.retention_map, key=order.index):
+            if self.retention_map[period] > 0:
+                return times[order.index(period)]
+        assert False
+
     def snapshot_rotate(self):
         dataset = self.get_dataset()
         if dataset.has_child_datasets():

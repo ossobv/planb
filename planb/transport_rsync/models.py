@@ -1,4 +1,3 @@
-import datetime
 import logging
 import os
 import shlex
@@ -11,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from planb.common.fields import FilelistField
 from planb.common.subprocess2 import (
     CalledProcessError, argsjoin, check_output)
-from planb.tasks import schedule_conditional_backup_job
+from planb.tasks import RetryBackupAfterAWhile, RetryBackupSoon
 from planb.transport import AbstractTransport
 from planb.utils import lazysetting
 
@@ -19,10 +18,6 @@ from .apps import TABLE_PREFIX
 from .rsync import RSYNC_ERR_VANISHED_SOURCE, RSYNC_EXITCODES
 
 logger = logging.getLogger(__name__)
-
-
-class DoNotBackupNow(RuntimeError):
-    pass
 
 
 class TransportChoices(models.PositiveSmallIntegerField):
@@ -344,10 +339,10 @@ class Config(AbstractTransport):
         # dropped and we'd have issues later on.
         connections.close_all()
 
-        # Check for do-not-run.d files, may raise DoNotBackupNow.
+        # Check for do-not-run.d files, may raise a DelayBackup.
         self._ensure_no_do_not_run_d_files()
 
-        # Do the backup.
+        # Do the backup, may error or raise a DelayBackup.
         self._do_actual_transport()
 
     def _ensure_no_do_not_run_d_files(self):
@@ -360,7 +355,7 @@ class Config(AbstractTransport):
         output = check_output(cmd, return_stderr=stderr).decode('utf-8')
         if output != '':
             output = output.strip().split('\n')
-            raise DoNotBackupNow(
+            raise RetryBackupSoon(
                 'cannot backup %r right now, because do-not-run.d files '
                 'exist: %r' % (self.fileset.friendly_name, output))
 
@@ -378,20 +373,17 @@ class Config(AbstractTransport):
             errstr = RSYNC_EXITCODES.get(returncode, 'Return code not matched')
             logger.warning(
                 'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e))
-            if returncode not in (RSYNC_ERR_VANISHED_SOURCE,):
-                raise
-
-            # "Partial transfer due to vanished source files"
-            # We need to handle this with some grace. Reschedule the backup
-            # after a few hours. Possibly there are unfinished local backups.
-            # TODO: Consider whether this is sufficient. Not failing
-            # the backup may cause the wrong backup to be kept over
-            # a new one which might be better...
-            logger.info(
-                'rsync exited with code %s for %s; rescheduling in +2h...',
-                returncode, self.fileset.friendly_name)
-            schedule_conditional_backup_job(
-                self.fileset, after=datetime.timedelta(hours=2))
+            if returncode in (RSYNC_ERR_VANISHED_SOURCE,):
+                # "Partial transfer due to vanished source files"
+                # We need to handle this with some grace. If this is due to a
+                # local backup script that's clearing out old backups and
+                # making new ones, we want to reschedule this soon-ish, but
+                # rather not _too_ soon, as a local backup may take a while to
+                # complete.
+                raise RetryBackupAfterAWhile(
+                    'rsync backup of %r has vanished source files; '
+                    'retrying in a bit' % (self.fileset.friendly_name,))
+            raise
 
         logger.info(
             'rsync exited with code %s for %s:'

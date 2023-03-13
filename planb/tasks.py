@@ -234,6 +234,19 @@ def finalize_run(task):
         runner.finalize_run(task.success, task.result)
 
 
+class DelayBackup(RuntimeError):
+    "Request to delay the backup / retry in a while."
+    pass
+
+
+class RetryBackupSoon(DelayBackup):
+    pass
+
+
+class RetryBackupAfterAWhile(DelayBackup):
+    pass
+
+
 class JobSpawner:
     def spawn_eligible(self):
         enabled_filesets = Fileset.objects.filter(is_enabled=True).count()
@@ -372,46 +385,69 @@ class FilesetRunner:
                 self._unconditional_run_work(fileset, dataset, run, t0)
 
         except Exception as e:
-            if True:  # isinstance(e, DigestableError)
-                # Raise log exception with traceback. We could pass it along
-                # for Django-Q but it logs errors instead of exceptions and
-                # then we don't have any useful tracebacks.
-                logger.exception('Backing up %s failed', fileset)
-            else:
-                # If the error is digestable, log an error without mail and
-                # have someone run a daily mail about this instead.
-                pass
-
-            # Close the DB connection because it may be stale.
-            connection.close()
-
-            # Store failure on the run fileset.
-            BackupRun.objects.filter(pk=run.pk).update(
-                duration=(time.time() - t0), success=False, error_text=str(e))
-
-            # Cache values on the fileset.
-            now = timezone.now()
-            Fileset.objects.filter(pk=fileset.pk).update(
-                last_run=now)    # don't overwrite last_ok
-            (Fileset.objects.filter(pk=fileset.pk)
-             .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
-             .update(first_fail=now))  # overwrite first_fail only if unset
-
             # Don't re-raise exception. We'll handle it.
             # As far as the workers are concerned, this job is done.
-            return
+            self._handle_run_failure(e, fileset, run, t0)
 
         else:
             logger.info('[%s] Completed successfully', fileset)
+
+            # Spawn the dutree listing when all previous work is done
+            # and finalized.
+            if fileset.do_snapshot_size_listing:
+                schedule_dutree_job(fileset, run)
 
         finally:
             if getproctitle:
                 setproctitle(oldproctitle)
 
-        # And now, spawn the dutree listing when all previous work is done and
-        # finalized.
-        if fileset.do_snapshot_size_listing:
-            schedule_dutree_job(fileset, run)
+    def _handle_run_failure(self, e, fileset, run, t0):
+        # Close the DB connection because it may be stale.
+        connection.close()
+
+        now = timezone.now()
+        backup_interval = fileset.get_backup_interval()
+
+        if isinstance(e, RetryBackupAfterAWhile):
+            soon = datetime.timedelta(seconds=(backup_interval // 8))
+        elif isinstance(e, RetryBackupSoon):
+            soon = datetime.timedelta(seconds=(backup_interval // 24))
+        elif isinstance(e, DelayBackup):
+            raise NotImplementedError(type(e))
+        else:
+            soon = False
+
+        if soon and fileset.last_ok:
+            long_failure = datetime.timedelta(seconds=(2 * backup_interval))
+            if (fileset.last_ok + long_failure) < now:
+                # This has taken too long. No rescheduling. Time to error.
+                soon = False
+
+        if soon:
+            logger.info(
+                'failure in %r transport (%s); rescheduling in +%ds...',
+                fileset.friendly_name, e, soon.total_seconds())
+            schedule_unconditional_backup_job(fileset, after=soon)
+            # Queueing for a lot later. By setting is_queued=True, we avoid
+            # another auto-schedule within the hour.
+            Fileset.objects.filter(pk=fileset.pk).update(
+                is_queued=True, is_running=False)
+        else:
+            # Log exception with traceback. We could pass it along
+            # for Django-Q but it logs errors instead of exceptions and
+            # then we don't have any useful tracebacks.
+            logger.exception('Backing up %s failed', fileset)
+
+        # Store failure on the run fileset.
+        BackupRun.objects.filter(pk=run.pk).update(
+            duration=(time.time() - t0), success=False, error_text=str(e))
+
+        # Cache values on the fileset.
+        Fileset.objects.filter(pk=fileset.pk).update(
+            last_run=now)    # don't overwrite last_ok
+        (Fileset.objects.filter(pk=fileset.pk)
+         .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
+         .update(first_fail=now))  # overwrite first_fail only if unset
 
     def _unconditional_run_work(self, fileset, dataset, run, t0):
         # Set title, create log, get transport config.
@@ -596,10 +632,12 @@ class FilesetRunner:
     def finalize_run(self, success, resultset):
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
+
         # Set the queued/running to False when we're done.
         fileset = Fileset.objects.get(pk=self._fileset_id)
-        Fileset.objects.filter(pk=fileset.pk).update(
-            is_queued=False, is_running=False)
+        if fileset.is_running:
+            Fileset.objects.filter(pk=fileset.pk).update(
+                is_queued=False, is_running=False)
 
         # This is never not success, as we handled all cases in the
         # unconditional_run, we hope.

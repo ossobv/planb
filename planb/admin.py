@@ -10,13 +10,13 @@ from planb.common import human
 
 from .forms import FilesetAdminForm, HostGroupAdminForm
 from .models import BOGODATE, BackupRun, HostGroup, Fileset
-from .tasks import schedule_rename_job, schedule_unconditional_backup_job
+from .tasks import schedule_manual_backup_job, schedule_rename_job
 
 
 def enqueue_multiple(modeladmin, request, queryset):
     for obj in queryset.filter(is_queued=False, is_enabled=True):
         Fileset.objects.filter(pk=obj.pk).update(is_queued=True)
-        schedule_unconditional_backup_job(obj)
+        schedule_manual_backup_job(obj)
     modeladmin.message_user(
         request, _('The selection has been queued for immediate backup'))
 enqueue_multiple.short_description = _(  # noqa

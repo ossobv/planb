@@ -32,6 +32,7 @@ _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9*/_.-]*$')
 '''
 Backups are run asynchronous with entry points:
  - planb.tasks.conditional_run
+ - planb.tasks.unconditional_run
  - planb.tasks.manual_run
 
 manual_run:
@@ -115,22 +116,9 @@ def yaml_digits(value):
 
 
 # Sync called task; spawns async.
-def schedule_unconditional_backup_job(fileset, custom_snapname=None):
-    """
-    Schedule the specified fileset to be backed up regardless.
-
-    The conditional run takes allowed times into account. The
-    unconditional run does not.
-    """
-    return _schedule_backup_job(
-        'planb.tasks.manual_run', (fileset.pk, custom_snapname),
-        after=None)
-
-
-# Sync called task; spawns async.
 def schedule_conditional_backup_job(fileset, after=None):
     """
-    Schedule the specified fileset to backup soon, if allowed.
+    Schedule the specified fileset to be backed up soon, if allowed.
 
     The conditional run takes allowed times into account. The
     unconditional run does not.
@@ -138,6 +126,27 @@ def schedule_conditional_backup_job(fileset, after=None):
     assert after is None or isinstance(after, datetime.timedelta), after
     return _schedule_backup_job(
         'planb.tasks.conditional_run', (fileset.pk,),
+        after=after)
+
+
+# Sync called task; spawns async.
+def schedule_manual_backup_job(fileset, custom_snapname=None):
+    """
+    Schedule the specified fileset to be backed up immediately.
+    """
+    return _schedule_backup_job(
+        'planb.tasks.manual_run', (fileset.pk, custom_snapname),
+        after=None)
+
+
+# Sync called task; spawns async.
+def schedule_unconditional_backup_job(fileset, after=None):
+    """
+    Schedule the specified fileset to backed up soon.
+    """
+    assert after is None or isinstance(after, datetime.timedelta), after
+    return _schedule_backup_job(
+        'planb.tasks.unconditional_run', (fileset.pk,),
         after=after)
 
 
@@ -195,9 +204,15 @@ def conditional_run(fileset_id):
 
 
 # Async called task:
-def manual_run(fileset_id, custom_snapname):  # a.k.a. unconditional_run
+def manual_run(fileset_id, custom_snapname):
     with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
         runner.manual_run(custom_snapname)
+
+
+# Async called task:
+def unconditional_run(fileset_id):
+    with handle_exit_signals(), FilesetRunner(fileset_id) as runner:
+        runner.unconditional_run()
 
 
 # Async called task:
@@ -452,7 +467,8 @@ class FilesetRunner:
             snapshot_size_listing = 'summary_pending: 0'
         else:
             snapshot_size_listing = 'summary_disabled: 0'
-        # XXX Include transport export in attributes.
+
+        # Include transport export in attributes.
         attributes = safe_dump(dict(
             snapshot=snapshot,
             do_snapshot_size_listing=fileset.do_snapshot_size_listing),

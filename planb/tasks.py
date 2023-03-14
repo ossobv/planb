@@ -317,14 +317,23 @@ class FilesetRunner:
         self._fileset_lock.release()
 
     def get_average_duration(self):
-        # Take average of last 10 runs.
-        durations = (
+        # Take average of last week. Include success=False, because they can
+        # also include productive download time.
+        a_week_ago = timezone.now() - datetime.timedelta(days=7)
+        durations = list(
             BackupRun.objects
-            .filter(fileset_id=self._fileset_id, success=True)
-            .order_by('-id').values_list('duration', flat=True))[0:10]
+            .filter(fileset_id=self._fileset_id, started__gte=a_week_ago)
+            .exclude(duration=None)
+            .values_list('duration', 'success'))
         if not durations:
             return 0  # impossible.. we should have backupruns if we call this
-        return sum(durations) // len(durations)
+
+        duration_sum = sum(i[0] for i in durations)
+        success_count = sum(1 for i in durations if i[1])
+        if not success_count:
+            return 0
+
+        return duration_sum // success_count
 
     def conditional_run(self):
         if not self._fileset_lock.is_acquired():

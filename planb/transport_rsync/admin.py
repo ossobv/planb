@@ -14,7 +14,7 @@ class ConfigAdmin(admin.ModelAdmin):
             'fileset', 'host', 'src_dir', 'includes', 'excludes',
         )}),
         ('Transport options', {'fields': (
-            'user', 'use_sudo', 'use_ionice', 'transport',
+            'user', 'use_sudo', 'use_ionice', 'use_donotrund', 'transport',
         )}),
         ('Advanced options', {'fields': (
             'flags', 'rsync_path', 'ionice_path',

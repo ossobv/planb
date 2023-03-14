@@ -48,6 +48,9 @@ class Config(AbstractTransport):
 
     use_sudo = models.BooleanField(default=True)
     use_ionice = models.BooleanField(default=True)
+    use_donotrund = models.BooleanField(
+        verbose_name=_('Use do-not-run.d'), default=True, help_text=_(
+            'Delay backup when /var/lib/planb/do-not-run.d has files.'))
 
     rsync_path = models.CharField(
         max_length=31, default=lazysetting('PLANB_RSYNC_BIN'))
@@ -340,7 +343,8 @@ class Config(AbstractTransport):
         connections.close_all()
 
         # Check for do-not-run.d files, may raise a DelayBackup.
-        self._ensure_no_do_not_run_d_files()
+        if self.use_donotrund:
+            self._ensure_no_do_not_run_d_files()
 
         # Do the backup, may error or raise a DelayBackup.
         self._do_actual_transport()

@@ -21,7 +21,31 @@ MAILTO=root
 
 export LC_ALL=C
 
-log_mail() {
+NOTIFY_ZABBIX_ERROR=  # no error reported so far..
+
+notify_zabbix_job_finished() {
+    if test -f /etc/zabbix/zabbix_agentd.conf; then
+        zabbix_sender -c /etc/zabbix/zabbix_agentd.conf \
+            -k planb.secondary.recv.time -o $(date +%s)
+
+        if test -z "$NOTIFY_ZABBIX_ERROR"; then
+            zabbix_sender -c /etc/zabbix/zabbix_agentd.conf \
+                -k planb.secondary.error.msg -o ''  # no error
+        fi
+    fi
+}
+
+notify_zabbix_error() {
+    local error="$1"
+    NOTIFY_ZABBIX_ERROR=1  # there was an error..
+
+    if test -f /etc/zabbix/zabbix_agentd.conf; then
+        zabbix_sender -c /etc/zabbix/zabbix_agentd.conf \
+            -k planb.secondary.error.msg -o "$error"
+    fi
+}
+
+log_alert() {
     local subject="$1"
     echo "$subject" >&2
     if ! test -t 2; then
@@ -31,6 +55,7 @@ log_mail() {
             cat
         ) | mail -s "[$ARGV0] $subject" $MAILTO
     fi
+    notify_zabbix_error "$subject"
 }
 
 remote_to_local_path() {
@@ -97,7 +122,7 @@ _recv() {
         for child in $children; do
             case $child in
                 $remote/*) :;;  # sane
-                *) echo $children | log_mail "fatal $child"; exit 1;;  # insane
+                *) echo $children | log_alert "fatal $child"; exit 1;; # insane
             esac
             local childlocal="$(remote_to_local_path "$child")"
             local childhowmany="$howmany"
@@ -118,9 +143,17 @@ _recv() {
     theirsnaps=$(timeout -s9 120s $REMOTE_CMD \
         "sudo zfs list -H -d 1 -t snapshot -S creation -o name '$remote'" |
         sed -e '/@planb-/!d;s/[^@]*@/@/')
-    if test -z "$theirsnaps" && $has_contained_filesystems; then
-        # All good, we did something.
-        return
+    if test -z "$theirsnaps"; then
+        if $has_contained_filesystems; then
+            # All good, we did something.
+            return
+        else
+            # Not good, we appear to be looking for a fileset that does not
+            # exist. Or at least a fileset without snapshots; which sounds
+            # very unlike a "double backup" fileset.
+            log_alert "Error: 0 remote snapshots (peer-zfs:$remote)" </dev/null
+            return
+        fi
     fi
 
     # Special hackery for tank/_local. Because it is not auto-snapshotted, we
@@ -148,7 +181,7 @@ _recv() {
         oursnaps=$(zfs list -H -d 1 -t snapshot -S creation -o name "$local" |
             sed -e '/@planb-/!d;s/[^@]*@/@/')
         if test -z "$oursnaps"; then
-            log_mail "Impossible: no local snapshots (zfs:$local)" </dev/null
+            log_alert "Impossible: no local snapshots (zfs:$local)" </dev/null
             exit 2
         fi
         remotesnap="$(echo "$theirsnaps" | head -n1)"
@@ -170,7 +203,7 @@ _recv() {
             (
                 echo "$oursnaps" | sed -e 's/^/- /'
                 echo "$theirsnaps" | sed -e 's/^/+ /'
-            ) | log_mail "Problem: no common snapshots (zfs:$local)"
+            ) | log_alert "Problem: no common snapshots (zfs:$local)"
             return
         fi
 
@@ -263,7 +296,7 @@ recv_initial_and_some_incrementals() {
         recv_incrementals "$remotepath" 2 || err=2
     fi
     if test $err -ne 0; then
-        log_mail "Problem: init/inc ($err) error (peer-zfs:$remotepath)" \
+        log_alert "Problem: init/inc ($err) error (peer-zfs:$remotepath)" \
             </dev/null
         false
     fi
@@ -285,7 +318,7 @@ init_and_increment() {
         if we_have_this_dataset "$remotepath"; then
             # Fetch three snapshots
             if ! recv_incrementals "$remotepath" 3; then
-                log_mail "Problem: inc error (peer-zfs:$remotepath)" \
+                log_alert "Problem: inc error (peer-zfs:$remotepath)" \
                     </dev/null
             fi
         else
@@ -388,5 +421,6 @@ case "${1:-}" in
     # Special case: _local contains keys
     init_and_increment "tank/_local"
     init_and_increment "$@"
+    if test $? -eq 0; then notify_zabbix_job_finished; fi
     ;;
 esac

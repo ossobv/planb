@@ -10,9 +10,22 @@ test -z "$USERATHOST" -o -z "$DESTPOOL" &&
     echo "usage: $0 user@host destpool [restartsec]" >&2 && exit 1
 
 while true; do
-    DATASETS=$("$here/planb-double-backup-sources.py" "$USERATHOST")
-    test $? -ne 0 -o -z "$DATASETS" &&
-        echo "$0: problem fetching datasets" >&2 && exit 1
+    ret=0
+    DATASETS=$("$here/planb-double-backup-sources.py" "$USERATHOST") || ret=$?
+
+    # Check status.. maybe send warning to Zabbix
+    if test -n "$DATASETS" -a $ret = 0; then
+        :
+    elif test -n "$DATASETS" -a $ret = 2; then
+        # Good, but a warning
+        if test -f /etc/zabbix/zabbix_agentd.conf; then
+            zabbix_sender -c /etc/zabbix/zabbix_agentd.conf \
+                -k planb.secondary.error.msg \
+                -o "planb-double-backup-sources had something to whine about"
+        fi
+    else
+        echo "$0: problem fetching datasets (ret=$ret)" >&2 && exit 1
+    fi
 
     # Shuffle and remove all commented/blank lines (do we use comments?)
     DATASETS=$(printf '%s' "$DATASETS" | shuf | grep '^[^#]')
@@ -22,6 +35,13 @@ while true; do
     echo
 
     "$here/manual-zfssync.sh" "$USERATHOST" "$DESTPOOL" $DATASETS
+
+    # The zfssync wipes this trigger. Re-set it.
+    if test $ret -eq 2 -a -f /etc/zabbix/zabbix_agentd.conf; then
+        zabbix_sender -c /etc/zabbix/zabbix_agentd.conf \
+            -k planb.secondary.error.msg \
+            -o "planb-double-backup-sources had something to whine about"
+    fi
 
     if test "$RESTART_EVERY" -eq 0; then
         break

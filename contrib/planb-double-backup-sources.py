@@ -90,6 +90,8 @@ def parse_args():
 
 
 def main():
+    warning = False
+
     if not DBDIR.exists():
         DBDIR.mkdir(parents=True)
     elif not DBDIR.is_dir():
@@ -117,6 +119,7 @@ def main():
                 file=sys.stderr)
             for dataset in sorted(local_only_set):
                 print('-', dataset, file=sys.stderr)
+            warning = True
 
     if mutated:
         storage.write()
@@ -124,6 +127,9 @@ def main():
     if not mutate:
         for dataset in storage:
             print(dataset)
+
+    if warning:
+        sys.exit(2)  # 2 means warning..
 
 
 if __name__ == '__main__':

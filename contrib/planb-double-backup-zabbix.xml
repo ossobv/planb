@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<zabbix_export>
+    <version>6.4</version>
+    <template_groups>
+        <template_group>
+            <uuid>04e3be0619df47d38ab29d0718133ec7</uuid>
+            <name>Templates/Custom</name>
+        </template_group>
+    </template_groups>
+    <templates>
+        <template>
+            <uuid>18b66b9f7e4f4fdbbb34d2707f42bf80</uuid>
+            <template>Template App-OSSO PlanB am7</template>
+            <name>Template App-OSSO PlanB am7</name>
+            <groups>
+                <group>
+                    <name>Templates/Custom</name>
+                </group>
+            </groups>
+            <items>
+                <item>
+                    <uuid>784e014052c549359f1b83096a426932</uuid>
+                    <name>PlanB double-backup error</name>
+                    <type>TRAP</type>
+                    <key>planb.secondary.error.msg</key>
+                    <delay>0</delay>
+                    <trends>0</trends>
+                    <value_type>TEXT</value_type>
+                    <triggers>
+                        <trigger>
+                            <uuid>618b470eb256439586bec47135f61d33</uuid>
+                            <expression>last(/Template App-OSSO PlanB am7/planb.secondary.error.msg)&lt;&gt;&quot;&quot; and
+time()&gt;100000 and
+time()&lt;160000 and
+dayofweek()&lt;=5</expression>
+                            <name>PlanB error on secondary {HOST.NAME}</name>
+                            <opdata>{ITEM.LASTVALUE}</opdata>
+                            <priority>DISASTER</priority>
+                        </trigger>
+                    </triggers>
+                </item>
+                <item>
+                    <uuid>2d59c47fe9614446965506b1c41073df</uuid>
+                    <name>PlanB double-backup receive time</name>
+                    <type>TRAP</type>
+                    <key>planb.secondary.recv.time</key>
+                    <delay>0</delay>
+                    <units>unixtime</units>
+                    <triggers>
+                        <trigger>
+                            <uuid>67ea277738a349738dbdef6d5f45d43f</uuid>
+                            <expression>fuzzytime(/Template App-OSSO PlanB am7/planb.secondary.recv.time,43200)=0 and
+time()&gt;100000 and
+time()&lt;160000 and
+dayofweek()&lt;=5</expression>
+                            <name>PlanB sync 12h late on secondary {HOST.NAME}</name>
+                            <opdata>last sync at {ITEM.LASTVALUE}</opdata>
+                            <priority>DISASTER</priority>
+                        </trigger>
+                    </triggers>
+                </item>
+            </items>
+        </template>
+    </templates>
+</zabbix_export>

@@ -19,6 +19,8 @@ REMOTE_PREFIX="$LOCAL_PREFIX"
 ARGV0=manual-zfssync
 MAILTO=root
 
+KEEP_EXTRA=25
+
 export LC_ALL=C
 
 NOTIFY_ZABBIX_ERROR=  # no error reported so far..
@@ -384,7 +386,7 @@ prune_dataset() {
     fi
     local prunesnaps="$(
         echo "$diffsnaps" | sed -e '/^-/!d;s/^-//' |
-        sed -e '1,30d' | tac)"  # keep 30 extra, del oldest first
+        sed -e '1,'$KEEP_EXTRA'd' | tac)"  # keep N extra, del oldest first
     if test -z "$prunesnaps"; then
         local keepcount="$(echo "$diffsnaps" | grep ^- | wc -l)"
         echo "Nothing to prune for (local $local), keeping $keepcount spare"

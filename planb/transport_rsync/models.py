@@ -53,7 +53,7 @@ class Config(AbstractTransport):
             'Delay backup when /var/lib/planb/do-not-run.d has files.'))
 
     rsync_path = models.CharField(
-        max_length=31, default=lazysetting('PLANB_RSYNC_BIN'))
+        max_length=255, default=lazysetting('PLANB_RSYNC_BIN'))
     ionice_path = models.CharField(
         max_length=31, default='/usr/bin/ionice', blank=True)
 

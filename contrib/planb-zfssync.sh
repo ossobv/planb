@@ -1,4 +1,4 @@
-#!/bin/sh -eux
+#!/bin/sh -eu
 
 # Usage: .../planb-zfssync [--recursive] [--lz4|--plain|--qlz1]
 #        root@MACHINE DISKS..

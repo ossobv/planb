@@ -11,7 +11,7 @@
 #
 #   kubersync-ephemeral NAMESPACE POD_OR_PODREGEX RSYNC_ARGS...
 #
-# You don't call this yourself, but are remote rsync will, for example
+# You don't call this yourself, but a remote rsync will, for example
 # like this:
 #
 #   rsync -va --rsync-path='sudo kubersync-ephemeral prod worker' \
@@ -36,9 +36,9 @@
 #     /usr/local/bin/kubersync-ephemeral NAMESPACE POD_NAME_OR_REGEX
 #
 # Details:
-# - An ephemeral rsync container that stays alive (sleeps forever) it spawned.
-#   (It uses the pod spec to find out which volumeMounts are needed. They are
-#   also mounted in this container.)
+# - An ephemeral rsync container that stays alive (sleeps forever)
+#   after it spawned. (It uses the pod spec to find out which
+#   volumeMounts are needed. They are also mounted in this container.)
 # - We exec into this new container whenever we want to rsync.
 #
 # Requirements/caveats:

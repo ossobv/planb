@@ -23,7 +23,7 @@
         {% endif %}{% endwith %}
         <li><a class="postlink" href="{% url "enqueue" original.pk %}">{% trans "Enqueue" %}</a></li>
         <li><a class="postlink" data-snapname="" href="{% url "enqueue" original.pk %}"
-            onclick="var snapname;if((snapname=prompt('Enter desired (lowercase) permanent snapshot name (or blank to cancel)'))&&snapname!='planb'&&snapname.match(/^[a-z]([a-z0-9-]*[a-z0-9])?$/)){this.setAttribute('data-snapname',snapname);return true;}alert('Aborted, or invalid characters');return false;"
+            onclick="var snapname;if((snapname=prompt('Enter desired (lowercase) permanent snapshot name (or blank to cancel).\nThe date is always suffixed to the name.'))&&snapname!='planb'&&snapname.match(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)){this.setAttribute('data-snapname',snapname);return true;}alert('Aborted, or invalid characters');return false;"
             >{% trans "Enqueue+keep" %}</a></li>
     {% endif %}
 

@@ -18,8 +18,10 @@ class EnqueueJob(View):
 
         if request.POST.get('snapname'):
             snapname = request.POST.get('snapname')
+            # Snapshots named planb-%Y%m%dT%H%MZ are selected for rotation.
+            # The date is always suffixed to the name.
             assert snapname not in (None, '', 'planb') and re.match(
-                r'^[a-z]([a-z0-9-]*[a-z0-9])?$', snapname), snapname
+                r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$', snapname), snapname
             custom_snapname = snapname
 
         try:

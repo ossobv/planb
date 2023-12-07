@@ -1,8 +1,9 @@
 import json
 import socket
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from planb.models import Fileset
@@ -66,10 +67,21 @@ class Command(BaseCommandWithZabbix):
             self.stdout.write(fileset.dataset_name)
 
     def dump_zabbix_discovery(self, qs):
+        # Take the maximum backuprun duration of the last 2 weeks. Include
+        # failed backupruns because they can have productive download time.
+        # Add it to the default of 30 hours to set the maximum time to trigger
+        # a failed backup error.
+        two_weeks_ago = timezone.now() - timedelta(days=14)
+        qs = qs.annotate(maximum_duration=Max(
+            'backuprun__duration', default=0,
+            filter=Q(backuprun__started__gte=two_weeks_ago)))
+
         hostname = socket.gethostname()
         data = [{
             '{#ID}': fileset.pk,
             '{#NAME}': fileset.unique_name,
+            # Round down to the nearest hour.
+            '{#ETA_MAX}': 3600 * round(fileset.maximum_duration / 3600),
             '{#PLANB}': hostname} for fileset in qs]
         self.stdout.write(json.dumps(data) + '\n')
 

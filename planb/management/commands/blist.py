@@ -80,8 +80,10 @@ class Command(BaseCommandWithZabbix):
         data = [{
             '{#ID}': fileset.pk,
             '{#NAME}': fileset.unique_name,
-            # Round down to the nearest hour.
-            '{#ETA_MAX}': 3600 * round(fileset.maximum_duration / 3600),
+            # Round down to the nearest hour
+            # maximum_duration can be None if the only backuprun in 2 weeks
+            # is still running.
+            '{#ETA_MAX}': 3600 * round(fileset.maximum_duration or 0 / 3600),
             '{#PLANB}': hostname} for fileset in qs]
         self.stdout.write(json.dumps(data) + '\n')
 

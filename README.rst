@@ -220,7 +220,7 @@ Install PlanB dependencies through apt (optional)::
     apt-get install python3-redis python3-setproctitle
     # .. and: python3-mysqldb or python3-psycopg2
 
-Install PlanB (including depedencies) from PyPI::
+Install PlanB (including dependencies) from PyPI::
 
     pip3 install planb
 

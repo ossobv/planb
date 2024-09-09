@@ -38,7 +38,7 @@ So, start with a bunch of disks. Let's say 34 10TB disks:
 The disks don't *need* to have the same size, but it helps (and hot
 spares will need to match the largest, for obvious reasons). For the common
 setup, you'll use the entire disk and not a partition. (*ZFS* will do
-its own parititioning, but you don't need to worry about that.)
+its own partitioning, but you don't need to worry about that.)
 
 You will want to *triple check* which disks you're using. You don't want
 to overwrite your operating system (OS) or some other important data.

@@ -292,7 +292,7 @@ class SwiftContainer(str):
     # uploaded to a separate container called CONTAINER_segments.
     # When doing a listing over CONTAINER, the segmented files are
     # reported as having 0 size. When that happens, we have to do a HEAD
-    # on those files to retreive the actual concatenated file size.
+    # on those files to retrieve the actual concatenated file size.
     #
     # This boolean allows us to skip those expensive lookups for all
     # containers X that do not have an X_segments helper container.

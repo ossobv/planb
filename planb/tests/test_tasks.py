@@ -53,7 +53,7 @@ class TaskTestCase(PlanbTestCase):
                 [message(fileset, 'Skipped because of blacklist hours: 9-17')])
 
         RsyncConfigFactory(fileset=fileset)
-        # Outside work hours it will immediatly run the backup.
+        # Outside work hours it will immediately run the backup.
         with patch('planb.models.timezone') as m, \
                 patch('planb.transport_rsync.models.check_output') as c:
             m.now.return_value = make_aware(
@@ -84,7 +84,7 @@ class TaskTestCase(PlanbTestCase):
 
     def manual_run_on_fileset(self, fileset):
         RsyncConfigFactory(fileset=fileset)
-        # Otherwise manual run will immediatly run the backup.
+        # Otherwise manual run will immediately run the backup.
         with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
             manual_run(fileset.pk, custom_snapname=None)

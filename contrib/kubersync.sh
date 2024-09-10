@@ -23,7 +23,7 @@
 # - choose a host with a working kubectl and access to K8s;
 # - configure a 'remotebackup' user on that host (for ssh access);
 # - give that user sudo powers to /usr/local/bin/kubersync:
-#   > # The backup user needs to acccess the MOUNT_POD.
+#   > # The backup user needs to access the MOUNT_POD.
 #   > remotebackup ALL=NOPASSWD: /usr/local/bin/kubersync --server --sender *
 # - setup/configure the deployment below, adding/changing rook/ceph
 #   paths as needed;

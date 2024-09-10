@@ -64,7 +64,7 @@ case "${1:-}" in
     ;;
 esac
 
-# Do we hava a non-empty guid and it has no whitespace?
+# Do we have a non-empty guid and it has no whitespace?
 tab=$(printf '\t')
 test -n "$planb_guid" && test "${planb_guid%[ $tab]*}" = "$planb_guid"
 

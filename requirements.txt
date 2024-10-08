@@ -9,7 +9,7 @@ setproctitle
 pysigset
 python-dateutil
 
-dutree
+dutree>=1.8
 PyYAML
 
 # For rst2html for planb-report as HTML

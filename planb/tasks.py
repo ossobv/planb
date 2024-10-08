@@ -1,10 +1,12 @@
 import datetime
 import logging
+import os.path
 import re
 import signal
 import time
 
 from dutree import Scanner
+from dutree.dutree import PlanbSwiftSyncDuScan  # specially for us
 
 from django.conf import settings
 from django.core.mail import mail_admins
@@ -611,7 +613,20 @@ class FilesetRunner:
             with dataset.workon(path):
                 setproctitle('[backing up %d: %s]: dutree' % (
                     fileset.pk, fileset.friendly_name))
-                dutree = Scanner(path).scan(use_apparent_size=False)
+
+                # NOTE: PlanB SwiftSync produces planb-swiftsync.cur file
+                # listings which we can read _way_ faster than traversing the
+                # filesystem.  Use those if available.
+                swiftsync_path = os.path.join(
+                    path, '..', 'planb-swiftsync.cur')
+                if os.path.isfile(swiftsync_path):
+                    # Prefix with 'path'. We strip it below.
+                    duscan = PlanbSwiftSyncDuScan(
+                        swiftsync_path, root_name=path)
+                else:
+                    duscan = Scanner(path)
+
+                dutree = duscan.scan(use_apparent_size=False)
 
                 # Get snapshot size and tree.
                 snapshot_size_mb = (

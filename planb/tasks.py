@@ -484,12 +484,16 @@ class FilesetRunner:
         if not transport.can_rotate_snapshot:
             fileset.snapshot_rotate()
 
-        # Extra custom snapshots?
+        # Create a second snapshot (name) for this backup ("Enqueue+keep").
         if run.snapshot_name:
             # Make an extra snapshot, which we'll keep because it has a
             # non-standard prefix.
             # XXX: This probably/possibly conflicts with can_create_snapshot
             # (remotely) created snapshots? Test this..
+            # XXX: This definitely does when they create recursive snapshots
+            # and we don't. We should add this in transport.run_transport() and
+            # then they should do something with that 2nd snapshot (which we
+            # provide through the env?).
             fileset.snapshot_create(run.snapshot_name)
 
         # Regular snapshots?

@@ -26,7 +26,7 @@ test -z "$planb_storage_name" && exit 3
 # See: zfs send 2>&1 | grep '^[[:blank:]]*send [[]-[^]]*w[^]]*[]] '
 zfs_recursive=false
 zfs_send_option=--raw  # (or the '-w' option)  # XXX DO NOT USE FOR UNENCRYPTED
-zfs_recv_option='-o readonly=on'
+zfs_recv_option='-u -o readonly=on'
 deflate=
 inflate=
 if test "${1:-}" = --recursive; then

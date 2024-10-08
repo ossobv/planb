@@ -1000,6 +1000,9 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                         raise ValueError('early abort during {}'.format(
                             record.container_path))
                     out_fp.write(data)
+
+            # Set the atime and mtime. (Cannot change ctime.)
+            os.utime(path, ns=(record.modified, record.modified))
         except OSError as e:
             log.error(
                 'Download failure for %r (from %r): %s',
@@ -1026,7 +1029,6 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
             raise self.ProcessRecordFailure() from e
 
     def _add_new_record_valid(self, record, path):
-        os.utime(path, ns=(record.modified, record.modified))
         local_size = os.stat(path).st_size
         if local_size != record.size:
             log.error(
@@ -1092,6 +1094,8 @@ class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
 
         # If the hash is equal, then all is awesome.
         if md5digest == etag:
+            # Set/update modified time.
+            os.utime(dst_path, ns=(record.modified, record.modified))
             return
 
         # If not, then we need to download a new file and overwrite it.

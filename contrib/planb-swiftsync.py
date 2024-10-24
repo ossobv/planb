@@ -355,6 +355,21 @@ class SwiftLine:
         assert '/./' not in self.path, self.path   # disallow awkward path
 
 
+class SwiftHeaders:
+    @staticmethod
+    def contentlength(headers):
+        size = headers.get('content-length')
+        assert size.isdigit(), headers
+        return int(size)
+
+    @staticmethod
+    def xtimestamp(headers):
+        xtimestamp = headers.get('x-timestamp')
+        assert all(i in '0123456789.' for i in xtimestamp), headers
+        tm = datetime.utcfromtimestamp(float(xtimestamp))
+        return tm
+
+
 class ListLine:
     # >>> escaped_re.findall('containerx|file||name|0|1234\n')
     # ['containerx', '|', 'file||name', '|', '0', '|', '1234\n']
@@ -371,11 +386,8 @@ class ListLine:
          'x-timestamp': '1623135813.04310', 'accept-ranges': 'bytes',
          'x-trans-id': 'txcxxx-xxx', 'x-openstack-request-id': 'txcxxx-xxx'}
         """
-        size = head_dict.get('content-length')
-        assert size.isdigit(), head_dict
-        assert all(i in '0123456789.' for i in head_dict['x-timestamp']), (
-            head_dict)
-        tm = datetime.utcfromtimestamp(float(head_dict['x-timestamp']))
+        size = SwiftHeaders.contentlength(head_dict)
+        tm = SwiftHeaders.xtimestamp(head_dict)
         tms = tm.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
         if container:
@@ -770,7 +782,7 @@ class SwiftSync:
                 obj_stat = swiftconn.head_object(container, line['name'])
                 # If this is still 0, then it's an empty file
                 # anyway.
-                record.size = int(obj_stat['content-length'])
+                record.size = SwiftHeaders.contentlength(obj_stat)
             except ClientException as e:
                 # 404?
                 log.warning(

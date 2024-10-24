@@ -145,7 +145,10 @@ class FilesetAdmin(admin.ModelAdmin):
         if object.first_fail is None:
             return '-'
         try:
-            run = object.backuprun_set.order_by('-id')[0]
+            # Take the most recent completed run. Can be success or failure.
+            run = (
+                object.backuprun_set.exclude(duration=None)
+                .order_by('-id')[0])
         except IndexError:
             return '-'
         return run.error_text or '-'

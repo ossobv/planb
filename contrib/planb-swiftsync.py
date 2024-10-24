@@ -31,7 +31,7 @@ else:
 SAMPLE_INIFILE = r"""\
 [acme_swift_v1_config]
 
-; Use rclonse(1) to see the containers: `rclone lsd acme_swift_v1_config:`
+; Use rclone(1) to see the containers: `rclone lsd acme_swift_v1_config:`
 type = swift
 user = NAMESPACE:USER
 key = KEY
@@ -55,6 +55,11 @@ planb_translate_1 = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
 ; (This will conflict with files actually having a %2F there, but that
 ; is not likely to happen.)
 planb_translate_2 = *=/$=%2F
+
+; You can use one or more 'planb_exclude' or use 'planb_exclude_<N>'
+; to define download exclusion rules.
+; Example: skip segments/* in the registry container.
+planb_exclude_0 = registry=^segments/
 
 
 [acme_swift_v3_config]
@@ -101,6 +106,29 @@ signal.signal(signal.SIGTERM, _signal_handler)
 signal.signal(signal.SIGQUIT, _signal_handler)
 
 
+class PathExcluder:
+    """
+    Excludes path from remote_path in listing.
+    """
+    def __init__(self, container, exclude_rules):
+        assert '/' not in container, container
+        self.container = container
+        self.excludes = []
+        for exclude_rule in exclude_rules:
+            container_match, needle = exclude_rule.split('=', 1)
+            if container == container_match or container_match == '*':
+                self.excludes.append(re.compile(needle))
+
+    def __bool__(self):
+        return bool(self.excludes)
+
+    def __call__(self, remote_path):
+        for needle in self.excludes:
+            if needle.search(remote_path):
+                return True
+        return False
+
+
 class PathTranslator:
     """
     Translates path from remote_path to local_path.
@@ -123,8 +151,8 @@ class PathTranslator:
         self.container = container
         self.single_container = single_container
         self.replacements = []
-        for translation in translations:
-            container_match, needle, replacement = translation.split('=')
+        for translation_rule in translations:
+            container_match, needle, replacement = translation_rule.split('=')
             if container == container_match or container_match == '*':
                 self.replacements.append((
                     re.compile(needle), replacement))
@@ -208,6 +236,13 @@ class SwiftSyncConfig:
             if key == 'planb_translate' or key.startswith('planb_translate_'):
                 self.planb_translations.extend(config[key])
 
+        # Accept multiple planb_exclude keys. But also accept
+        # planb_exclude_<id> keys. See reasoning at planb_translate.
+        self.planb_excludes = []
+        for key in sorted(config.keys()):
+            if key == 'planb_exclude' or key.startswith('planb_exclude_'):
+                self.planb_excludes.extend(config[key])
+
         # Sometimes segment autodetection can fail, resulting in:
         # > Filesize mismatch for '...': 0 != 9515
         # This is probably because the object has X-Object-Manifest and is a
@@ -256,6 +291,9 @@ class SwiftSyncConfig:
                 'auth_version? {!r}'.format(self.swift_authver))
 
         return connection
+
+    def get_excluder(self, container):
+        return PathExcluder(container, self.planb_excludes)
 
     def get_translator(self, container, single_container):
         return PathTranslator(
@@ -317,6 +355,33 @@ class SwiftLine:
         assert '/./' not in self.path, self.path   # disallow awkward path
 
 
+class SwiftHeaders:
+    @staticmethod
+    def contentlength(headers):
+        size = headers.get('content-length')
+        assert size.isdigit(), headers
+        return int(size)
+
+    @staticmethod
+    def etag(headers):
+        "normalize_etag"
+        tag = headers.get('etag')
+        if tag and tag.startswith('"') and tag.endswith('"') and tag != '"':
+            tag = tag[1:-1]
+        return tag
+
+    @staticmethod
+    def xtimestamp(headers):
+        xtimestamp = headers.get('x-timestamp')
+        assert all(i in '0123456789.' for i in xtimestamp), headers
+        tm = datetime.utcfromtimestamp(float(xtimestamp))
+        return tm
+
+    @staticmethod
+    def is_dynamic_large_object(headers):
+        return bool(headers.get('x-object-manifest'))
+
+
 class ListLine:
     # >>> escaped_re.findall('containerx|file||name|0|1234\n')
     # ['containerx', '|', 'file||name', '|', '0', '|', '1234\n']
@@ -333,11 +398,8 @@ class ListLine:
          'x-timestamp': '1623135813.04310', 'accept-ranges': 'bytes',
          'x-trans-id': 'txcxxx-xxx', 'x-openstack-request-id': 'txcxxx-xxx'}
         """
-        size = head_dict.get('content-length')
-        assert size.isdigit(), head_dict
-        assert all(i in '0123456789.' for i in head_dict['x-timestamp']), (
-            head_dict)
-        tm = datetime.utcfromtimestamp(float(head_dict['x-timestamp']))
+        size = SwiftHeaders.contentlength(head_dict)
+        tm = SwiftHeaders.xtimestamp(head_dict)
         tms = tm.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
         if container:
@@ -690,6 +752,7 @@ class SwiftSync:
         with open(path_tmp, 'w') as dest:
             os.chmod(path_tmp, 0o600)
             for container in self.get_containers():
+                self._excluder = self.config.get_excluder(container)
                 assert '|' not in container, container
                 assert '{' not in container, container
                 if self.container:  # only one container
@@ -720,6 +783,12 @@ class SwiftSync:
     def _make_new_list_add_line(self, dest, fmt, swiftconn, container, line):
         record = SwiftLine(line)
 
+        if self._excluder and self._excluder(record.path):
+            return
+
+        # If the container is full of segmented downloads, we cannot rely on
+        # just the listing. We will have to HEAD each individual file to get
+        # the size property. THIS MAKES MAKING THE LIST VERY SLOW.
         if record.size == 0 and container.has_segments:
             # Do a head to get DLO/SLO stats. This is
             # only needed if this container has segments,
@@ -728,7 +797,7 @@ class SwiftSync:
                 obj_stat = swiftconn.head_object(container, line['name'])
                 # If this is still 0, then it's an empty file
                 # anyway.
-                record.size = int(obj_stat['content-length'])
+                record.size = SwiftHeaders.contentlength(obj_stat)
             except ClientException as e:
                 # 404?
                 log.warning(
@@ -882,7 +951,10 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
     """
     Multithreaded SwiftSyncWorkerBase class.
     """
-    class ProcessRecordFailure(Exception):
+    class ProcessRecordError(Exception):
+        pass
+
+    class ProcessRecordTransientError(ProcessRecordError):
         pass
 
     def __init__(self, swiftsync, source, offset=0, threads=0):
@@ -935,11 +1007,13 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
         # should minimise swiftclient library MT issues.
         self._swiftconn = self._swiftsync.config.get_swift()
 
-        ProcessRecordFailure = self.ProcessRecordFailure
+        ProcessRecordError = self.ProcessRecordError
+        ProcessRecordTransientError = self.ProcessRecordTransientError
         translators = self._swiftsync.get_translators()
         only_container = self._swiftsync.container
         offset = self._offset
         threads = self._threads
+        first_error = None
 
         # Loop over the planb-swiftsync.add file, but only do our own files.
         with open(self._source, 'r') as add_fp:
@@ -967,13 +1041,29 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                 # Download the file into the appropriate directory.
                 try:
                     self.process_record(record, container, dst_path)
-                except ProcessRecordFailure:
+                except ProcessRecordTransientError:  # subclass of Error, first
                     self.status.failed_fetches += 1
+                except ProcessRecordError as e:
+                    self.status.failed_fetches += 1
+                    if not first_error:
+                        first_error = e
                 else:
                     self.process_record_success(record)
 
         if self.status:
             log.warning('At list EOF, got %s status', self.status)
+
+        # Maybe there was something that demands our attention.
+        if first_error:
+            raise first_error
+
+    def _check_etag_valid(self, record, container, etag, obj_stat):
+        if not etag or len(etag) != 32 or any(
+                i not in '0123456789abcdef' for i in etag):
+            log.error(
+                'File %r %r presented bad etag %s in %r', container,
+                record.path, etag, obj_stat)
+            raise self.ProcessRecordError()
 
     def _add_new_record_dir(self, path):
         try:
@@ -989,17 +1079,33 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                 # > the object's contents before making another request.
                 resp_headers, obj = self._swiftconn.get_object(
                     container, record.path, resp_chunk_size=(16 * 1024 * 1024))
+
+                # Check etag validity.
+                etag = SwiftHeaders.etag(resp_headers)
+                self._check_etag_valid(record, container, etag, resp_headers)
+
                 if record.size == 0 and 'X-Object-Manifest' in resp_headers:
                     raise NotImplementedError(
                         '0-sized files with X-Object-Manifest? '
                         'cont={!r}, path={!r}, size={!r}, hdrs={!r}'.format(
                             container, record.path, record.size, resp_headers))
 
+                m = md5()
                 for data in obj:
                     if _MT_ABORT:
                         raise ValueError('early abort during {}'.format(
                             record.container_path))
                     out_fp.write(data)
+                    m.update(data)
+
+                # Check etag value.
+                hexdigest = m.hexdigest()
+                if SwiftHeaders.is_dynamic_large_object(resp_headers):
+                    # etag is assembled differently. Trust that we get a 409
+                    # when the md5sum is bad.
+                    pass
+                elif hexdigest != etag:
+                    raise ValueError('etag mismatch: %s != %s')
 
             # Set the atime and mtime. (Cannot change ctime.)
             os.utime(path, ns=(record.modified, record.modified))
@@ -1026,17 +1132,39 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
                     os.unlink(path)
                 except FileNotFoundError:
                     pass
-            raise self.ProcessRecordFailure() from e
+            raise self.ProcessRecordTransientError() from e
 
-    def _add_new_record_valid(self, record, path):
+    def _add_new_record_valid(self, record, container, path):
+        # FIXME: Do we want to check mtime and etag here too?
         local_size = os.stat(path).st_size
         if local_size != record.size:
-            log.error(
-                'Filesize mismatch for %r (from %r): %d != %d',
-                path, record.container_path, record.size, local_size)
+            try:
+                obj_stat = self._swiftconn.head_object(container, record.path)
+            except ClientException as e:
+                log.warning(
+                    'File %r %r disappeared from under us when doing a HEAD '
+                    '(%s)', container, record.path, e)
+                transient = True
+            else:
+                modified = SwiftHeaders.xtimestamp(obj_stat)
+                if modified == record.modified:
+                    # BEWARE: Unchanged mtime, but changed filesize? Problem.
+                    log.error(
+                        'Filesize mismatch for %r (from %r): %d != %d',
+                        path, record.container_path, record.size, local_size)
+                    transient = False
+                else:
+                    log.warning(
+                        'File changed during operation %r (from %r): %d != %d',
+                        path, record.container_path, record.size, local_size)
+                    transient = True
+
             # FIXME: also remove directories we just created?
             os.unlink(path)  # this should not fail
-            raise self.ProcessRecordFailure()
+
+            if transient:
+                raise self.ProcessRecordTransientError()
+            raise self.ProcessRecordError()
 
 
 class SwiftSyncMultiAdder(SwiftSyncMultiWorkerBase):
@@ -1045,11 +1173,11 @@ class SwiftSyncMultiAdder(SwiftSyncMultiWorkerBase):
         Process a single record: download it.
 
         If there was an error, it cleans up after itself and raises a
-        ProcessRecordFailure.
+        ProcessRecordError.
         """
         self._add_new_record_dir(dst_path)
         self._add_new_record_download(record, container, dst_path)
-        self._add_new_record_valid(record, dst_path)
+        self._add_new_record_valid(record, container, dst_path)
 
 
 class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
@@ -1060,7 +1188,7 @@ class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
         """
         Process a single record: download it.
 
-        Raises ProcessRecordFailure on error.
+        Raises ProcessRecordError on error.
         """
         try:
             obj_stat = self._swiftconn.head_object(container, record.path)
@@ -1068,41 +1196,47 @@ class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
             log.warning(
                 'File %r %r disappeared from under us when doing a HEAD (%s)',
                 container, record.path, e)
-            raise self.ProcessRecordFailure()
+            raise self.ProcessRecordTransientError()
 
-        etag = str(obj_stat.get('etag'))
-        if len(etag) != 32 or any(i not in '0123456789abcdef' for i in etag):
-            log.warning(
-                'File %r %r presented bad etag: %r', container, record.path,
-                obj_stat)
-            raise self.ProcessRecordFailure()
+        etag = SwiftHeaders.etag(obj_stat)
+        self._check_etag_valid(record, container, etag, obj_stat)
 
-        # Note that guard against odd races, we must also check the record
-        # against this new head. This also asserts that the file size is still
-        # the same.
+        # To guard against odd races, we must also check the record against
+        # this new head. This also asserts that the file size is still the
+        # same.
         new_record = ListLine.from_swift_head(
             record.container, record.path, obj_stat)
         if new_record.line != record.line:
             log.warning(
                 'File was updated in the mean time? %r != %r',
                 record.line, new_record.line)
-            raise self.ProcessRecordFailure()
+            raise self.ProcessRecordTransientError()
 
-        # Nice, we have an etag, and we were lured here with the prospect that
-        # the file was equal to what we already had.
-        md5digest = self._md5sum(dst_path)  # should exist and succeed
+        # If the length is the same, we might be looking at an existing object.
+        # Try to not download it again if possible.
+        local_size = os.stat(dst_path).st_size  # should exist and succeed
+        if SwiftHeaders.contentlength(obj_stat) == local_size:
+            if SwiftHeaders.is_dynamic_large_object(obj_stat):
+                # We cannot check the md5sum in the DLO case. The etag is built
+                # up from the base16 md5sums of the individual parts, i.e.:
+                # etag = md5sum.hexdigest(
+                #     md5sum.hexdigest('0001') + md5sum.hexdigest('0002'))
+                pass
+            else:
+                md5digest = self._md5sum(dst_path)  # should exist and succeed
 
-        # If the hash is equal, then all is awesome.
-        if md5digest == etag:
-            # Set/update modified time.
-            os.utime(dst_path, ns=(record.modified, record.modified))
-            return
+                # If the hash is equal, then all is awesome and we won't need
+                # to download it again.
+                if md5digest == etag:
+                    # Set/update modified time.
+                    os.utime(dst_path, ns=(record.modified, record.modified))
+                    return
 
-        # If not, then we need to download a new file and overwrite it.
+        # We need to download a new file and overwrite it.
         # XXX: if this fails, we have invalid state! the file could be
         # removed while our lists will not have it. This needs fixing.
         self._add_new_record_download(record, container, dst_path)
-        self._add_new_record_valid(record, dst_path)
+        self._add_new_record_valid(record, container, dst_path)
 
     def _md5sum(self, path):
         m = md5()

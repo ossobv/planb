@@ -31,7 +31,7 @@ else:
 SAMPLE_INIFILE = r"""\
 [acme_swift_v1_config]
 
-; Use rclonse(1) to see the containers: `rclone lsd acme_swift_v1_config:`
+; Use rclone(1) to see the containers: `rclone lsd acme_swift_v1_config:`
 type = swift
 user = NAMESPACE:USER
 key = KEY
@@ -55,6 +55,11 @@ planb_translate_1 = wsdl=^(\d{4})(\d{2})(\d{2})/=\1/\2/\3/
 ; (This will conflict with files actually having a %2F there, but that
 ; is not likely to happen.)
 planb_translate_2 = *=/$=%2F
+
+; You can use one or more 'planb_exclude' or use 'planb_exclude_<N>'
+; to define download exclusion rules.
+; Example: skip segments/* in the registry container.
+planb_exclude_0 = registry=^segments/
 
 
 [acme_swift_v3_config]
@@ -101,6 +106,29 @@ signal.signal(signal.SIGTERM, _signal_handler)
 signal.signal(signal.SIGQUIT, _signal_handler)
 
 
+class PathExcluder:
+    """
+    Excludes path from remote_path in listing.
+    """
+    def __init__(self, container, exclude_rules):
+        assert '/' not in container, container
+        self.container = container
+        self.excludes = []
+        for exclude_rule in exclude_rules:
+            container_match, needle = exclude_rule.split('=', 1)
+            if container == container_match or container_match == '*':
+                self.excludes.append(re.compile(needle))
+
+    def __bool__(self):
+        return bool(self.excludes)
+
+    def __call__(self, remote_path):
+        for needle in self.excludes:
+            if needle.search(remote_path):
+                return True
+        return False
+
+
 class PathTranslator:
     """
     Translates path from remote_path to local_path.
@@ -123,8 +151,8 @@ class PathTranslator:
         self.container = container
         self.single_container = single_container
         self.replacements = []
-        for translation in translations:
-            container_match, needle, replacement = translation.split('=')
+        for translation_rule in translations:
+            container_match, needle, replacement = translation_rule.split('=')
             if container == container_match or container_match == '*':
                 self.replacements.append((
                     re.compile(needle), replacement))
@@ -208,6 +236,13 @@ class SwiftSyncConfig:
             if key == 'planb_translate' or key.startswith('planb_translate_'):
                 self.planb_translations.extend(config[key])
 
+        # Accept multiple planb_exclude keys. But also accept
+        # planb_exclude_<id> keys. See reasoning at planb_translate.
+        self.planb_excludes = []
+        for key in sorted(config.keys()):
+            if key == 'planb_exclude' or key.startswith('planb_exclude_'):
+                self.planb_excludes.extend(config[key])
+
         # Sometimes segment autodetection can fail, resulting in:
         # > Filesize mismatch for '...': 0 != 9515
         # This is probably because the object has X-Object-Manifest and is a
@@ -256,6 +291,9 @@ class SwiftSyncConfig:
                 'auth_version? {!r}'.format(self.swift_authver))
 
         return connection
+
+    def get_excluder(self, container):
+        return PathExcluder(container, self.planb_excludes)
 
     def get_translator(self, container, single_container):
         return PathTranslator(
@@ -690,6 +728,7 @@ class SwiftSync:
         with open(path_tmp, 'w') as dest:
             os.chmod(path_tmp, 0o600)
             for container in self.get_containers():
+                self._excluder = self.config.get_excluder(container)
                 assert '|' not in container, container
                 assert '{' not in container, container
                 if self.container:  # only one container
@@ -719,6 +758,9 @@ class SwiftSync:
 
     def _make_new_list_add_line(self, dest, fmt, swiftconn, container, line):
         record = SwiftLine(line)
+
+        if self._excluder and self._excluder(record.path):
+            return
 
         if record.size == 0 and container.has_segments:
             # Do a head to get DLO/SLO stats. This is

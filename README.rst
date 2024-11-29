@@ -14,8 +14,8 @@ The following data transfer methods are supported:
   <./contrib/planb-zfssync.sh>`_);
 * snapshots of ZFS volumes (through `planb-zfssync
   <./contrib/planb-zfssync.sh>`_);
-* copies of (large) *OpenStack Swift* containers (through `planb-swiftsync
-  <./contrib/planb-swiftsync.py>`_);
+* copies of (large) *S3* and *OpenStack Swift* containers (through
+  `planb-objsync <./contrib/planb-objsync.py>`_);
 * custom transfer (through your own custom ``transfer_exec`` script).
 
 
@@ -109,12 +109,12 @@ TODO
   they have already been backed up once. The rsync job would need some
   way to keep track of changes in include/exclude settings, and run a
   cleanup in case they are changed. (See metadata storage like
-  planb-swiftsync.* files.)
+  planb-objsync.* files.)
 * RFE: Standardize stdout/stderr output from Rsync/Exec success (and
   prepend "> " to output) to be more in line with failure.
 * RFE: Add possibility to feed back snapshot size from the individual
-  Transport instead of using dutree. Parsing the swiftsync listings is
-  fast after all.
+  Transport instead of using dutree. Parsing the planb-objsync listings
+  is fast after all.
 * FIX: Add uwsgi-uid==djangoq-uid check?
 * Replace the exception mails for common errors (like failing rsync) to
   use mail_admins style mail.

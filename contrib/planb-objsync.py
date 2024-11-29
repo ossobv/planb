@@ -12,23 +12,34 @@ from argparse import ArgumentParser
 from collections import OrderedDict
 from configparser import RawConfigParser, SectionProxy
 from datetime import datetime, timezone
+from functools import cached_property, lru_cache
 from hashlib import md5
 from tempfile import NamedTemporaryFile
 from time import time
 from unittest import TestCase
 
 try:
-    from swiftclient import Connection
+    from boto3 import client as s3_client
+except ImportError:
+    warnings.warn('No boto3? You probably need to {!r}'.format(
+        'apt-get install python3-boto3 --no-install-recommends'))
+    sys.exit(1)
+else:
+    from botocore.exceptions import ClientError as S3ClientError
+
+try:
+    from swiftclient import Connection as SwiftConnection
 except ImportError:
     warnings.warn('No swiftclient? You probably need to {!r}'.format(
         'apt-get install python3-swiftclient --no-install-recommends'))
+    sys.exit(1)
 else:
-    from swiftclient.exceptions import ClientException
+    from swiftclient.exceptions import ClientException as SwiftClientError
 
 # TODO: when stopping mid-add, we get lots of "ValueError: early abort"
 # backtraces polluting the log; should do without error
 
-SAMPLE_INIFILE = r"""\
+SAMPLE_INIFILE = r"""
 [acme_swift_v1_config]
 
 ; Use rclone(1) to see the containers: `rclone lsd acme_swift_v1_config:`
@@ -61,6 +72,10 @@ planb_translate_2 = *=/$=%2F
 ; Example: skip segments/* in the registry container.
 planb_exclude_0 = registry=^segments/
 
+; The location of the CA bundle to verify the server certificates.
+; When set to "false" the certificate verification is disabled.
+; Defaults to "true" and will use the client library default CA bundle.
+; planb_ca_cert = /path/to/my-ca-bundle.crt
 
 [acme_swift_v3_config]
 
@@ -75,15 +90,27 @@ auth_version = 3
 
 ; Set this to always to skip autodetection of DLO segment support: not all DLO
 ; segments are stored in a separate <container>_segments container.
-; (You may need to clear the planb-swiftsync.new cache after setting this.)
+; (You may need to clear the planb-objsync.new cache after setting this.)
 planb_container_has_segments = always
+
+
+[acme_minio_s3_config]
+
+type = s3
+provider = Minio
+access_key_id = USER
+secret_access_key = SECRET_KEY
+endpoint = https://MINIOSERVER
+
+; The planb exclude/translate options apply to s3 storage too.
+; planb_container_has_segments has no function on on s3 object storage.
 """
 
 
 logging.basicConfig(
     level=logging.INFO,
     format=(
-        '%(asctime)s [planb-swiftsync:%(threadName)-10.10s] '
+        '%(asctime)s [planb-objsync:%(threadName)-10.10s] '
         '[%(levelname)-3.3s] %(message)s'),
     handlers=[logging.StreamHandler()])
 log = logging.getLogger()
@@ -139,7 +166,7 @@ class PathTranslator:
     Test using:
 
         planb_storage_destination=$(pwd)/data \
-        ./planb-swiftsync -c planb-swiftsync.conf SECTION \
+        ./planb-objsync -c planb-objsync.conf SECTION \
             --test-path-translate CONTAINERNAME
 
         (provide remote paths on stdin)
@@ -197,7 +224,7 @@ class ConfigParserMultiValues(OrderedDict):
             super().__setitem__(key, value)
 
 
-class SwiftSyncConfig:
+class SyncConfig:
     def __init__(self, inifile, section):
         self.read_inifile(inifile, section)
         self.read_environment()
@@ -213,20 +240,19 @@ class SwiftSyncConfig:
             raise ValueError(
                 'no section {!r} found in {!r}'.format(section, inifile))
 
-        type_ = config.get('type', None)
-        assert type_ == ['swift'], type_
-        self.swift_authver = config.get('auth_version', ['1'])[-1]
-        self.swift_auth = config['auth'][-1]   # authurl
-        self.swift_user = config['user'][-1]
-        self.swift_key = config['key'][-1]
-        # auth_version v3:
-        self.swift_project = config.get('tenant', [None])[-1]  # project
-        self.swift_pdomain = (
-            config.get('tenant_domain', [None])[-1])    # project-domain
-        self.swift_udomain = (
-            config.get('domain', [None])[-1])           # user-domain
-        self.swift_containers = []
+        self.read_planb_config(config)
 
+        self.sync_type = config.get('type', [None])[-1]
+        if self.sync_type == 's3':
+            self.read_s3_config(config)
+        elif self.sync_type == 'swift':
+            self.read_swift_config(config)
+        else:
+            raise ValueError(
+                f'Unsupported type {self.sync_type!r} in {section!r} of '
+                f'{inifile!r}')
+
+    def read_planb_config(self, config):
         # Accept multiple planb_translate keys. But also accept
         # planb_translate_<id> keys. If you use the rclone config tool,
         # rewriting the file would destroy duplicate keys, so using a
@@ -250,6 +276,36 @@ class SwiftSyncConfig:
         self.all_containers_have_segments = (
             config.get('planb_container_has_segments', [''])[-1] == 'always')
 
+        # CA bundle to verify server certificates.
+        # Defaults to true to enable verification and use the client CA bundle.
+        self.ca_cert = config.get('planb_ca_cert', ['true'])[-1]
+        if self.ca_cert.lower() in ('true', 'false'):
+            self.ca_cert = bool(self.ca_cert.lower() == 'true')
+
+    def read_s3_config(self, config):
+        self.s3_access_key_id = config['access_key_id'][-1]
+        self.s3_secret_access_key = config['secret_access_key'][-1]
+        self.s3_endpoint = config['endpoint'][-1]
+        self.s3_verify = self.ca_cert
+
+    def read_swift_config(self, config):
+        self.swift_authver = config.get('auth_version', ['1'])[-1]
+        self.swift_auth = config['auth'][-1]   # authurl
+        self.swift_user = config['user'][-1]
+        self.swift_key = config['key'][-1]
+        # auth_version v3:
+        self.swift_project = config.get('tenant', [None])[-1]  # project
+        self.swift_pdomain = (
+            config.get('tenant_domain', [None])[-1])    # project-domain
+        self.swift_udomain = (
+            config.get('domain', [None])[-1])           # user-domain
+        if self.ca_cert in (True, False):
+            self.swift_insecure = bool(not self.ca_cert)
+            self.swift_cacert = None
+        else:
+            self.swift_insecure = False
+            self.swift_cacert = self.ca_cert
+
     def read_environment(self):
         # /tank/customer-friendly_name/data
         storage = os.environ['planb_storage_destination']
@@ -268,30 +324,6 @@ class SwiftSyncConfig:
         self.metadata_path = storage.rsplit('/', 1)[0]
         assert self.metadata_path.startswith('/'), self.metadata_path
 
-    def get_swift(self):
-        if self.swift_authver == '3':
-            os_options = {
-                'project_name': self.swift_project,
-                'project_domain_name': self.swift_pdomain,
-                'user_domain_name': self.swift_udomain,
-            }
-            connection = Connection(
-                auth_version='3', authurl=self.swift_auth,
-                user=self.swift_user, key=self.swift_key,
-                os_options=os_options)
-
-        elif self.swift_authver == '1':
-            connection = Connection(
-                auth_version='1', authurl=self.swift_auth,
-                user=self.swift_user, key=self.swift_key,
-                tenant_name='UNUSED')
-
-        else:
-            raise NotImplementedError(
-                'auth_version? {!r}'.format(self.swift_authver))
-
-        return connection
-
     def get_excluder(self, container):
         return PathExcluder(container, self.planb_excludes)
 
@@ -301,7 +333,7 @@ class SwiftSyncConfig:
             single_container)
 
 
-class SwiftSyncConfigPathTranslators(dict):
+class SyncConfigPathTranslators(dict):
     def __init__(self, config, single_container):
         assert isinstance(single_container, bool)
         super().__init__()
@@ -321,7 +353,7 @@ class SwiftSyncConfigPathTranslators(dict):
         return translator
 
 
-class SwiftContainer(str):
+class Container(str):
     # The OpenStack Swift canonical method for handling large objects,
     # is using Dynamic Large Objects (DLO) or Static Large Objects
     # (SLO).
@@ -337,25 +369,53 @@ class SwiftContainer(str):
     has_segments = False
 
 
-class SwiftLine:
-    def __init__(self, obj):
+class ObjectLine:
+    def __init__(self, obj, size, modified, path):
+        self.obj = obj
+        self.size = size
+        self.modified = modified
+        self.path = path
+        assert not self.path.startswith(('\\', '/', './', '../')), self.path
+        assert '/../' not in self.path, self.path  # disallow harmful path
+        assert '/./' not in self.path, self.path   # disallow awkward path
+
+    @classmethod
+    def from_s3_line(cls, obj):
+        # {'Key': 'string',
+        #  'LastModified': datetime(2015, 1, 1),
+        #  'ETag': 'string',
+        #  'ChecksumAlgorithm': [
+        #      'CRC32'|'CRC32C'|'SHA1'|'SHA256',
+        #  ],
+        #  'Size': 123,
+        #  'StorageClass': 'STANDARD'|'REDUCED_REDUNDANCY'|...,
+        #  'Owner': {
+        #      'DisplayName': 'string',
+        #      'ID': 'string'
+        #  },
+        #  'RestoreStatus': {
+        #      'IsRestoreInProgress': True|False,
+        #      'RestoreExpiryDate': datetime(2015, 1, 1)
+        #  }}
+        return cls(
+            obj=obj, size=obj['Size'], path=obj['Key'],
+            modified=obj['LastModified'].strftime('%Y-%m-%dT%H:%M:%S.%f'))
+
+    @classmethod
+    def from_swift_line(cls, obj):
         # {'bytes': 107713,
         #  'last_modified': '2018-05-25T15:11:14.501890',
         #  'hash': '89602749f508fc9820ef575a52cbfaba',
         #  'name': '20170101/mr/administrative',
         #  'content_type': 'text/xml'}]
-        self.obj = obj
-        self.size = obj['bytes']
         assert len(obj['last_modified']) == 26, obj
         assert obj['last_modified'][10] == 'T', obj
-        self.modified = obj['last_modified']
-        self.path = obj['name']
-        assert not self.path.startswith(('\\', '/', './', '../')), self.path
-        assert '/../' not in self.path, self.path  # disallow harmful path
-        assert '/./' not in self.path, self.path   # disallow awkward path
+        return cls(
+            obj=obj, size=obj['bytes'], modified=obj['last_modified'],
+            path=obj['name'])
 
 
-class SwiftHeaders:
+class ObjectHeaders:
     @staticmethod
     def contentlength(headers):
         size = headers.get('content-length')
@@ -377,10 +437,6 @@ class SwiftHeaders:
         tm = datetime.utcfromtimestamp(float(xtimestamp))
         return tm
 
-    @staticmethod
-    def is_dynamic_large_object(headers):
-        return bool(headers.get('x-object-manifest'))
-
 
 class ListLine:
     # >>> escaped_re.findall('containerx|file||name|0|1234\n')
@@ -388,7 +444,7 @@ class ListLine:
     escaped_re = re.compile(r'(?P<part>(?:[^|]|(?:[|][|]))+|[|])')
 
     @classmethod
-    def from_swift_head(cls, container, path, head_dict):
+    def from_object_head(cls, container, path, head_dict):
         """
         {'server': 'nginx', 'date': 'Fri, 02 Jul 2021 13:04:35 GMT',
          'content-type': 'image/jpg', 'content-length': '241190',
@@ -398,8 +454,8 @@ class ListLine:
          'x-timestamp': '1623135813.04310', 'accept-ranges': 'bytes',
          'x-trans-id': 'txcxxx-xxx', 'x-openstack-request-id': 'txcxxx-xxx'}
         """
-        size = SwiftHeaders.contentlength(head_dict)
-        tm = SwiftHeaders.xtimestamp(head_dict)
+        size = ObjectHeaders.contentlength(head_dict)
+        tm = ObjectHeaders.xtimestamp(head_dict)
         tms = tm.strftime('%Y-%m-%dT%H:%M:%S.%f')
 
         if container:
@@ -471,7 +527,7 @@ class ListLine:
                 and self.path == other.path)
 
 
-class SwiftSyncWorkerStatus:
+class SyncWorkerStatus:
     """
     Status class. Is True if anything was wrong.
 
@@ -519,14 +575,253 @@ class SwiftSyncWorkerStatus:
         return '<SwiftSyncWorkerStatus({})>'.format(str(self))
 
 
-class SwiftSync:
+class BaseSyncClient:
     def __init__(self, config, container=None):
+        self.config = config
+        self.container = container
+
+    @cached_property
+    def client(self):
+        return self.get_client()
+
+    def clone(self):
+        '''
+        Return a copy of the client that is safe to use in a new thread.
+        '''
+        return self.__class__(self.config, self.container)
+
+    def get_client(self):
+        '''
+        Return the client to interface with the object storage.
+        '''
+        raise NotImplementedError()
+
+    def get_containers(self):
+        '''
+        Return a list of container names in the object storage.
+        '''
+        raise NotImplementedError()
+
+    def get_container(self, name):
+        '''
+        Return an iterator for the object listing of the container.
+        '''
+        raise NotImplementedError()
+
+    def head_object(self, container, name):
+        '''
+        Return a dict with headers of the object in the container.
+        '''
+        raise NotImplementedError()
+
+    def get_object(self, container, name):
+        '''
+        Return a (dict, stream) with headers and object data of the object in
+        the container.
+        '''
+        raise NotImplementedError()
+
+    def is_valid_etag(self, etag):
+        '''
+        Validate the etag value for the client.
+        '''
+        return bool(
+            etag
+            and len(etag) == 32
+            and all(i in '0123456789abcdef' for i in etag))
+
+
+class S3SyncClient(BaseSyncClient):
+    ClientError = S3ClientError
+    MAX_RESULTS = 1000  # AWS S3 default/max allowed.
+
+    def get_client(self):
+        return s3_client(
+            's3', aws_access_key_id=self.config.s3_access_key_id,
+            aws_secret_access_key=self.config.s3_secret_access_key,
+            endpoint_url=self.config.s3_endpoint, verify=self.config.s3_verify)
+
+    @lru_cache
+    def get_containers(self):
+        if self.container:
+            return [Container(self.container)]
+
+        container_names = []
+        params = {}
+        # Note: ContinuationToken is the cursor for the next page and there is
+        # no NextContinuationToken.
+        # If the ContinuationToken is given is must be valid.
+        while params.get('ContinuationToken') != '':
+            response = self.client.list_buckets(
+                MaxBuckets=self.MAX_RESULTS, **params)
+            if 'Buckets' not in response:  # Page break falls on last object.
+                break
+            for container in response['Buckets']:
+                container_names.append(Container(container['Name']))
+            params['ContinuationToken'] = response.get('ContinuationToken', '')
+
+        return sorted(set(container_names))
+
+    def get_container(self, name):
+        params = {}
+        # Note: The response NextContinuationToken is the cursor for the
+        # next page and ContinuationToken is the cursor of the current page.
+        # If the ContinuationToken is given is must be valid.
+        while params.get('ContinuationToken') != '':
+            response = self.client.list_objects_v2(
+                Bucket=name, MaxKeys=self.MAX_RESULTS, **params)
+            if 'Contents' not in response:  # Page break falls on last object.
+                break
+            for line in response['Contents']:
+                yield ObjectLine.from_s3_line(line)
+            params['ContinuationToken'] = response.get(
+                'NextContinuationToken', '')
+
+    def get_object(self, container, name):
+        response = self.client.get_object(Bucket=container, Key=name)
+        # response is a mix of body, headers and s3 properties.
+        # the body is a StreamingBody which can be read in chunks.
+        return (response['ResponseMetadata']['HTTPHeaders'], response['Body'])
+
+    def head_object(self, container, name):
+        return self.client.head_object(Bucket=container, Key=name)
+
+    def is_dynamic_large_object(self, headers):
+        return bool('-' in headers.get('etag', ''))
+
+    def is_valid_etag(self, etag):
+        '''
+        Validate the etag value for the client.
+        '''
+        # The S3 multipart etag is a md5 hash with a parts count.
+        # {md5(''.join(md5(part) for part in parts))}-{len(parts)}
+        if super().is_valid_etag(etag):
+            return True
+        try:
+            etag, parts = etag.split('-')
+        except (AttributeError, ValueError):
+            return False
+        else:
+            return bool(super().is_valid_etag(etag) and parts.isdigit())
+
+
+class SwiftSyncClient(BaseSyncClient):
+    ClientError = SwiftClientError
+
+    def get_client(self):
+        if self.config.swift_authver == '3':
+            os_options = {
+                'project_name': self.config.swift_project,
+                'project_domain_name': self.config.swift_pdomain,
+                'user_domain_name': self.config.swift_udomain,
+            }
+            client = SwiftConnection(
+                auth_version='3', authurl=self.config.swift_auth,
+                user=self.config.swift_user, key=self.config.swift_key,
+                os_options=os_options, insecure=self.config.swift_insecure,
+                cacert=self.config.swift_cacert)
+
+        elif self.config.swift_authver == '1':
+            client = SwiftConnection(
+                auth_version='1', authurl=self.config.swift_auth,
+                user=self.config.swift_user, key=self.config.swift_key,
+                tenant_name='UNUSED', insecure=self.config.swift_insecure,
+                cacert=self.config.swift_cacert)
+
+        else:
+            raise NotImplementedError(
+                'auth_version? {!r}'.format(self.swift_authver))
+
+        return client
+
+    @lru_cache
+    def get_containers(self):
+        resp_headers, containers = self.client.get_account()
+        # containers == [
+        #   {'count': 350182, 'bytes': 78285833087,
+        #    'name': 'containerA'}]
+        container_names = set(i['name'] for i in containers)
+
+        force_segments = self.config.all_containers_have_segments
+
+        # Translate container set into containers with and without
+        # segments. For example:
+        # - containerA (has_segments=False)
+        # - containerB (has_segments=True)
+        # - containerB_segments (skipped, belongs with containerB)
+        # - containerC_segments (has_segments=False)
+        selected_containers = []
+        for name in sorted(container_names):
+            # We're looking for a specific container. Only check whether a
+            # X_segments exists. (Because of DLO/SLO we must do the
+            # get_accounts() lookup even though we already know
+            # which container to process.)
+            if self.container:
+                if self.container == name:
+                    new = Container(name)
+                    if force_segments or (
+                            '{}_segments'.format(name) in container_names):
+                        new.has_segments = True
+                    selected_containers.append(new)
+                    break
+
+            # We're getting all containers. Check if X_segments exists for
+            # it. And only add X_segments containers if there is no X
+            # container.
+            else:
+                if (name.endswith('_segments')
+                        and name.rsplit('_', 1)[0] in container_names):
+                    # Don't add X_segments, because X exists.
+                    pass
+                else:
+                    new = Container(name)
+                    if force_segments or (
+                            '{}_segments'.format(name) in container_names):
+                        new.has_segments = True
+                    selected_containers.append(new)
+
+        # It's already sorted because we sort the container_names
+        # before inserting.
+        return selected_containers
+
+    def get_container(self, container):
+        '''
+        Return an iterator for the object listing of the container.
+        '''
+        marker = ''  # "start _after_ marker"
+        prev_marker = 'anything_except_the_empty_string'
+        limit = 10000
+        while True:
+            assert marker != prev_marker, marker  # loop trap
+            resp_headers, lines = self.client.get_container(
+                container, full_listing=False, limit=limit,
+                marker=marker)
+            for idx, line in enumerate(lines):
+                yield ObjectLine.from_swift_line(line)
+            if not lines or (idx + 1 < limit):
+                break
+            marker, prev_marker = line['name'], marker
+
+    def get_object(self, container, name):
+        return self.client.get_object(
+            container, name, resp_chunk_size=(16 * 1024 * 1024))
+
+    def head_object(self, container, name):
+        return self.client.head_object(container, name)
+
+    def is_dynamic_large_object(self, headers):
+        return bool(headers.get('x-object-manifest'))
+
+
+class ObjectSync:
+    def __init__(self, client, config, container=None):
+        self.client = client
         self.config = config
         self.container = container
 
         # Init translators. They're done lazily, so we don't need to know which
         # containers exist yet.
-        self._translators = SwiftSyncConfigPathTranslators(
+        self._translators = SyncConfigPathTranslators(
             self.config, single_container=bool(container))
 
         # Get data path. Chdir into it so no unmounting can take place.
@@ -535,71 +830,54 @@ class SwiftSync:
 
         # Get metadata path where we store listings.
         metadata_path = config.metadata_path
-        self._filelock = os.path.join(metadata_path, 'planb-swiftsync.lock')
-        self._path_cur = os.path.join(metadata_path, 'planb-swiftsync.cur')
+        self._filelock = os.path.join(metadata_path, 'planb-objsync.lock')
+        self._path_cur = os.path.join(metadata_path, 'planb-objsync.cur')
         # ^-- this contains the local truth
-        self._path_new = os.path.join(metadata_path, 'planb-swiftsync.new')
+        self._path_new = os.path.join(metadata_path, 'planb-objsync.new')
         # ^-- the unreached goal
-        self._path_del = os.path.join(metadata_path, 'planb-swiftsync.del')
-        self._path_add = os.path.join(metadata_path, 'planb-swiftsync.add')
-        self._path_utime = os.path.join(metadata_path, 'planb-swiftsync.utime')
+        self._path_del = os.path.join(metadata_path, 'planb-objsync.del')
+        self._path_add = os.path.join(metadata_path, 'planb-objsync.add')
+        self._path_utime = os.path.join(metadata_path, 'planb-objsync.utime')
         # ^-- the work we have to do to reach the goal
         # NOTE: For changed files, we get an entry in both del and add.
         # Sometimes however, only the mtime is changed. For that case we
         # use the utime list, where we check the hash before
         # downloading/overwriting.
 
-    def get_containers(self):
-        if not hasattr(self, '_get_containers'):
-            resp_headers, containers = (
-                self.config.get_swift().get_account())
-            # containers == [
-            #   {'count': 350182, 'bytes': 78285833087,
-            #    'name': 'containerA'}]
-            container_names = set(i['name'] for i in containers)
+    def _migrate_swift_to_obj_db(self):
+        '''
+        Rename the `planb-swiftsync.cur` database to `planb-objsync.cur`.
+        Note: only use when `self._filelock` is ours.
+        '''
+        # Skip if the new database exists.
+        if os.path.isfile(self._path_cur):
+            return
 
-            force_segments = self.config.all_containers_have_segments
+        metadata_path = self.config.metadata_path
+        old_path_cur = os.path.join(metadata_path, 'planb-swiftsync.cur')
+        # Skip if the old database does not exists (new client).
+        if not os.path.isfile(old_path_cur):
+            return
 
-            # Translate container set into containers with and without
-            # segments. For example:
-            # - containerA (has_segments=False)
-            # - containerB (has_segments=True)
-            # - containerB_segments (skipped, belongs with containerB)
-            # - containerC_segments (has_segments=False)
-            selected_containers = []
-            for name in sorted(container_names):
-                # We're looking for a specific container. Only check whether a
-                # X_segments exists. (Because of DLO/SLO we must do the
-                # get_accounts() lookup even though we already know
-                # which container to process.)
-                if self.container:
-                    if self.container == name:
-                        new = SwiftContainer(name)
-                        if force_segments or (
-                                '{}_segments'.format(name) in container_names):
-                            new.has_segments = True
-                        selected_containers.append(new)
-                        break
-
-                # We're getting all containers. Check if X_segments exists for
-                # it. And only add X_segments containers if there is no X
-                # container.
-                else:
-                    if (name.endswith('_segments')
-                            and name.rsplit('_', 1)[0] in container_names):
-                        # Don't add X_segments, because X exists.
-                        pass
-                    else:
-                        new = SwiftContainer(name)
-                        if force_segments or (
-                                '{}_segments'.format(name) in container_names):
-                            new.has_segments = True
-                        selected_containers.append(new)
-
-            # It's already sorted because we sort the container_names
-            # before inserting.
-            self._get_containers = selected_containers
-        return self._get_containers
+        old_filelock = os.path.join(metadata_path, 'planb-swiftsync.lock')
+        old_lock_fd = None
+        try:
+            # Get lock on the old metadata location.
+            old_lock_fd = os.open(
+                old_filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            # Failed to get lock.
+            log.error('Failed to get %r lock', old_filelock)
+            sys.exit(1)
+        else:
+            # Check again after gaining the lock.
+            if (not os.path.isfile(self._path_cur)
+                    and os.path.isfile(old_path_cur)):
+                os.rename(old_path_cur, self._path_cur)
+        finally:
+            if old_lock_fd is not None:
+                os.close(old_lock_fd)
+                os.unlink(old_filelock)
 
     def get_translators(self):
         return self._translators
@@ -615,6 +893,7 @@ class SwiftSync:
             log.error('Failed to get %r lock', self._filelock)
             sys.exit(1)
         else:
+            self._migrate_swift_to_obj_db()
             self._locked_sync()
         finally:
             if lock_fd is not None:
@@ -623,7 +902,7 @@ class SwiftSync:
 
     def _locked_sync(self):
         times = []
-        status = SwiftSyncWorkerStatus()
+        status = SyncWorkerStatus()
 
         # Do work.
         times.append(['make_lists', time()])
@@ -666,7 +945,7 @@ class SwiftSync:
 
     def make_lists(self):
         """
-        Build planb-swiftsync.add, planb-swiftsync.del, planb-swiftsync.utime.
+        Build planb-objsync.add, planb-objsync.del, planb-objsync.utime.
         """
         log.info('Building lists')
 
@@ -694,45 +973,45 @@ class SwiftSync:
 
     def delete_from_list(self):
         """
-        Delete from planb-swiftsync.del.
+        Delete from planb-objsync.del.
         """
         if os.path.getsize(self._path_del):
-            log.info('Removing old files (SwiftSyncDeleter)')
-            deleter = SwiftSyncDeleter(self, self._path_del)
+            log.info('Removing old files (SyncDeleter)')
+            deleter = SyncDeleter(self, self._path_del)
             deleter.work()
 
         # NOTE: We don't expect any failures here, ever. This concerns
         # only local file deletions. If they fail, then something is
         # really wrong (bad filesystem, or datalist out of sync).
-        return SwiftSyncWorkerStatus()  # no (recoverable) failures
+        return SyncWorkerStatus()  # no (recoverable) failures
 
     def add_from_list(self):
         """
-        Add from planb-swiftsync.add.
+        Add from planb-objsync.add.
         """
         if os.path.getsize(self._path_add):
-            log.info('Adding new files (SwiftSyncAdder)')
-            adder = SwiftSyncAdder(self, self._path_add)
+            log.info('Adding new files (SyncAdder)')
+            adder = SyncAdder(self, self._path_add)
             adder.work()
             return adder.status  # (possibly recoverable) failure count
 
-        return SwiftSyncWorkerStatus()  # no (recoverable) failures
+        return SyncWorkerStatus()  # no (recoverable) failures
 
     def update_from_list(self):
         """
-        Check/update from planb-swiftsync.utime.
+        Check/update from planb-objsync.utime.
         """
         if os.path.getsize(self._path_utime):
-            log.info('Updating timestamp for updated files (SwiftSyncUpdater)')
-            updater = SwiftSyncUpdater(self, self._path_utime)
+            log.info('Updating timestamp for updated files (SyncUpdater)')
+            updater = SyncUpdater(self, self._path_utime)
             updater.work()
             return updater.status  # (possibly recoverable) failure count
 
-        return SwiftSyncWorkerStatus()  # no (recoverable) failures
+        return SyncWorkerStatus()  # no (recoverable) failures
 
     def clean_lists(self):
         """
-        Remove planb-swiftsync.new so we'll fetch a fresh one on the next run.
+        Remove planb-objsync.new so we'll fetch a fresh one on the next run.
         """
         os.unlink(self._path_new)
         # Also remove add/del/utime files; we don't need them anymore, and they
@@ -743,15 +1022,14 @@ class SwiftSync:
 
     def _make_new_list(self):
         """
-        Create planb-swiftsync.new with the files we want to have.
+        Create planb-objsync.new with the files we want to have.
 
         This can be slow as we may need to fetch many lines from swift.
         """
         path_tmp = '{}.tmp'.format(self._path_new)
-        swiftconn = self.config.get_swift()
         with open(path_tmp, 'w') as dest:
             os.chmod(path_tmp, 0o600)
-            for container in self.get_containers():
+            for container in self.client.get_containers():
                 self._excluder = self.config.get_excluder(container)
                 assert '|' not in container, container
                 assert '{' not in container, container
@@ -760,29 +1038,12 @@ class SwiftSync:
                 else:  # multiple containers
                     fmt = '{}|{{}}|{{}}|{{}}\n'.format(container)
                 log.info('Fetching new list for %r', container)
-                # full_listing:
-                #     if True, return a full listing, else returns a max of
-                #     10000 listings; but that will eat memory, which we don't
-                #     want.
-                marker = ''  # "start _after_ marker"
-                prev_marker = 'anything_except_the_empty_string'
-                limit = 10000
-                while True:
-                    assert marker != prev_marker, marker  # loop trap
-                    resp_headers, lines = swiftconn.get_container(
-                        container, full_listing=False, limit=limit,
-                        marker=marker)
-                    for idx, line in enumerate(lines):
-                        self._make_new_list_add_line(
-                            dest, fmt, swiftconn, container, line)
-                    if not lines or (idx + 1 < limit):
-                        break
-                    marker, prev_marker = line['name'], marker
+                for line in self.client.get_container(container):
+                    self._make_new_list_add_line(
+                        dest, fmt, self.client, container, line)
         os.rename(path_tmp, self._path_new)
 
-    def _make_new_list_add_line(self, dest, fmt, swiftconn, container, line):
-        record = SwiftLine(line)
-
+    def _make_new_list_add_line(self, dest, fmt, client, container, record):
         if self._excluder and self._excluder(record.path):
             return
 
@@ -794,16 +1055,16 @@ class SwiftSync:
             # only needed if this container has segments,
             # and if the apparent file size is 0.
             try:
-                obj_stat = swiftconn.head_object(container, line['name'])
+                obj_stat = client.head_object(container, record.path)
                 # If this is still 0, then it's an empty file
                 # anyway.
-                record.size = SwiftHeaders.contentlength(obj_stat)
-            except ClientException as e:
+                record.size = ObjectHeaders.contentlength(obj_stat)
+            except client.ClientError as e:
                 # 404?
                 log.warning(
                     'File %r %r disappeared from under us '
                     'when doing a HEAD (%s)',
-                    container, line['name'], e)
+                    container, record.path, e)
                 # Skip record.
                 return
 
@@ -814,13 +1075,13 @@ class SwiftSync:
 
     def _make_diff_lists(self):
         """
-        Create planb-swiftsync.add, planb-swiftsync.del and
-        planb-swiftsync.utime based on planb-swiftsync.new and
-        planb-swiftsync.cur.
+        Create planb-objsync.add, planb-objsync.del and
+        planb-objsync.utime based on planb-objsync.new and
+        planb-objsync.cur.
 
-        planb-swiftsync.del:   Files that can be removed immediately.
-        planb-swiftsync.add:   Files that can be added immediately.
-        planb-swiftsync.utime: Files that have the same name and filesize, but
+        planb-objsync.del:   Files that can be removed immediately.
+        planb-objsync.add:   Files that can be added immediately.
+        planb-objsync.utime: Files that have the same name and filesize, but
                                different timestamp.
         """
         try:
@@ -855,7 +1116,7 @@ class SwiftSync:
 
     def update_cur_list_from_added(self, added_fp):
         """
-        Update planb-swiftsync.cur by adding all from added_fp.
+        Update planb-objsync.cur by adding all from added_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp, \
@@ -874,7 +1135,7 @@ class SwiftSync:
 
     def update_cur_list_from_deleted(self, deleted_fp):
         """
-        Update planb-swiftsync.cur by removing all from deleted_fp.
+        Update planb-objsync.cur by removing all from deleted_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp, \
@@ -893,7 +1154,7 @@ class SwiftSync:
 
     def update_cur_list_from_updated(self, updated_fp):
         """
-        Update planb-swiftsync.cur by updating all from updated_fp.
+        Update planb-objsync.cur by updating all from updated_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
         with open(self._path_cur, 'r') as cur_fp, \
@@ -912,9 +1173,9 @@ class SwiftSync:
         os.rename(path_tmp, self._path_cur)
 
 
-class SwiftSyncDeleter:
-    def __init__(self, swiftsync, source):
-        self._swiftsync = swiftsync
+class SyncDeleter:
+    def __init__(self, objsync, source):
+        self._objsync = objsync
         self._source = source
 
     def work(self):
@@ -924,15 +1185,15 @@ class SwiftSyncDeleter:
             finally:
                 success_fp.flush()
                 success_fp.seek(0)
-                self._swiftsync.update_cur_list_from_deleted(success_fp)
+                self._objsync.update_cur_list_from_deleted(success_fp)
 
     def _delete_old(self, success_fp):
         """
-        Delete old files (from planb-swiftsync.del) and store which files we
+        Delete old files (from planb-objsync.del) and store which files we
         deleted in the success_fp.
         """
-        translators = self._swiftsync.get_translators()
-        only_container = self._swiftsync.container
+        translators = self._objsync.get_translators()
+        only_container = self._objsync.container
 
         with open(self._source, 'r') as del_fp:
             for record in _comm_lineiter(del_fp):
@@ -947,7 +1208,7 @@ class SwiftSyncDeleter:
                 success_fp.write(record.line)
 
 
-class SwiftSyncMultiWorkerBase(threading.Thread):
+class SyncMultiWorkerBase(threading.Thread):
     """
     Multithreaded SwiftSyncWorkerBase class.
     """
@@ -957,9 +1218,9 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
     class ProcessRecordTransientError(ProcessRecordError):
         pass
 
-    def __init__(self, swiftsync, source, offset=0, threads=0):
+    def __init__(self, objsync, source, offset=0, threads=0):
         super().__init__()
-        self._swiftsync = swiftsync
+        self._objsync = objsync
         self._source = source
         self._offset = offset
         self._threads = threads
@@ -968,7 +1229,7 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
 
         # If there were one or more failures, store them so they can be used by
         # the caller.
-        self.status = SwiftSyncWorkerStatus()
+        self.status = SyncWorkerStatus()
 
     def run(self):
         log.info('%s: Started thread', self.__class__.__name__)
@@ -1003,19 +1264,19 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
         """
         Process the source list, calling process_record() for each file.
         """
-        # Create this swift connection first in this thread on purpose. That
-        # should minimise swiftclient library MT issues.
-        self._swiftconn = self._swiftsync.config.get_swift()
+        # Create the client first in this thread on purpose to minimize
+        # client library MT issues.
+        self._client = self._objsync.client.clone()
 
         ProcessRecordError = self.ProcessRecordError
         ProcessRecordTransientError = self.ProcessRecordTransientError
-        translators = self._swiftsync.get_translators()
-        only_container = self._swiftsync.container
+        translators = self._objsync.get_translators()
+        only_container = self._objsync.container
         offset = self._offset
         threads = self._threads
         first_error = None
 
-        # Loop over the planb-swiftsync.add file, but only do our own files.
+        # Loop over the planb-objsync.add file, but only do our own files.
         with open(self._source, 'r') as add_fp:
             for idx, record in enumerate(_comm_lineiter(add_fp)):
                 # When running with multiple threads, we don't use a
@@ -1058,8 +1319,7 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
             raise first_error
 
     def _check_etag_valid(self, record, container, etag, obj_stat):
-        if not etag or len(etag) != 32 or any(
-                i not in '0123456789abcdef' for i in etag):
+        if not self._client.is_valid_etag(etag):
             log.error(
                 'File %r %r presented bad etag %s in %r', container,
                 record.path, etag, obj_stat)
@@ -1074,14 +1334,13 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
     def _add_new_record_download(self, record, container, path):
         try:
             with open(path, 'wb') as out_fp:
-                # resp_chunk_size - if defined, chunk size of data to read.
-                # > If you specify a resp_chunk_size you must fully read
-                # > the object's contents before making another request.
-                resp_headers, obj = self._swiftconn.get_object(
-                    container, record.path, resp_chunk_size=(16 * 1024 * 1024))
+                # The obj is a chunked object and you you must fully read
+                # the object's contents before making another request.
+                resp_headers, obj = self._client.get_object(
+                    container, record.path)
 
                 # Check etag validity.
-                etag = SwiftHeaders.etag(resp_headers)
+                etag = ObjectHeaders.etag(resp_headers)
                 self._check_etag_valid(record, container, etag, resp_headers)
 
                 if record.size == 0 and 'X-Object-Manifest' in resp_headers:
@@ -1100,7 +1359,7 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
 
                 # Check etag value.
                 hexdigest = m.hexdigest()
-                if SwiftHeaders.is_dynamic_large_object(resp_headers):
+                if self._client.is_dynamic_large_object(resp_headers):
                     # etag is assembled differently. Trust that we get a 409
                     # when the md5sum is bad.
                     pass
@@ -1139,14 +1398,14 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
         local_size = os.stat(path).st_size
         if local_size != record.size:
             try:
-                obj_stat = self._swiftconn.head_object(container, record.path)
-            except ClientException as e:
+                obj_stat = self._client.head_object(container, record.path)
+            except self._client.ClientError as e:
                 log.warning(
                     'File %r %r disappeared from under us when doing a HEAD '
                     '(%s)', container, record.path, e)
                 transient = True
             else:
-                modified = SwiftHeaders.xtimestamp(obj_stat)
+                modified = ObjectHeaders.xtimestamp(obj_stat)
                 if modified == record.modified:
                     # BEWARE: Unchanged mtime, but changed filesize? Problem.
                     log.error(
@@ -1167,7 +1426,7 @@ class SwiftSyncMultiWorkerBase(threading.Thread):
             raise self.ProcessRecordError()
 
 
-class SwiftSyncMultiAdder(SwiftSyncMultiWorkerBase):
+class SyncMultiAdder(SyncMultiWorkerBase):
     def process_record(self, record, container, dst_path):
         """
         Process a single record: download it.
@@ -1180,7 +1439,7 @@ class SwiftSyncMultiAdder(SwiftSyncMultiWorkerBase):
         self._add_new_record_valid(record, container, dst_path)
 
 
-class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
+class SyncMultiUpdater(SyncMultiWorkerBase):
     """
     Multithreaded SwiftSyncUpdater.
     """
@@ -1191,20 +1450,20 @@ class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
         Raises ProcessRecordError on error.
         """
         try:
-            obj_stat = self._swiftconn.head_object(container, record.path)
-        except ClientException as e:
+            obj_stat = self._client.head_object(container, record.path)
+        except self._client.ClientError as e:
             log.warning(
                 'File %r %r disappeared from under us when doing a HEAD (%s)',
                 container, record.path, e)
             raise self.ProcessRecordTransientError()
 
-        etag = SwiftHeaders.etag(obj_stat)
+        etag = ObjectHeaders.etag(obj_stat)
         self._check_etag_valid(record, container, etag, obj_stat)
 
         # To guard against odd races, we must also check the record against
         # this new head. This also asserts that the file size is still the
         # same.
-        new_record = ListLine.from_swift_head(
+        new_record = ListLine.from_object_head(
             record.container, record.path, obj_stat)
         if new_record.line != record.line:
             log.warning(
@@ -1215,8 +1474,8 @@ class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
         # If the length is the same, we might be looking at an existing object.
         # Try to not download it again if possible.
         local_size = os.stat(dst_path).st_size  # should exist and succeed
-        if SwiftHeaders.contentlength(obj_stat) == local_size:
-            if SwiftHeaders.is_dynamic_large_object(obj_stat):
+        if ObjectHeaders.contentlength(obj_stat) == local_size:
+            if self._client.is_dynamic_large_object(obj_stat):
                 # We cannot check the md5sum in the DLO case. The etag is built
                 # up from the base16 md5sums of the individual parts, i.e.:
                 # etag = md5sum.hexdigest(
@@ -1255,11 +1514,11 @@ class SwiftSyncMultiUpdater(SwiftSyncMultiWorkerBase):
         return hexdigest
 
 
-class SwiftSyncBase:
+class SyncBase:
     worker_class = NotImplemented
 
-    def __init__(self, swiftsync, source):
-        self._swiftsync = swiftsync
+    def __init__(self, objsync, source):
+        self._objsync = objsync
         self._source = source
         self._thread_count = 7
 
@@ -1272,7 +1531,7 @@ class SwiftSyncBase:
 
         threads = [
             self.worker_class(
-                swiftsync=self._swiftsync, source=self._source,
+                objsync=self._objsync, source=self._source,
                 offset=idx, threads=self._thread_count)
             for idx in range(self._thread_count)]
 
@@ -1382,8 +1641,8 @@ class SwiftSyncBase:
         return combined_fp
 
 
-class SwiftSyncAdder(SwiftSyncBase):
-    worker_class = SwiftSyncMultiAdder
+class SyncAdder(SyncBase):
+    worker_class = SyncMultiAdder
 
     def merge_success(self, success_fp):
         """
@@ -1401,13 +1660,13 @@ class SwiftSyncAdder(SwiftSyncBase):
                     '%s: Merging %d bytes of added files into current',
                     self.__class__.__name__, size)
                 success_fp.seek(0)
-                self._swiftsync.update_cur_list_from_added(success_fp)
+                self._objsync.update_cur_list_from_added(success_fp)
         finally:
             success_fp.close()
 
 
-class SwiftSyncUpdater(SwiftSyncBase):
-    worker_class = SwiftSyncMultiUpdater
+class SyncUpdater(SyncBase):
+    worker_class = SyncMultiUpdater
 
     def merge_success(self, success_fp):
         """
@@ -1425,7 +1684,7 @@ class SwiftSyncUpdater(SwiftSyncBase):
                     '%s: Merging %d bytes of updated files into current',
                     self.__class__.__name__, size)
                 success_fp.seek(0)
-                self._swiftsync.update_cur_list_from_updated(success_fp)
+                self._objsync.update_cur_list_from_updated(success_fp)
         finally:
             success_fp.close()
 
@@ -1750,28 +2009,37 @@ class Cli:
             help='inifile location')
         parser.add_argument('inisection')
         parser.add_argument(
-            '--test-path-translate', metavar='testcontainer',
+            '--test-path-translate', action='store_true',
             help='test path translation with paths from stdin')
         parser.add_argument('container', nargs='?')
         parser.add_argument('--all-containers', action='store_true')
         self.args = parser.parse_args()
 
-        if not self.args.test_path_translate:
-            if not (bool(self.args.container)
-                    ^ bool(self.args.all_containers)):
-                parser.error('either specify a container or --all-containers')
+        if self.args.test_path_translate:
+            if not bool(self.args.container):
+                parser.error(
+                    'specify the container to test path translations on')
+        if not (bool(self.args.container) ^ bool(self.args.all_containers)):
+            parser.error('either specify a container or --all-containers')
+
+    @cached_property
+    def config(self):
+        return SyncConfig(
+            os.path.expanduser(self.args.config),
+            self.args.inisection)
 
     @property
-    def config(self):
-        if not hasattr(self, '_config'):
-            self._config = SwiftSyncConfig(
-                os.path.expanduser(self.args.config),
-                self.args.inisection)
-        return self._config
+    def client(self):
+        if self.config.sync_type == 's3':
+            return S3SyncClient(self.config, self.args.container)
+        elif self.config.sync_type == 'swift':
+            return SwiftSyncClient(self.config, self.args.container)
+        else:
+            raise NotImplementedError()
 
     def execute(self):
         if self.args.test_path_translate:
-            self.test_path_translate(self.args.test_path_translate)
+            self.test_path_translate(self.args.container)
         elif self.args.container:
             self.sync_container(self.args.container)
         elif self.args.all_containers:
@@ -1780,26 +2048,27 @@ class Cli:
             raise NotImplementedError()
 
     def sync_container(self, container_name):
-        swiftsync = SwiftSync(self.config, container_name)
-        swiftsync.sync()
+        objsync = ObjectSync(self.client, self.config, container_name)
+        objsync.sync()
 
     def sync_all_containers(self):
-        swiftsync = SwiftSync(self.config)
-        swiftsync.sync()
+        objsync = ObjectSync(self.client, self.config)
+        objsync.sync()
 
     def test_path_translate(self, container):
-        translator = self.config.get_translator(container)
+        translator = self.config.get_translator(
+            container, single_container=True)
         try:
             while True:
                 rpath = input()
                 lpath = translator(rpath)
                 print('{!r} => {!r}'.format(rpath, lpath))
-        except EOFError:
+        except (EOFError, SystemExit):
             pass
 
 
 if __name__ == '__main__':
-    # Test using: python3 -m unittest contrib/planb-swiftsync.py
+    # Test using: python3 -m unittest contrib/planb-objsync.py
     cli = Cli()
     try:
         cli.execute()

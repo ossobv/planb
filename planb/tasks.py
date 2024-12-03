@@ -618,15 +618,18 @@ class FilesetRunner:
                 setproctitle('[backing up %d: %s]: dutree' % (
                     fileset.pk, fileset.friendly_name))
 
-                # NOTE: PlanB SwiftSync produces planb-swiftsync.cur file
+                # NOTE: PlanB ObjSync produces the planb-objsync.cur file
                 # listings which we can read _way_ faster than traversing the
                 # filesystem.  Use those if available.
-                swiftsync_path = os.path.join(
-                    path, '..', 'planb-swiftsync.cur')
-                if os.path.isfile(swiftsync_path):
-                    # Prefix with 'path'. We strip it below.
-                    duscan = PlanbSwiftSyncDuScan(
-                        swiftsync_path, root_name=path)
+                # Note: planb-swiftsync.cur was the old name of this file.
+                for objsync_name in (
+                        'planb-objsync.cur', 'planb-swiftsync.cur'):
+                    objsync_path = os.path.join(path, '..', objsync_name)
+                    if os.path.isfile(objsync_path):
+                        # Prefix with 'path'. We strip it below.
+                        duscan = PlanbSwiftSyncDuScan(
+                            objsync_path, root_name=path)
+                        break
                 else:
                     duscan = Scanner(path)
 

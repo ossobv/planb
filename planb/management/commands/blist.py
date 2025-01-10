@@ -69,8 +69,8 @@ class Command(BaseCommandWithZabbix):
     def dump_zabbix_discovery(self, qs):
         # Take the maximum backuprun duration of the last 2 weeks. Include
         # failed backupruns because they can have productive download time.
-        # Add it to the default of 30 hours to set the maximum time to trigger
-        # a failed backup error.
+        # This is added to the default backup timeout in zabbix to trigger a
+        # failed backup error.
         two_weeks_ago = timezone.now() - timedelta(days=14)
         qs = qs.annotate(maximum_duration=Max(
             'backuprun__duration', default=0,
@@ -80,10 +80,12 @@ class Command(BaseCommandWithZabbix):
         data = [{
             '{#ID}': fileset.pk,
             '{#NAME}': fileset.unique_name,
-            # Round down to the nearest hour
+            # Round ETA down to the nearest hour and set a maximum of 2 days.
             # maximum_duration can be None if the only backuprun in 2 weeks
             # is still running.
-            '{#ETA_MAX}': 3600 * round(fileset.maximum_duration or 0 / 3600),
+            '{#ETA_MAX}': min(
+                3600 * round((fileset.maximum_duration or 0) / 3600),
+                86400 * 2),
             '{#PLANB}': hostname} for fileset in qs]
         self.stdout.write(json.dumps(data) + '\n')
 

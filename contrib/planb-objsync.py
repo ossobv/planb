@@ -19,7 +19,8 @@ from time import time
 from unittest import TestCase
 
 try:
-    from boto3 import client as s3_client
+    from boto3 import client as S3Client
+    from botocore.client import Config as S3Config
 except ImportError:
     warnings.warn('No boto3? You probably need to {!r}'.format(
         'apt-get install python3-boto3 --no-install-recommends'))
@@ -75,7 +76,15 @@ planb_exclude_0 = registry=^segments/
 ; The location of the CA bundle to verify the server certificates.
 ; When set to "false" the certificate verification is disabled.
 ; Defaults to "true" and will use the client library default CA bundle.
-; planb_ca_cert = /path/to/my-ca-bundle.crt
+;planb_ca_cert = /path/to/my-ca-bundle.crt
+
+; The connect/read timeout (int/float)
+; A single value is applied to both the connect and read timeout.
+; The S3 client can set the connect and read timeout separately with
+; comma separated values. The Swift client does not suport this and the
+; connect timeout is used for both.
+;planb_timeout = 60  ; 60s connect and read timeout (default)
+;planb_timeout = 10, 30 ; 10s connect and 30s read timeout.
 
 [acme_swift_v3_config]
 
@@ -281,6 +290,13 @@ class SyncConfig:
         self.ca_cert = config.get('planb_ca_cert', ['true'])[-1]
         if self.ca_cert.lower() in ('true', 'false'):
             self.ca_cert = bool(self.ca_cert.lower() == 'true')
+
+        # Connect/read timeout.
+        # S3 defaults to 60 seconds while Swift waits forever.
+        # Adopt 60 seconds as the planb default.
+        timeouts = config.get('planb_timeout', ['60, 60'])[-1].split(',')
+        self.connect_timeout, self.read_timeout = (
+            float(timeouts[0]), float(timeouts[-1]))
 
     def read_s3_config(self, config):
         self.s3_access_key_id = config['access_key_id'][-1]
@@ -636,10 +652,14 @@ class S3SyncClient(BaseSyncClient):
     MAX_RESULTS = 1000  # AWS S3 default/max allowed.
 
     def get_client(self):
-        return s3_client(
+        config = S3Config(
+            connect_timeout=self.config.connect_timeout,
+            read_timeout=self.config.read_timeout)
+        return S3Client(
             's3', aws_access_key_id=self.config.s3_access_key_id,
             aws_secret_access_key=self.config.s3_secret_access_key,
-            endpoint_url=self.config.s3_endpoint, verify=self.config.s3_verify)
+            endpoint_url=self.config.s3_endpoint, verify=self.config.s3_verify,
+            config=config)
 
     @lru_cache
     def get_containers(self):
@@ -709,6 +729,10 @@ class SwiftSyncClient(BaseSyncClient):
     ClientError = SwiftClientError
 
     def get_client(self):
+        # The swift keystoneclient does not support separate connect/read
+        # timeout values while the requests library it uses does.
+        # timeout = (self.config.connect_timeout, self.config.read_timeout)
+        timeout = self.config.connect_timeout
         if self.config.swift_authver == '3':
             os_options = {
                 'project_name': self.config.swift_project,
@@ -719,14 +743,14 @@ class SwiftSyncClient(BaseSyncClient):
                 auth_version='3', authurl=self.config.swift_auth,
                 user=self.config.swift_user, key=self.config.swift_key,
                 os_options=os_options, insecure=self.config.swift_insecure,
-                cacert=self.config.swift_cacert)
+                cacert=self.config.swift_cacert, timeout=timeout)
 
         elif self.config.swift_authver == '1':
             client = SwiftConnection(
                 auth_version='1', authurl=self.config.swift_auth,
                 user=self.config.swift_user, key=self.config.swift_key,
                 tenant_name='UNUSED', insecure=self.config.swift_insecure,
-                cacert=self.config.swift_cacert)
+                cacert=self.config.swift_cacert, timeout=timeout)
 
         else:
             raise NotImplementedError(

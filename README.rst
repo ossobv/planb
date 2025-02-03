@@ -555,6 +555,15 @@ I've increased the bwlimit, but it's still slow.
             Ciphers aes128-ctr,aes128-gcm@openssh.com,aes256-ctr,\
                 aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,3des-cbc
 
+In the errors, I'm seeing distracting ssh banners on some systems.
+    You can change the ssh client LogLevel for the ssh user to only log errors
+    in ``~planb/.ssh/config``::
+
+        Host *
+            # Do not report ssh banners from remote systems. They are
+            # a distraction when looking for the actual problem.
+            LogLevel error
+
 Removing a fileset does not wipe the filesystem from disk, what should I do?
     This is done intentionally. You should periodically use ``planb slist
     --stale`` to check for *stale* filesystems.

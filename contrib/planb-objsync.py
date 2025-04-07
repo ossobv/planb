@@ -16,6 +16,7 @@ from functools import cached_property, lru_cache
 from hashlib import md5
 from tempfile import NamedTemporaryFile
 from time import time
+from traceback import format_exception
 from unittest import TestCase
 
 try:
@@ -37,7 +38,7 @@ except ImportError:
 else:
     from swiftclient.exceptions import ClientException as SwiftClientError
 
-# TODO: when stopping mid-add, we get lots of "ValueError: early abort"
+# TODO: when stopping mid-add, we get lots of "AbortThread: early abort"
 # backtraces polluting the log; should do without error
 
 SAMPLE_INIFILE = r"""
@@ -449,9 +450,20 @@ class ObjectHeaders:
     @staticmethod
     def xtimestamp(headers):
         xtimestamp = headers.get('x-timestamp')
-        assert all(i in '0123456789.' for i in xtimestamp), headers
-        tm = datetime.utcfromtimestamp(float(xtimestamp))
-        return tm
+        if xtimestamp:
+            assert all(i in '0123456789.' for i in xtimestamp), headers
+            dt = datetime.utcfromtimestamp(float(xtimestamp))
+            return dt.replace(tzinfo=timezone.utc)
+
+        # Alas, this does not do milli-/microseconds.
+        # See: LastModifiedDisrepancyWorkaround
+        last_modified = headers.get('last-modified')
+        if last_modified:
+            assert last_modified.endswith(' GMT'), last_modified
+            dt = datetime.strptime(last_modified, '%a, %d %b %Y %H:%M:%S GMT')
+            return dt.replace(tzinfo=timezone.utc)
+
+        raise ValueError('no x-timestamp/last-modified in {}'.format(headers))
 
 
 class ListLine:
@@ -462,13 +474,27 @@ class ListLine:
     @classmethod
     def from_object_head(cls, container, path, head_dict):
         """
-        {'server': 'nginx', 'date': 'Fri, 02 Jul 2021 13:04:35 GMT',
-         'content-type': 'image/jpg', 'content-length': '241190',
-         'etag': '7bc4ca634783b4c83cf506188cd7176b',
-         'x-object-meta-mtime': '1581604242',
-         'last-modified': 'Tue, 08 Jun 2021 07:03:34 GMT',
-         'x-timestamp': '1623135813.04310', 'accept-ranges': 'bytes',
-         'x-trans-id': 'txcxxx-xxx', 'x-openstack-request-id': 'txcxxx-xxx'}
+        {"server": "nginx", "date": "Fri, 02 Jul 2021 13:04:35 GMT",
+         "content-type": "image/jpg", "content-length": "241190",
+         "etag": "7bc4ca634783b4c83cf506188cd7176b",
+         "x-object-meta-mtime": "1581604242",
+         "last-modified": "Tue, 08 Jun 2021 07:03:34 GMT",
+         "x-timestamp": "1623135813.04310", "accept-ranges": "bytes",
+         "x-trans-id": "txcxxx-xxx", "x-openstack-request-id": "txcxxx-xxx"}
+
+        or
+
+        {"accept-ranges": "bytes", "content-length": "8",
+         "content-type": "application/octet-stream",
+         "etag": "\"b47449c3b5c78b115c8faf2e9ecafd35\"",
+         "last-modified": "Mon, 07 Apr 2025 02:34:11 GMT",
+         "server": "MinIO",
+         "strict-transport-security": "max-age=31536000; includeSubDomains",
+         "vary": "Origin, Accept-Encoding", "x-amz-id-2": "be74..",
+         "x-amz-request-id": "1833F1DFA1B31AAC",
+         "x-content-type-options": "nosniff",
+         "x-xss-protection": "1; mode=block",
+         "date": "Mon, 07 Apr 2025 05:23:43 GMT"}
         """
         size = ObjectHeaders.contentlength(head_dict)
         tm = ObjectHeaders.xtimestamp(head_dict)
@@ -704,7 +730,69 @@ class S3SyncClient(BaseSyncClient):
         return (response['ResponseMetadata']['HTTPHeaders'], response['Body'])
 
     def head_object(self, container, name):
-        return self.client.head_object(Bucket=container, Key=name)
+        # NOTE: botocore does translations based on
+        # botocore/data/s3/2006-03-01/service-2.json
+        # There, conversions are defined between e.g. "Last-Modified" and
+        # "LastModified":
+        #
+        # >     "HeadObjectOutput":{
+        # >       "type":"structure",
+        # > ...
+        # >       "members":{
+        # > ...
+        # >         "LastModified":{
+        # >           "shape":"LastModified",
+        # >           "documentation":"<p>Creation date of the object.</p>",
+        # >           "location":"header",
+        # >           "locationName":"Last-Modified"
+        # >         },
+        # > ...
+        # >     },
+        # > ...
+        # >     "LastModified":{"type":"timestamp"},
+        #
+        # For HTTPHeaders in HEAD requests, this means that we get
+        # second-precision (not millisecond~) from the "Last-Modified" header.
+        #
+        # But for the LastModified which we get from ListObjects XML, we get
+        # millisecond precision. This is a discrepancy and we do workarounds
+        # for that below. See: LastModifiedDisrepancyWorkaround
+
+        response = self.client.head_object(Bucket=container, Key=name)
+        # response might look like this:
+        # {
+        #   "ResponseMetadata": {
+        #     "RequestId": "1833F1..",
+        #     "HostId": "be74..",
+        #     "HTTPStatusCode": 200,
+        #     "HTTPHeaders": {
+        #       "accept-ranges": "bytes",
+        #       "content-length": "8",
+        #       "content-type": "application/octet-stream",
+        #       "etag": "\"b47449c3b5c78b115c8faf2e9ecafd35\"",
+        #       "last-modified": "Mon, 07 Apr 2025 02:34:11 GMT",
+        #       "server": "MinIO",
+        #       "strict-transport-security": "max-age=31536000; includeSub...",
+        #       "vary": "Origin, Accept-Encoding",
+        #       "x-amz-id-2": "be74....",
+        #       "x-amz-request-id": "1833F1...",
+        #       "x-content-type-options": "nosniff",
+        #       "x-xss-protection": "1; mode=block",
+        #       "date": "Mon, 07 Apr 2025 05:23:43 GMT"
+        #     },
+        #     "RetryAttempts": 0
+        #   },
+        #   "AcceptRanges": "bytes",
+        #   "LastModified": datetime("2025-04-07T02:34:11Z", tzinfo=UTC),
+        #   "ContentLength": 8,
+        #   "ETag": "\"b474...\"",
+        #   "ContentType": "application/octet-stream",
+        #   "Metadata": {}
+        # }
+        # we're interested in the regular head info.
+        headers = response['ResponseMetadata']['HTTPHeaders']
+
+        return headers
 
     def is_dynamic_large_object(self, headers):
         return bool('-' in headers.get('etag', ''))
@@ -1236,6 +1324,9 @@ class SyncMultiWorkerBase(threading.Thread):
     """
     Multithreaded SwiftSyncWorkerBase class.
     """
+    class AbortThread(Exception):
+        pass
+
     class ProcessRecordError(Exception):
         pass
 
@@ -1260,10 +1351,10 @@ class SyncMultiWorkerBase(threading.Thread):
         self._success_fp = NamedTemporaryFile(delete=True, mode='w+')
         try:
             self._process_source_list()
-        except Exception as e:
-            self.error = e
+        except Exception:
+            self.exc_info = sys.exc_info()
         else:
-            self.error = None
+            self.exc_info = None
         finally:
             self._success_fp.flush()
             log.info('%s: Stopping thread', self.__class__.__name__)
@@ -1311,7 +1402,7 @@ class SyncMultiWorkerBase(threading.Thread):
 
                 # Make multi-thread ready.
                 if _MT_ABORT:
-                    raise ValueError('early abort')
+                    raise SyncMultiWorkerBase.AbortThread('early abort')
 
                 # record.container is None for single_container syncs.
                 container = record.container or only_container
@@ -1376,8 +1467,9 @@ class SyncMultiWorkerBase(threading.Thread):
                 m = md5()
                 for data in obj:
                     if _MT_ABORT:
-                        raise ValueError('early abort during {}'.format(
-                            record.container_path))
+                        raise SyncMultiWorkerBase.AbortThread(
+                            'early abort during {}'.format(
+                                record.container_path))
                     out_fp.write(data)
                     m.update(data)
 
@@ -1490,10 +1582,25 @@ class SyncMultiUpdater(SyncMultiWorkerBase):
         new_record = ListLine.from_object_head(
             record.container, record.path, obj_stat)
         if new_record.line != record.line:
-            log.warning(
-                'File was updated in the mean time? %r != %r',
-                record.line, new_record.line)
-            raise self.ProcessRecordTransientError()
+            # 'container|index.latest|2025-04-07T08:08:13.322000|8\n'
+            # 'container|index.latest|2025-04-07T08:08:13.000000|8\n'
+            lst_rest, lst_mtime, lst_size = record.line.rsplit('|', 2)
+            new_rest, new_mtime, new_size = new_record.line.rsplit('|', 2)
+            new_mtime_without_0 = new_mtime.rstrip('0')
+            if (lst_rest == new_rest
+                    and lst_size == new_size
+                    and new_mtime_without_0.endswith('.')
+                    and lst_mtime.startswith(new_mtime_without_0)):
+                # NOTE: This is not a problem for non-dynamic_large_object;
+                # the etag will be checked too.
+                log.warning(
+                    'LastModifiedDisrepancyWorkaround, accepting %r == %r',
+                    record.line, new_record.line)
+            else:
+                log.warning(
+                    'File was updated in the mean time? %r != %r',
+                    record.line, new_record.line)
+                raise self.ProcessRecordTransientError()
 
         # If the length is the same, we might be looking at an existing object.
         # Try to not download it again if possible.
@@ -1570,11 +1677,20 @@ class SyncBase:
                 thread.start()
             for thread in threads:
                 thread.join()
-                if thread.error:
+                if thread.exc_info:
+                    exc_type, exc_value, exc_tb = thread.exc_info
                     thread.status.unhandled_errors += 1
-                    log.warning(
-                        'Got unhandled exception %s in %s', thread.error,
-                        thread.name)
+                    if exc_type == SyncMultiWorkerBase.AbortThread:
+                        log.warning(
+                            'Thread aborted with %s in %r',
+                            exc_value, thread.name)
+                    else:
+                        traceback = ''.join(format_exception(
+                            exc_type, exc_value, exc_tb))
+                        log.warning(
+                            'Got unhandled %s %s in %r. %s',
+                            exc_type.__name__, exc_value, thread.name,
+                            traceback)
             _MT_HAS_THREADS = False
 
             success_fps = [th.take_success_file() for th in threads]

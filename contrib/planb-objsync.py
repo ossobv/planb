@@ -456,6 +456,7 @@ class ObjectHeaders:
             return dt.replace(tzinfo=timezone.utc)
 
         # Alas, this does not do milli-/microseconds.
+        # See: LastModifiedDisrepancyWorkaround
         last_modified = headers.get('last-modified')
         if last_modified:
             assert last_modified.endswith(' GMT'), last_modified
@@ -729,6 +730,34 @@ class S3SyncClient(BaseSyncClient):
         return (response['ResponseMetadata']['HTTPHeaders'], response['Body'])
 
     def head_object(self, container, name):
+        # NOTE: botocore does translations based on
+        # botocore/data/s3/2006-03-01/service-2.json
+        # There, conversions are defined between e.g. "Last-Modified" and
+        # "LastModified":
+        #
+        # >     "HeadObjectOutput":{
+        # >       "type":"structure",
+        # > ...
+        # >       "members":{
+        # > ...
+        # >         "LastModified":{
+        # >           "shape":"LastModified",
+        # >           "documentation":"<p>Creation date of the object.</p>",
+        # >           "location":"header",
+        # >           "locationName":"Last-Modified"
+        # >         },
+        # > ...
+        # >     },
+        # > ...
+        # >     "LastModified":{"type":"timestamp"},
+        #
+        # For HTTPHeaders in HEAD requests, this means that we get
+        # second-precision (not millisecond~) from the "Last-Modified" header.
+        #
+        # But for the LastModified which we get from ListObjects XML, we get
+        # millisecond precision. This is a discrepancy and we do workarounds
+        # for that below. See: LastModifiedDisrepancyWorkaround
+
         response = self.client.head_object(Bucket=container, Key=name)
         # response might look like this:
         # {
@@ -1553,10 +1582,25 @@ class SyncMultiUpdater(SyncMultiWorkerBase):
         new_record = ListLine.from_object_head(
             record.container, record.path, obj_stat)
         if new_record.line != record.line:
-            log.warning(
-                'File was updated in the mean time? %r != %r',
-                record.line, new_record.line)
-            raise self.ProcessRecordTransientError()
+            # 'container|index.latest|2025-04-07T08:08:13.322000|8\n'
+            # 'container|index.latest|2025-04-07T08:08:13.000000|8\n'
+            lst_rest, lst_mtime, lst_size = record.line.rsplit('|', 2)
+            new_rest, new_mtime, new_size = new_record.line.rsplit('|', 2)
+            new_mtime_without_0 = new_mtime.rstrip('0')
+            if (lst_rest == new_rest
+                    and lst_size == new_size
+                    and new_mtime_without_0.endswith('.')
+                    and lst_mtime.startswith(new_mtime_without_0)):
+                # NOTE: This is not a problem for non-dynamic_large_object;
+                # the etag will be checked too.
+                log.warning(
+                    'LastModifiedDisrepancyWorkaround, accepting %r == %r',
+                    record.line, new_record.line)
+            else:
+                log.warning(
+                    'File was updated in the mean time? %r != %r',
+                    record.line, new_record.line)
+                raise self.ProcessRecordTransientError()
 
         # If the length is the same, we might be looking at an existing object.
         # Try to not download it again if possible.

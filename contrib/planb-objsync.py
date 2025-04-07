@@ -16,6 +16,7 @@ from functools import cached_property, lru_cache
 from hashlib import md5
 from tempfile import NamedTemporaryFile
 from time import time
+from traceback import format_exception
 from unittest import TestCase
 
 try:
@@ -37,7 +38,7 @@ except ImportError:
 else:
     from swiftclient.exceptions import ClientException as SwiftClientError
 
-# TODO: when stopping mid-add, we get lots of "ValueError: early abort"
+# TODO: when stopping mid-add, we get lots of "AbortThread: early abort"
 # backtraces polluting the log; should do without error
 
 SAMPLE_INIFILE = r"""
@@ -1236,6 +1237,9 @@ class SyncMultiWorkerBase(threading.Thread):
     """
     Multithreaded SwiftSyncWorkerBase class.
     """
+    class AbortThread(Exception):
+        pass
+
     class ProcessRecordError(Exception):
         pass
 
@@ -1260,10 +1264,10 @@ class SyncMultiWorkerBase(threading.Thread):
         self._success_fp = NamedTemporaryFile(delete=True, mode='w+')
         try:
             self._process_source_list()
-        except Exception as e:
-            self.error = e
+        except Exception:
+            self.exc_info = sys.exc_info()
         else:
-            self.error = None
+            self.exc_info = None
         finally:
             self._success_fp.flush()
             log.info('%s: Stopping thread', self.__class__.__name__)
@@ -1311,7 +1315,7 @@ class SyncMultiWorkerBase(threading.Thread):
 
                 # Make multi-thread ready.
                 if _MT_ABORT:
-                    raise ValueError('early abort')
+                    raise SyncMultiWorkerBase.AbortThread('early abort')
 
                 # record.container is None for single_container syncs.
                 container = record.container or only_container
@@ -1376,8 +1380,9 @@ class SyncMultiWorkerBase(threading.Thread):
                 m = md5()
                 for data in obj:
                     if _MT_ABORT:
-                        raise ValueError('early abort during {}'.format(
-                            record.container_path))
+                        raise SyncMultiWorkerBase.AbortThread(
+                            'early abort during {}'.format(
+                                record.container_path))
                     out_fp.write(data)
                     m.update(data)
 
@@ -1570,11 +1575,20 @@ class SyncBase:
                 thread.start()
             for thread in threads:
                 thread.join()
-                if thread.error:
+                if thread.exc_info:
+                    exc_type, exc_value, exc_tb = thread.exc_info
                     thread.status.unhandled_errors += 1
-                    log.warning(
-                        'Got unhandled exception %s in %s', thread.error,
-                        thread.name)
+                    if exc_type == SyncMultiWorkerBase.AbortThread:
+                        log.warning(
+                            'Thread aborted with %s in %r',
+                            exc_value, thread.name)
+                    else:
+                        traceback = ''.join(format_exception(
+                            exc_type, exc_value, exc_tb))
+                        log.warning(
+                            'Got unhandled %s %s in %r. %s',
+                            exc_type.__name__, exc_value, thread.name,
+                            traceback)
             _MT_HAS_THREADS = False
 
             success_fps = [th.take_success_file() for th in threads]

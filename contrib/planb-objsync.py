@@ -450,9 +450,19 @@ class ObjectHeaders:
     @staticmethod
     def xtimestamp(headers):
         xtimestamp = headers.get('x-timestamp')
-        assert all(i in '0123456789.' for i in xtimestamp), headers
-        tm = datetime.utcfromtimestamp(float(xtimestamp))
-        return tm
+        if xtimestamp:
+            assert all(i in '0123456789.' for i in xtimestamp), headers
+            dt = datetime.utcfromtimestamp(float(xtimestamp))
+            return dt.replace(tzinfo=timezone.utc)
+
+        # Alas, this does not do milli-/microseconds.
+        last_modified = headers.get('last-modified')
+        if last_modified:
+            assert last_modified.endswith(' GMT'), last_modified
+            dt = datetime.strptime(last_modified, '%a, %d %b %Y %H:%M:%S GMT')
+            return dt.replace(tzinfo=timezone.utc)
+
+        raise ValueError('no x-timestamp/last-modified in {}'.format(headers))
 
 
 class ListLine:
@@ -463,13 +473,27 @@ class ListLine:
     @classmethod
     def from_object_head(cls, container, path, head_dict):
         """
-        {'server': 'nginx', 'date': 'Fri, 02 Jul 2021 13:04:35 GMT',
-         'content-type': 'image/jpg', 'content-length': '241190',
-         'etag': '7bc4ca634783b4c83cf506188cd7176b',
-         'x-object-meta-mtime': '1581604242',
-         'last-modified': 'Tue, 08 Jun 2021 07:03:34 GMT',
-         'x-timestamp': '1623135813.04310', 'accept-ranges': 'bytes',
-         'x-trans-id': 'txcxxx-xxx', 'x-openstack-request-id': 'txcxxx-xxx'}
+        {"server": "nginx", "date": "Fri, 02 Jul 2021 13:04:35 GMT",
+         "content-type": "image/jpg", "content-length": "241190",
+         "etag": "7bc4ca634783b4c83cf506188cd7176b",
+         "x-object-meta-mtime": "1581604242",
+         "last-modified": "Tue, 08 Jun 2021 07:03:34 GMT",
+         "x-timestamp": "1623135813.04310", "accept-ranges": "bytes",
+         "x-trans-id": "txcxxx-xxx", "x-openstack-request-id": "txcxxx-xxx"}
+
+        or
+
+        {"accept-ranges": "bytes", "content-length": "8",
+         "content-type": "application/octet-stream",
+         "etag": "\"b47449c3b5c78b115c8faf2e9ecafd35\"",
+         "last-modified": "Mon, 07 Apr 2025 02:34:11 GMT",
+         "server": "MinIO",
+         "strict-transport-security": "max-age=31536000; includeSubDomains",
+         "vary": "Origin, Accept-Encoding", "x-amz-id-2": "be74..",
+         "x-amz-request-id": "1833F1DFA1B31AAC",
+         "x-content-type-options": "nosniff",
+         "x-xss-protection": "1; mode=block",
+         "date": "Mon, 07 Apr 2025 05:23:43 GMT"}
         """
         size = ObjectHeaders.contentlength(head_dict)
         tm = ObjectHeaders.xtimestamp(head_dict)
@@ -705,7 +729,41 @@ class S3SyncClient(BaseSyncClient):
         return (response['ResponseMetadata']['HTTPHeaders'], response['Body'])
 
     def head_object(self, container, name):
-        return self.client.head_object(Bucket=container, Key=name)
+        response = self.client.head_object(Bucket=container, Key=name)
+        # response might look like this:
+        # {
+        #   "ResponseMetadata": {
+        #     "RequestId": "1833F1..",
+        #     "HostId": "be74..",
+        #     "HTTPStatusCode": 200,
+        #     "HTTPHeaders": {
+        #       "accept-ranges": "bytes",
+        #       "content-length": "8",
+        #       "content-type": "application/octet-stream",
+        #       "etag": "\"b47449c3b5c78b115c8faf2e9ecafd35\"",
+        #       "last-modified": "Mon, 07 Apr 2025 02:34:11 GMT",
+        #       "server": "MinIO",
+        #       "strict-transport-security": "max-age=31536000; includeSub...",
+        #       "vary": "Origin, Accept-Encoding",
+        #       "x-amz-id-2": "be74....",
+        #       "x-amz-request-id": "1833F1...",
+        #       "x-content-type-options": "nosniff",
+        #       "x-xss-protection": "1; mode=block",
+        #       "date": "Mon, 07 Apr 2025 05:23:43 GMT"
+        #     },
+        #     "RetryAttempts": 0
+        #   },
+        #   "AcceptRanges": "bytes",
+        #   "LastModified": datetime("2025-04-07T02:34:11Z", tzinfo=UTC),
+        #   "ContentLength": 8,
+        #   "ETag": "\"b474...\"",
+        #   "ContentType": "application/octet-stream",
+        #   "Metadata": {}
+        # }
+        # we're interested in the regular head info.
+        headers = response['ResponseMetadata']['HTTPHeaders']
+
+        return headers
 
     def is_dynamic_large_object(self, headers):
         return bool('-' in headers.get('etag', ''))

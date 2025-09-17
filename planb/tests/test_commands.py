@@ -49,8 +49,12 @@ class CommandTestCase(PlanbTestCase):
             assert item.get('{#PLANB}'), item
             item['{#PLANB}'] = '$host'
         expected = [
-            {'{#ID}': db01.pk, '{#NAME}': 'local-db01', '{#PLANB}': '$host'},
-            {'{#ID}': web01.pk, '{#NAME}': 'local-web01', '{#PLANB}': '$host'},
+            {
+                '{#ID}': db01.pk, '{#NAME}': 'local-db01',
+                '{#PLANB}': '$host', '{#ETA_MAX}': 0},
+            {
+                '{#ID}': web01.pk, '{#NAME}': 'local-web01',
+                '{#PLANB}': '$host', '{#ETA_MAX}': 0},
         ]
         self.assertEqual(expected, decoded)
 

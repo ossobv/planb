@@ -29,6 +29,14 @@ def message(
 class TaskTestCase(PlanbTestCase):
     maxDiff = 8192
 
+    def assertTransportCommand(self, mock_check_config, fileset, config):
+        # Check the transport command.
+        call = mock_check_config.call_args[0][0]
+        self.assertEqual(call[0], RSYNC_BIN)
+        self.assertEqual(
+            call[-2], f'{config.user}@{config.host}:{config.src_dir}')
+        self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
+
     def test_runner(self):
         fileset = FilesetFactory()
         runner = FilesetRunner(fileset.pk)
@@ -52,16 +60,16 @@ class TaskTestCase(PlanbTestCase):
                 log.output,
                 [message(fileset, 'Skipped because of blacklist hours: 9-17')])
 
-        RsyncConfigFactory(fileset=fileset)
+        config = RsyncConfigFactory(fileset=fileset)
         # Outside work hours it will immediately run the backup.
         with patch('planb.models.timezone') as m, \
                 patch('planb.transport_rsync.models.check_output') as c:
+            # Pass the do-not-run.d file check.
+            c.return_value.decode.return_value = ''
             m.now.return_value = make_aware(
                 datetime.datetime(2019, 1, 1, 3, 0))
             conditional_run(fileset.pk)
-            call = c.call_args[0][0]
-            self.assertEqual(call[0], RSYNC_BIN)
-            self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
+            self.assertTransportCommand(c, fileset, config)
 
     def test_manual_run_is_running(self):
         fileset = FilesetFactory(storage_alias='dummy', is_running=True)
@@ -83,34 +91,34 @@ class TaskTestCase(PlanbTestCase):
             FilesetFactory(storage_alias='dummy', is_enabled=False))
 
     def manual_run_on_fileset(self, fileset):
-        RsyncConfigFactory(fileset=fileset)
+        config = RsyncConfigFactory(fileset=fileset)
         # Otherwise manual run will immediately run the backup.
         with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
+            # Pass the do-not-run.d file check.
+            c.return_value.decode.return_value = ''
             manual_run(fileset.pk, custom_snapname=None)
             self.assertEqual(
                 log.output, [
                     message(fileset, 'Manually requested backup'),
                     message(fileset, 'Starting backup'),
                     message(fileset, 'Completed successfully')])
-            call = c.call_args[0][0]
-            self.assertEqual(call[0], RSYNC_BIN)
-            self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
+            self.assertTransportCommand(c, fileset, config)
 
     def test_unconditional_run(self):
         fileset = FilesetFactory(storage_alias='dummy')
-        RsyncConfigFactory(fileset=fileset)
+        config = RsyncConfigFactory(fileset=fileset)
         # Unconditional run will always run a backup.
         with self.assertLogs('planb.tasks', level='INFO') as log, \
                 patch('planb.transport_rsync.models.check_output') as c:
+            # Pass the do-not-run.d file check.
+            c.return_value.decode.return_value = ''
             unconditional_run(fileset.pk)
             self.assertEqual(
                 log.output, [
                     message(fileset, 'Starting backup'),
                     message(fileset, 'Completed successfully')])
-            call = c.call_args[0][0]
-            self.assertEqual(call[0], RSYNC_BIN)
-            self.assertEqual(call[-1], fileset.get_dataset().get_data_path())
+            self.assertTransportCommand(c, fileset, config)
 
     def test_dutree_run(self):
         # Dutree is spawned at the end of the unconditional_run.

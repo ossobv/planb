@@ -257,7 +257,7 @@ class Config(AbstractTransport):
         remote_userhost = self.get_transport_ssh_userhost()
 
         args = (
-            tuple(shlex.split(remote_shell))
+            tuple(shlex.split(remote_shell or ''))
             + self.get_transport_ssh_options()
             + (remote_userhost,)
             + ('find', '/var/lib/planb/do-not-run.d', '-type', 'f')

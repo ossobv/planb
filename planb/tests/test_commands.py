@@ -1,5 +1,6 @@
 import json
 from io import StringIO
+from shutil import which
 from unittest.mock import patch
 
 from django.core import mail
@@ -98,12 +99,13 @@ class CommandTestCase(PlanbTestCase):
         self.assertEqual(
             message.subject, 'Example Company backup report "local"')
         self.assertEqual(message.body, TEST_BREPORT)
-        attachment = message.attachments[0]
-        self.assertEqual(attachment[0], 'pretty_report.html')
-        self.assertIn(
-            '<title>PlanB backup report for &quot;local&quot;</title>',
-            attachment[1])
-        self.assertEqual(attachment[2], 'text/html')
+        if which('rst2html') is not None:
+            attachment = message.attachments[0]
+            self.assertEqual(attachment[0], 'pretty_report.html')
+            self.assertIn(
+                '<title>PlanB backup report for &quot;local&quot;</title>',
+                attachment[1])
+            self.assertEqual(attachment[2], 'text/html')
 
     def test_confexport(self):
         fileset = FilesetFactory(

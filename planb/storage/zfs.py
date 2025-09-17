@@ -265,14 +265,7 @@ class ZfsStorage(PerformCommands, Storage):
         old_path = self.zfs_get_local_path(old_dataset_name)
         assert old_path is not None, old_path
 
-        # Remove the directory before doing anything else.
-        try:
-            os.rmdir(old_path)  # remove if empty/not active
-        except FileNotFoundError:
-            pass  # wasn't even there? all good
-        except OSError:
-            logger.error('Cannot remove old dir %r. Still mounted?', old_path)
-            raise
+        self._zfs_rename_dataset_pre_setup(old_path)
 
         self._perform_binary_command(
             ('rename', old_dataset_name, new_dataset_name))
@@ -294,6 +287,19 @@ class ZfsStorage(PerformCommands, Storage):
             if old_path == new_path:
                 new_path = None
 
+        self._zfs_rename_dataset_post_setup(new_path, new_dataset_name)
+
+    def _zfs_rename_dataset_pre_setup(self, old_path):
+        # Remove the directory before doing anything else.
+        try:
+            os.rmdir(old_path)  # remove if empty/not active
+        except FileNotFoundError:
+            pass  # wasn't even there? all good
+        except OSError:
+            logger.error('Cannot remove old dir %r. Still mounted?', old_path)
+            raise
+
+    def _zfs_rename_dataset_post_setup(self, new_path, new_dataset_name):
         # Update ZFS secret, if we're using those.
         if self.config['DATASETKEYS']:
             self._zfs_update_key_location(new_dataset_name)

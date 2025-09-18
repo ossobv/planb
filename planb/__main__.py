@@ -1,5 +1,5 @@
-from pkg_resources import (
-    get_distribution, DistributionNotFound, RequirementParseError)
+from importlib.metadata import (
+    PackageNotFoundError, version as metadata_version)
 import os
 import sys
 
@@ -69,8 +69,8 @@ def try_become_user(planb_user):
 
 def get_version():
     try:
-        version = get_distribution('planb').version
-    except (DistributionNotFound, RequirementParseError):
+        version = metadata_version('planb')
+    except PackageNotFoundError:
         version = '1.7'
     return 'PlanB {} (Django {})'.format(version, get_django_version())
 

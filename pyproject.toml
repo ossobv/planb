@@ -1,0 +1,93 @@
+[project]
+dynamic = ["readme", "version"]
+name = "planb"
+description = "PlanB automates remote SSH+rsync backups"
+authors = [
+    {name = "Alex Boonstra", email = "aboonstra+planb@osso.nl"},
+    {name = "Harm Geerts", email = "hgeerts+planb@osso.nl"},
+    {name = "Walter Doekes", email = "wjdoekes+planb@osso.nl"},
+]
+maintainers = [
+    {name = "Harm Geerts", email = "hgeerts+planb@osso.nl"},
+    {name = "Walter Doekes", email = "wjdoekes+planb@osso.nl"},
+]
+requires-python = ">= 3.10"
+classifiers=[
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Framework :: Django :: 3",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Archiving :: Backup",
+]
+dependencies = [
+    # Core
+    "Django~=3.2.25",
+    # Config and metadata format.
+    "PyYAML>=5.1.1",
+    "django-multi-email-field>=0.6.1,<0.7",
+    # Async task system.
+    "django-q>=1.2.1,<2",
+    # HTML email support.
+    "docutils",
+    # Disk space usage.
+    "dutree>=1.8,<2",
+    # Kleides Discourse Single-Sign-On authentication.
+    "kleides-dssoclient>=0.7",
+    "pysigset",
+    # Better timedelta for data retention periods.
+    "python-dateutil>=2.8.1,<3",
+    "redis>=2.10.5,<3",
+    "requests>=2.22.0",
+    # Set process name for ps output.
+    "setproctitle>=1.1.8,<2",
+    # Needed by django-q.
+    "setuptools",
+]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+
+[project.optional-dependencies]
+dev = [
+    "factory-boy>=2.12.0",
+    "pytest",
+    "pytest-cov",
+    "pytest-django",
+    "pytest-randomly",
+]
+
+[project.scripts]
+planb = "planb.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/ossobv/planb"
+
+[build-system]
+requires = ["setuptools >= 77.0.3", "setuptools-git-versioning>=2.0,<3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.data-files]
+"share/doc/planb" = [
+    "LICENSE", 
+    "README.rst", 
+    "CHANGES.rst",
+]
+"share/planb" = [
+    "example_settings.py", 
+    "wsgi.py",
+    "rc.d/planb-queue.service",
+    "rc.d/planb-queue-dutree.service",
+]
+
+[tool.setuptools.dynamic.readme]
+file = ["README.rst", "CHANGES.rst"]
+content-type = "text/x-rst"
+
+[tool.setuptools.packages.find]
+include = ["planb*"]
+
+[tool.setuptools-git-versioning]
+enabled = true

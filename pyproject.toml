@@ -25,18 +25,18 @@ classifiers=[
 ]
 dependencies = [
     # Core
-    "Django~=3.2.25",
+    "Django~=4.2.24",
     # Config and metadata format.
     "PyYAML>=5.1.1",
-    "django-multi-email-field>=0.6.1,<0.7",
+    "django-multi-email-field~=0.8.0",
     # Async task system.
-    "django-q>=1.2.1,<2",
+    "django-q2~=1.8.0",
     # HTML email support.
     "docutils",
     # Disk space usage.
     "dutree>=1.8,<2",
     # Kleides Discourse Single-Sign-On authentication.
-    "kleides-dssoclient>=0.7",
+    "kleides-dssoclient>=0.9",
     "pysigset",
     # Better timedelta for data retention periods.
     "python-dateutil>=2.8.1,<3",

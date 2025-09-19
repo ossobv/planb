@@ -46,13 +46,15 @@ class PlanbTestCase(PlanbTestCase):
 
     def test_snapshot_create(self):
         fileset = FilesetFactory(storage_alias='dummy')
-        with patch('planb.models.datetime') as m:
-            m.utcnow.return_value = datetime.datetime(2020, 5, 3, 14, 42)
+        with patch('planb.storage.base.datetime') as m:
+            m.datetime.now.return_value = datetime.datetime(
+                2020, 5, 3, 14, 42, tzinfo=datetime.timezone.utc)
             # snapshot create will always create a snapshot.
             # The snapshot name is a utc timestamp.
             self.assertEqual(
                 fileset.snapshot_create(), 'planb-20200503T1442Z')
-            m.utcnow.return_value = datetime.datetime(2020, 5, 3, 15, 31)
+            m.datetime.now.return_value = datetime.datetime(
+                2020, 5, 3, 15, 31, tzinfo=datetime.timezone.utc)
             self.assertEqual(
                 fileset.snapshot_create(), 'planb-20200503T1531Z')
 
@@ -140,13 +142,13 @@ class PlanbTestCase(PlanbTestCase):
         with patch('planb.models.timezone') as m:
             # Time since last backup is just 5 hours.
             fileset.last_ok = datetime.datetime(
-                2020, 5, 19, 19, tzinfo=timezone.utc)
+                2020, 5, 19, 19, tzinfo=datetime.timezone.utc)
             m.now.return_value = datetime.datetime(
-                2020, 5, 20, tzinfo=timezone.utc)
+                2020, 5, 20, tzinfo=datetime.timezone.utc)
             self.assertTrue(fileset.should_backup())
             # Same day of the month, one month later at midnight.
             m.now.return_value = datetime.datetime(
-                2020, 6, 19, tzinfo=timezone.utc)
+                2020, 6, 19, tzinfo=datetime.timezone.utc)
             self.assertTrue(fileset.should_backup())
 
         # Backup is running.

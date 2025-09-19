@@ -3,13 +3,19 @@ import datetime
 import logging
 import re
 
+from django.conf import settings
 from dateutil.relativedelta import relativedelta, SU
 
 logger = logging.getLogger(__name__)
 
-# regex to get the datetime from a snapshot name.
-# the optional prefix can be ignored.
-SNAPNAME_DATETIME_RE = re.compile(r'^(?:planb-)?(\d{8}T\d{4}Z)$')
+# Datetime format for the snapshot names.
+# Use the Z timezone suffix for UTC instead of +00:00.
+SNAPNAME_DATETIME_FMT = '%Y%m%dT%H%MZ'
+# Regex to get the datetime from a snapshot name.
+# The optional prefix can be ignored.
+SNAPNAME_DATETIME_RE = re.compile(r'^.*(\d{8}T\d{4}Z)$')
+# Regex for valid custom snapname prefixes.
+SNAPNAME_PREFIX_RE = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')
 
 
 class RetentionPeriod:
@@ -64,8 +70,32 @@ def datetime_from_snapshot_name(snapname):
     return dts
 
 
+def get_snapshot_name(custom_prefix=None):
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    snapname = utc_now.strftime(SNAPNAME_DATETIME_FMT)
+    prefix = custom_prefix or settings.PLANB_PREFIX
+    if prefix:
+        snapname = f'{prefix}-{snapname}'
+    return snapname
+
+
+def is_valid_custom_snapshot_prefix(snapname):
+    # Snapshots prefixed with settings.PLANB_PREFIX are selected for
+    # rotation and should not be used as a custom snapname.
+    # The date is always suffixed to the name.
+    if (snapname in (None, '', 'planb', settings.PLANB_PREFIX)
+            or not SNAPNAME_PREFIX_RE.match(snapname)):
+        return False
+    return True
+
+
 def parse_snapshot_datetime(value):
-    return datetime.datetime.strptime(value, '%Y%m%dT%H%MZ')  # planb-dTtZ
+    return datetime.datetime.strptime(value, SNAPNAME_DATETIME_FMT)
+
+
+def parse_snapshot_name(snapname):
+    prefix, dts = snapname.rsplit('-', 1)
+    return prefix, datetime_from_snapshot_name(dts)
 
 
 class DatasetNotFound(Exception):
@@ -126,12 +156,17 @@ class Storage(object):
             dataset_name, retention_map)
         for snapname in self.snapshot_list(dataset_name):
             try:
-                dts = datetime_from_snapshot_name(snapname)
+                prefix, dts = parse_snapshot_name(snapname)
             except ValueError:
+                is_automated = False
+            else:
+                is_automated = not is_valid_custom_snapshot_prefix(prefix)
+
+            if is_automated:
+                snapshots.append((dts, snapname))
+            else:
                 logger.info(
                     '[%s] Keeping manual snapshot %s', dataset_name, snapname)
-                continue
-            snapshots.append((dts, snapname))
 
         snapshots = list(sorted(snapshots, reverse=True))
         logger.info(
@@ -209,7 +244,7 @@ class SnapshotRetentionManager:
             logger.debug(
                 '[%s] Select %s as best match for %s:%s with diff:%d',
                 self.dataset_name, best_snapshot, period,
-                desired_dts.strftime('%Y%m%dT%H%MZ'), best_difference)
+                desired_dts.strftime(SNAPNAME_DATETIME_FMT), best_difference)
             self.keep_snapshots.add(best_snapshot)
         return best_dts
 

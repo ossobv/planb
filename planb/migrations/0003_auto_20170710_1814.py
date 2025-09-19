@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import datetime
 from django.db import migrations, models
-from django.utils.timezone import utc
 
 
 class Migration(migrations.Migration):
@@ -22,7 +21,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='hostconfig',
             name='date_complete',
-            field=models.DateTimeField(default=datetime.datetime(1970, 1, 2, 0, 0, tzinfo=utc), verbose_name='Complete date'),
+            field=models.DateTimeField(default=datetime.datetime(1970, 1, 2, 0, 0, tzinfo=datetime.timezone.utc), verbose_name='Complete date'),
         ),
         migrations.AlterField(
             model_name='hostconfig',

@@ -1,6 +1,6 @@
 import json
 import socket
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Max, Q
@@ -114,7 +114,7 @@ class Command(BaseCommandWithZabbix):
         self.stdout.write(json.dumps(data) + '\n')
 
     def _get_first_and_last_success_and_fail(self, qs, now):
-        t0 = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        t0 = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
         oldest_success = oldest_failure = now
         latest_success = latest_failure = t0
 

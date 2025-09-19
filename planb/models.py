@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 import logging
 
 from django.apps import apps
@@ -18,13 +18,14 @@ from django_q.brokers.redis_broker import Redis
 from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
 from planb.storage import storage_pools
-from planb.storage.base import DatasetNotFound, datetime_from_snapshot_name
+from planb.storage.base import (
+    DatasetNotFound, datetime_from_snapshot_name, get_snapshot_name)
 from planb.utils import RETENTION_PERIOD_ADVANCED
 
 
 logger = logging.getLogger(__name__)
 
-BOGODATE = datetime(1970, 1, 2, tzinfo=timezone.utc)
+BOGODATE = datetime(1970, 1, 2, tzinfo=dt_timezone.utc)
 
 validate_retention = RegexValidator(
     r'^(\d+[ymwdh],?)*$', message=_('Enter a valid value like 6m,4w,7d'))
@@ -522,21 +523,14 @@ class Fileset(models.Model):
         return self.get_dataset().has_child_datasets()
 
     def get_next_snapshot_name(self):
+        '''Generate and store the next snapshot name for transports that create
+        their own snapshots.'''
         if not hasattr(self, '_next_snapshot_name'):
-            snapname = datetime.utcnow().strftime('%Y%m%dT%H%MZ')  # yuck
-            if settings.PLANB_PREFIX:
-                snapname = '{}-{}'.format(settings.PLANB_PREFIX, snapname)
-            # XXX: yuck
-            self._next_snapshot_name = snapname
+            self._next_snapshot_name = get_snapshot_name()
         return self._next_snapshot_name
 
     def snapshot_create(self, custom_prefix=None):
-        snapname = datetime.utcnow().strftime('%Y%m%dT%H%MZ')  # XXX: see yuck
-
-        prefix = custom_prefix or settings.PLANB_PREFIX
-        if prefix:
-            snapname = '{}-{}'.format(prefix, snapname)
-
+        snapname = get_snapshot_name(custom_prefix)
         self.get_dataset().snapshot_create(snapname)
         logger.info('[%s] Created snapshot %s', self, snapname)
         return snapname

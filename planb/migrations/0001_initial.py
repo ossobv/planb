@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 
 import datetime
 from django.db import migrations, models
-from django.utils import timezone
 import django.db.models.deletion
 import planb.common.fields
 
@@ -35,7 +34,7 @@ class Migration(migrations.Migration):
                 ('excludes', planb.common.fields.FilelistField(blank=True, max_length=1023)),
                 ('running', models.BooleanField(default=False)),
                 ('priority', models.IntegerField(default=0)),
-                ('date_complete', models.DateTimeField(default=datetime.datetime(1970, 1, 2, 0, 0, tzinfo=timezone.utc), verbose_name='Complete date')),
+                ('date_complete', models.DateTimeField(default=datetime.datetime(1970, 1, 2, 0, 0, tzinfo=datetime.timezone.utc), verbose_name='Complete date')),
                 ('complete_duration', models.PositiveIntegerField(default=0, help_text='Duration in seconds of last successful job.', verbose_name='Time')),
                 ('enabled', models.BooleanField(default=True)),
                 ('queued', models.BooleanField(default=False)),

@@ -1,12 +1,12 @@
-import re
-
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.contrib import messages
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.views.generic.base import View
 
 from .models import Fileset
 from .tasks import schedule_manual_backup_job
+from planb.storage.base import SNAPNAME_PREFIX_RE
 
 
 class EnqueueJob(View):
@@ -18,10 +18,12 @@ class EnqueueJob(View):
 
         if request.POST.get('snapname'):
             snapname = request.POST.get('snapname')
-            # Snapshots named planb-%Y%m%dT%H%MZ are selected for rotation.
+            # Snapshots prefixed with settings.PLANB_PREFIX are selected for
+            # rotation and should not be used as a custom snapname.
             # The date is always suffixed to the name.
-            assert snapname not in (None, '', 'planb') and re.match(
-                r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$', snapname), snapname
+            if (snapname in (None, '', 'planb', settings.PLANB_PREFIX)
+                    or not SNAPNAME_PREFIX_RE.match(snapname)):
+                raise HttpResponseBadRequest('Invalid snapname')
             custom_snapname = snapname
 
         try:

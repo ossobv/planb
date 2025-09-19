@@ -852,7 +852,7 @@ class SwiftSyncClient(BaseSyncClient):
         # containers == [
         #   {'count': 350182, 'bytes': 78285833087,
         #    'name': 'containerA'}]
-        container_names = set(i['name'] for i in containers)
+        container_names = {i['name'] for i in containers}
 
         force_segments = self.config.all_containers_have_segments
 
@@ -1375,7 +1375,7 @@ class SyncMultiWorkerBase(threading.Thread):
         """
         self._success_fp.write(record.line)
 
-    def _process_source_list(self):
+    def _process_source_list(self):  # noqa: C901
         """
         Process the source list, calling process_record() for each file.
         """
@@ -1446,7 +1446,7 @@ class SyncMultiWorkerBase(threading.Thread):
         except FileExistsError:
             pass
 
-    def _add_new_record_download(self, record, container, path):
+    def _add_new_record_download(self, record, container, path):  # noqa: C901
         try:
             with open(path, 'wb') as out_fp:
                 # The obj is a chunked object and you you must fully read
@@ -1908,7 +1908,7 @@ class _ListLineComm:
             elem = it = None
         return it, elem
 
-    def _process_main(self):
+    def _process_main(self):  # noqa: C901
         # Make local
         act_both, act_difftime, act_leftonly, act_rightonly = (
             self._act_both, self._act_difftime,
@@ -2039,7 +2039,7 @@ contx|ab|2021-02-03T12:34:56.654321|1234
 contx|b|2021-02-03T12:34:56.654321|1234
 conty|a|2021-02-03T12:34:56.654321|1234'''.split('\n')
         it = _comm_lineiter(a)
-        values = [i for i in it]
+        values = list(it)
         self.assertEqual(values, [
             ListLine('contx|a|2021-02-03T12:34:56.654321|1234'),
             ListLine('contx|ab|2021-02-03T12:34:56.654321|1234'),

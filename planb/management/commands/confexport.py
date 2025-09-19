@@ -7,6 +7,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from planb.common.customyaml import CustomYaml
 from planb.models import Fileset, HostGroup
 from planb.management.base import BaseCommand
+from planb.transport_rsync.models import Config as RSyncConfig
 
 
 class HostAsConfigListingConfig(object):
@@ -55,6 +56,13 @@ class HostAsConfig(object):
         )))
 
     def get_paths(self):
+        try:
+            transport = self._host.get_transport()
+        except ObjectDoesNotExist:
+            # No transport configured? Then no paths.
+            return ('paths', 'NO TRANSPORT CONFIGURED')
+        if not isinstance(transport, RSyncConfig):
+            return ('paths', 'TRANSPORT DOES NOT SPECIFY PATHS')
         return ('paths', OrderedDict((
             # Root of the filesystem. Should be '/'. In the future we
             # could put something else in here, like '/encrypted-root/'.
@@ -76,36 +84,24 @@ class HostAsConfig(object):
                          "here's the p0rn"]
                         + [None] * 8)
 
-                paths.append(
-                    dict([(path, comment)]) if comment else path)
+                paths.append({path: comment} if comment else path)
 
         return paths
 
     def get_root(self):
-        try:
-            return ('root', self._host.get_transport().src_dir)
-        except ObjectDoesNotExist:
-            return ('root', None)
+        return ('root', self._host.get_transport().src_dir)
 
     def get_includes(self):
         # A list of "glob" names to include; started from 'root'
         # without that slash.
-        try:
-            return ('include', self._split_paths(
-                self._host.get_transport().includes))
-        except ObjectDoesNotExist:
-            # No transport configured? Then no includes..
-            return ('include', 'NO TRANSPORT CONFIGURED')
+        return ('include', self._split_paths(
+            self._host.get_transport().includes))
 
     def get_excludes(self):
         # A list of "glob" names to exclude; started from 'root'
         # without that slash.
-        try:
-            return ('exclude', self._split_paths(
-                self._host.get_transport().excludes))
-        except ObjectDoesNotExist:
-            # No transport configured? Then no excludes..
-            return ('exclude', 'NO TRANSPORT CONFIGURED')
+        return ('exclude', self._split_paths(
+            self._host.get_transport().excludes))
 
     def get_notes(self):
         return ('notes', self._host.notes)

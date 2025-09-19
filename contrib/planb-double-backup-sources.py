@@ -89,7 +89,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main():  # noqa: C901
     warning = False
 
     if not DBDIR.exists():

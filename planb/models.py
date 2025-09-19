@@ -321,11 +321,11 @@ class Fileset(models.Model):
     @property
     def retention_map(self):
         if not hasattr(self, '_retention_map'):
-            self._retention_map = dict(
-                (i[-1], int(i[:-1]))
+            self._retention_map = {
+                i[-1]: int(i[:-1])
                 for i in self.get_retention().split(',')
                 if i
-            )
+            }
         return self._retention_map
 
     @property

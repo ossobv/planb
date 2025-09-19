@@ -7,7 +7,11 @@ from django.core.exceptions import ValidationError
 from .models import validate_blacklist_hours, validate_retention
 
 _planb_settings_checks = []
-_is_planb_settings_check = (lambda x: _planb_settings_checks.append(x) or x)
+
+
+def _is_planb_settings_check(check):
+    _planb_settings_checks.append(check)
+    return check
 
 
 def check_planb_settings(app_configs, **kwargs):

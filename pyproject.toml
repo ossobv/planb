@@ -69,6 +69,29 @@ Repository = "https://github.com/ossobv/planb"
 requires = ["setuptools >= 77.0.3", "setuptools-git-versioning>=2.0,<3", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.ruff]
+extend-exclude = [
+    "*/migrations/*",
+]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = false
+
+[tool.ruff.lint]
+ignore = []
+select = [
+    "C",
+    "E",
+    "F",
+    "W",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8
+
 [tool.setuptools.data-files]
 "share/doc/planb" = [
     "LICENSE", 

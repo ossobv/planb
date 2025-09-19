@@ -168,7 +168,7 @@ class Storage(object):
                 logger.info(
                     '[%s] Keeping manual snapshot %s', dataset_name, snapname)
 
-        snapshots = list(sorted(snapshots, reverse=True))
+        snapshots = sorted(snapshots, reverse=True)
         logger.info(
             '[%s] Available snapshots: %s', dataset_name,
             [i[1] for i in snapshots])
@@ -193,7 +193,7 @@ class Storage(object):
 class SnapshotRetentionManager:
     def __init__(self, dataset_name, snapshots, retention_map):
         self.dataset_name = dataset_name
-        self.snapshots = list(sorted(snapshots, reverse=True))
+        self.snapshots = sorted(snapshots, reverse=True)
         self.retention_map = retention_map
         self.newest_dts, self.newest_snapshot = self.snapshots[0]
         # Always keep the newest snapshot.
@@ -301,7 +301,7 @@ class Datasets(list):
         """
         # Filter, get only leaves OR those which exist in the database.
         datasets_in_database = [ds for ds in self if ds.exists_in_database]
-        datasets_by_name = set(ds.name for ds in datasets_in_database)
+        datasets_by_name = {ds.name for ds in datasets_in_database}
         relevant_datasets = datasets_in_database
         for ds in self:
             # We already have those that exist in the database.

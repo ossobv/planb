@@ -17,15 +17,10 @@ from django.utils import timezone
 from django_q.brokers import get_broker
 from django_q.conf import Conf as DQConf
 from django_q.tasks import Schedule, async_task, schedule
+from setproctitle import getproctitle, setproctitle
 from yaml import safe_dump, safe_load
 
 from .models import BOGODATE, BackupRun, Fileset, FilesetLock
-
-try:
-    from setproctitle import getproctitle, setproctitle
-except ImportError:
-    getproctitle = None
-    setproctitle = (lambda x: None)
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +54,11 @@ finalize_run:
 if not DQConf.SIGNAL_NAMES:
     # Bug in django_q.conf that imports signal function instead of signal
     # module and then tries to get the global SIG* names.
-    DQConf.SIGNAL_NAMES = dict(
-        (getattr(signal, n), n)
+    DQConf.SIGNAL_NAMES = {
+        getattr(signal, n): n
         for n in dir(signal)
         if n.startswith("SIG") and "_" not in n
-    )
+    }
 
 
 class handle_exit_signals:
@@ -380,8 +375,7 @@ class FilesetRunner:
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
         fileset = Fileset.objects.get(pk=self._fileset_id)
-        if getproctitle:
-            oldproctitle = getproctitle()
+        oldproctitle = getproctitle()
 
         # Mark it as running.
         Fileset.objects.filter(pk=fileset.pk).update(is_running=True)
@@ -409,8 +403,7 @@ class FilesetRunner:
                 schedule_dutree_job(fileset, run)
 
         finally:
-            if getproctitle:
-                setproctitle(oldproctitle)
+            setproctitle(oldproctitle)
 
     def _handle_run_failure(self, e, fileset, run, t0):
         # Close the DB connection because it may be stale.
@@ -520,9 +513,9 @@ class FilesetRunner:
             snapshot_size_listing = 'summary_disabled: 0'
 
         # Include transport export in attributes.
-        attributes = safe_dump(dict(
-            snapshot=snapshot,
-            do_snapshot_size_listing=fileset.do_snapshot_size_listing),
+        attributes = safe_dump({
+            'snapshot': snapshot,
+            'do_snapshot_size_listing': fileset.do_snapshot_size_listing},
             default_flow_style=False)
 
         # Store run info.
@@ -563,8 +556,7 @@ class FilesetRunner:
         run = BackupRun.objects.get(pk=run_id)
         assert run.fileset_id == fileset.id
 
-        if getproctitle:
-            oldproctitle = getproctitle()
+        oldproctitle = getproctitle()
 
         # Retrieve the name of the snapshot created the backup run.
         attributes = safe_load(run.attributes)
@@ -583,8 +575,7 @@ class FilesetRunner:
                 self._snapshot_info_from_dutree(
                     fileset, dataset, snapshot, run)
         finally:
-            if getproctitle:
-                setproctitle(oldproctitle)
+            setproctitle(oldproctitle)
 
     def _snapshot_info_from_child_datasets(self, dataset, snapshot, run):
         snapshot_size = 524288

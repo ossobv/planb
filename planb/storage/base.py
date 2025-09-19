@@ -3,13 +3,20 @@ import datetime
 import logging
 import re
 
+from django.conf import settings
 from dateutil.relativedelta import relativedelta, SU
 
 logger = logging.getLogger(__name__)
 
-# regex to get the datetime from a snapshot name.
-# the optional prefix can be ignored.
+# Datetime format for the snapshot names.
+# Use the Z timezone suffix for UTC instead of +00:00.
+SNAPNAME_DATETIME_FMT = '%Y%m%dT%H%MZ'
+# Regex to get the datetime from a snapshot name.
+# The optional prefix can be ignored.
+# XXX The PLANB_PREFIX is ignored.
 SNAPNAME_DATETIME_RE = re.compile(r'^(?:planb-)?(\d{8}T\d{4}Z)$')
+# Regex for valid custom snapname prefixes.
+SNAPNAME_PREFIX_RE = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')
 
 
 class RetentionPeriod:
@@ -65,7 +72,16 @@ def datetime_from_snapshot_name(snapname):
 
 
 def parse_snapshot_datetime(value):
-    return datetime.datetime.strptime(value, '%Y%m%dT%H%MZ')  # planb-dTtZ
+    return datetime.datetime.strptime(value, SNAPNAME_DATETIME_FMT)
+
+
+def get_snapshot_name(custom_prefix=None):
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    snapname = utc_now.strftime(SNAPNAME_DATETIME_FMT)
+    prefix = custom_prefix or settings.PLANB_PREFIX
+    if prefix:
+        snapname = f'{prefix}-{snapname}'
+    return snapname
 
 
 class DatasetNotFound(Exception):
@@ -209,7 +225,7 @@ class SnapshotRetentionManager:
             logger.debug(
                 '[%s] Select %s as best match for %s:%s with diff:%d',
                 self.dataset_name, best_snapshot, period,
-                desired_dts.strftime('%Y%m%dT%H%MZ'), best_difference)
+                desired_dts.strftime(SNAPNAME_DATETIME_FMT), best_difference)
             self.keep_snapshots.add(best_snapshot)
         return best_dts
 

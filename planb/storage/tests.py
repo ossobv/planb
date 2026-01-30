@@ -65,10 +65,10 @@ class PlanbStorageTestCase(PlanbTestCase):
         destroyed = dataset.snapshot_rotate(
             retention_map={'h': 2, 'y': 1})
         self.assertEqual(
-            destroyed, ['planb-20200504T1655Z', 'planb-20200503T1801Z',
-                        'planb-20200502T1743Z'])
+            destroyed, ['planb-20200504T1655Z', 'planb-20200502T1743Z'])
         self.assertEqual(dataset.snapshot_list(), [
             'planb-20200102T0912Z',
+            'planb-20200503T1801Z',
             'planb-20200504T1458Z',
             'archive-20200504T1458Z',
             'planb-20200504T1602Z',
@@ -171,9 +171,11 @@ class PlanbStorageTestCase(PlanbTestCase):
         dataset.snapshot_create('planb-20200102T1812Z')
         dataset.snapshot_create('planb-20200502T1743Z')
         dataset.snapshot_create('planb-20200503T1801Z')
+        dataset.snapshot_create('planb-20200804T1902Z')
         self.assertEqual(dataset.snapshot_list(), [
             'planb-20200102T0912Z', 'planb-20200102T1812Z',
             'planb-20200502T1743Z', 'planb-20200503T1801Z',
+            'planb-20200804T1902Z',
         ])
         destroyed = dataset.snapshot_rotate(retention_map={'h': 2})
         self.assertEqual(destroyed, ['planb-20200102T0912Z'])
@@ -222,7 +224,6 @@ class PlanbStorageTestCase(PlanbTestCase):
         self.assertEqual(destroyed, [
             'planb-20200503T2209Z',
             'planb-20200425T2249Z',
-            'planb-20180531T0543Z',
         ])
 
     def test_zfs_storage(self):

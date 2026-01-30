@@ -214,7 +214,10 @@ class SnapshotRetentionManager:
             self, period, retention, snapshot_dts):
         retention_period = RETENTION_PERIOD_SECONDS[period]
         desired_dts = None
-        for i in range(retention):
+        # Add one extra backup so the configured retention is the minimum
+        # amount of kept backups and the full retention period is available
+        # for recovery.
+        for i in range(retention + 1):
             # Find the next best snapshot from the previous match to
             # increase coverage on systems with irregular schedules.
             desired_dts = retention_period(snapshot_dts, desired_dts)

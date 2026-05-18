@@ -63,7 +63,7 @@ class DatasetStorage:
 
 def get_server_datasets(server):
     return check_output(
-        ['ssh', server, 'planb', 'blist', '--double'],
+        ['ssh', server, '-oLogLevel=error', 'planb', 'blist', '--double'],
         text=True).splitlines()
 
 

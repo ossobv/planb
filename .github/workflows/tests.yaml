@@ -38,7 +38,8 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update
-          apt-get install -qy --no-install-recommends libsqlite3-0 tzdata
+          apt-get install -qy --no-install-recommends \
+            libsqlite3-0 python3-cffi-backend tzdata
           uv tool install tox --with tox-gh-actions --with tox-uv
 
       - name: Run tests with tox

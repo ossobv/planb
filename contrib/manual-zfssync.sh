@@ -276,7 +276,7 @@ _recv() {
             echo "warning: We have newer snapshots ($newer_snapshots) after" \
                "$remote${commonsnap:-@(void)}, adding recv -F" >&2
         else
-            echo "warning: We have never snapshots ($newer_snapshots) after" \
+            echo "warning: We have newer snapshots ($newer_snapshots) after" \
                "$remote${commonsnap:-@(void)}, expect failure" >&2
         fi
     fi

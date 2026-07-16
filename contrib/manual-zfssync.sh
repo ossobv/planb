@@ -11,7 +11,11 @@
 # - MANUAL_ZFSSYNC_OVERWRITE_NEWER_SNAPSHOTS=1
 
 ssh_target="$1"; shift  # remotebackup@DEST
-REMOTE_CMD="/usr/bin/ssh -oLogLevel=error $ssh_target"  # options?
+REMOTE_CMD_OPTIONS=
+if test -n "${SSH_CONTROL_PATH:-}"; then
+    REMOTE_CMD_OPTIONS="-oControlMaster=no -oControlPath=$SSH_CONTROL_PATH "
+fi
+REMOTE_CMD="/usr/bin/ssh -oLogLevel=error ${REMOTE_CMD_OPTIONS}${ssh_target}"
 
 LOCAL_PREFIX="$1"; shift  # "tank" both local and remote
 REMOTE_PREFIX="$LOCAL_PREFIX"

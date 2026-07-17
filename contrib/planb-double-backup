@@ -37,6 +37,7 @@ trap 'cleanup; trap - TERM; kill -TERM $$' TERM
 
 
 while true; do
+    start_master
     ret=0
     DATASETS=$("$here/planb-double-backup-sources.py" "$USERATHOST") || ret=$?
 
@@ -61,7 +62,6 @@ while true; do
     echo '' $DATASETS
     echo
 
-    start_master
     "$here/manual-zfssync.sh" "$USERATHOST" "$DESTPOOL" $DATASETS
     stop_master
 

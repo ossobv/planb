@@ -101,6 +101,11 @@ if test "$contains" != "filesystems"; then
     sudo zfs set planb:contains=filesystems "$planb_storage_name"
 fi
 
+target_snapshot=$planb_snapshot_target
+target_snapshot_prefix=${planb_snapshot_target%-*}
+# XXX: do we?
+test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
+
 
 ssh_target="$1"; shift  # remotebackup@DEST (options like -luser disallowed)
 # XXX: todo: sanitize $1? (no spaces, no funny chars)
@@ -114,16 +119,19 @@ else
     ssh_options="$ssh_options -o StrictHostKeyChecking=no"
 fi
 
-target_snapshot=$planb_snapshot_target
-target_snapshot_prefix=${planb_snapshot_target%-*}
-# XXX: do we?
-test "$target_snapshot_prefix" = "planb"  # (not needed, we use planb:owner)
+# Multiplexing ssh connections: one master TCP/login for the whole run, so the
+# many zfs-list/snapshot/send calls below don't require separate logins (slow
+# and log-spammy).
+# WARNING: Cannot contain spaces or awkward shell characters. It's our
+# job to clean up ssh_mux_dir now.
+ssh_mux_dir=$(mktemp -d "${TMPDIR:-/tmp}/planb-ssh.XXXXXX")
+ssh_control_path="$ssh_mux_dir/ctl"
 
 # Prepare globals, so we know what to refactor
 ZFS_SEND_OPTION=$zfs_send_option
 ZFS_RECV_OPTION=$zfs_recv_option
 ZFS_RECURSIVE=$zfs_recursive
-SSH_OPTIONS=$ssh_options
+SSH_OPTIONS="$ssh_options -o ControlMaster=no -o ControlPath=$ssh_control_path"
 SSH_TARGET=$ssh_target
 TARGET_SNAPSHOT=$target_snapshot
 TARGET_SNAPSHOT_PREFIX=$target_snapshot_prefix
@@ -280,6 +288,20 @@ prune_remote_snapshots() {
     fi
 }
 
+
+# Setup cleanup handler and start master ssh connection.
+stop_ssh() {
+    ssh -o ControlPath="$ssh_control_path" -O exit "$ssh_target" 2>/dev/null \
+        || true
+    rm -rf "$ssh_mux_dir"
+}
+trap 'stop_ssh' EXIT
+trap 'stop_ssh; trap - INT; kill -INT $$' INT
+trap 'stop_ssh; trap - TERM; kill -TERM $$' TERM
+ssh -o LogLevel=error $ssh_options \
+    -o ControlMaster=yes -o ControlPath=$ssh_control_path \
+    -o ControlPersist=60 -o ServerAliveInterval=60 -o ServerAliveCountMax=3 \
+    -o BatchMode=yes -N -f "$ssh_target"
 
 # Download snapshots (make them on remote if necessary).
 for arg in "$@"; do

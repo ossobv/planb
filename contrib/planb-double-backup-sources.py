@@ -5,6 +5,7 @@
 # Right now:
 # - assuming you're running this as root
 # - remote has planb access
+import os
 import sys
 
 from argparse import ArgumentParser
@@ -62,8 +63,14 @@ class DatasetStorage:
 
 
 def get_server_datasets(server):
+    ssh_opts = ['-oLogLevel=error']
+    if os.environ.get('SSH_CONTROL_PATH'):
+        ssh_opts.extend([
+            '-oControlMaster=no',
+            '-oControlPath={}'.format(os.environ['SSH_CONTROL_PATH']),
+        ])
     return check_output(
-        ['ssh', server, '-oLogLevel=error', 'planb', 'blist', '--double'],
+        ['ssh'] + ssh_opts + [server, 'planb', 'blist', '--double'],
         text=True).splitlines()
 
 

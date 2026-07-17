@@ -109,10 +109,10 @@ PLANB_TRANSPORTS = [
 Q_MAIN_QUEUE = 'main'
 Q_CLUSTER_QUEUE = os.environ.get('Q_CLUSTER_QUEUE', Q_MAIN_QUEUE)
 
-# The worker queue for dutree tasks, limited to 1 worker. See how this is set
+# The worker queue for dutree tasks, limited to 3 workers. See how this is set
 # in the bqcluster management command.
 Q_DUTREE_QUEUE = 'dutree'
-Q_DUTREE_WORKERS = 1
+Q_DUTREE_WORKERS = 3
 
 Q_CLUSTER = {
     'name': 'planb',    # redis prefix AND default broker (yuck!)

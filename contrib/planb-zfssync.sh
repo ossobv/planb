@@ -289,9 +289,15 @@ prune_remote_snapshots() {
 }
 
 
-# Start master ssh connection.
-trap 'ssh -o ControlPath="$ssh_control_path" -O exit "$ssh_target" \
-    2>/dev/null || :; rm -rf "$ssh_mux_dir"' EXIT
+# Setup cleanup handler and start master ssh connection.
+stop_ssh() {
+    ssh -o ControlPath="$ssh_control_path" -O exit "$ssh_target" 2>/dev/null \
+        || true
+    rm -rf "$ssh_mux_dir"
+}
+trap 'stop_ssh' EXIT
+trap 'stop_ssh; trap - INT; kill -INT $$' INT
+trap 'stop_ssh; trap - TERM; kill -TERM $$' TERM
 ssh -o LogLevel=error $ssh_options \
     -o ControlMaster=yes -o ControlPath=$ssh_control_path \
     -o ControlPersist=60 -o ServerAliveInterval=60 -o ServerAliveCountMax=3 \

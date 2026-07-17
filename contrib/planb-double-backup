@@ -18,14 +18,23 @@ SSH_CONTROL_PATH="$SSH_MUX_DIR/ctl"
 export SSH_CONTROL_PATH
 
 start_master() {
-    ssh -oLogLevel=error -oControlMaster=yes -oControlPath="$SSH_CONTROL_PATH" \
+    ssh -oLogLevel=error -oControlMaster=yes \
+        -oControlPath="$SSH_CONTROL_PATH" \
         -oControlPersist=60 -oServerAliveInterval=60 -oServerAliveCountMax=3 \
         -oBatchMode=yes -N -f "$USERATHOST"
 }
 stop_master() {
-    ssh -oControlPath="$SSH_CONTROL_PATH" -O exit "$USERATHOST" 2>/dev/null || :
+    ssh -oControlPath="$SSH_CONTROL_PATH" -O exit "$USERATHOST" 2>/dev/null ||
+        true
 }
-trap 'stop_master; rm -rf "$SSH_MUX_DIR"' EXIT INT TERM
+cleanup() {
+    stop_master
+    rm -rf "$SSH_MUX_DIR"
+}
+trap 'cleanup' EXIT
+trap 'cleanup; trap - INT; kill -INT $$' INT
+trap 'cleanup; trap - TERM; kill -TERM $$' TERM
+
 
 while true; do
     ret=0

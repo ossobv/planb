@@ -26,6 +26,21 @@ from .base import Datasets, Dataset, DatasetNotFound, Storage
 logger = logging.getLogger(__name__)
 
 
+class WorkonFailure(Exception):
+    pass
+
+
+class LocalFilesetMissing(WorkonFailure):
+    """Expected storage "fileset" was not found"""
+    pass
+
+
+class LocalMountFailure(WorkonFailure):
+    """Expected storage "fileset+snapshot" mount failed"""
+    # (maybe the snapshot doesn't exist)
+    pass
+
+
 class PerformCommands:
     @classmethod
     def ensure_defaults(cls, config):
@@ -490,8 +505,8 @@ class ZfsDataset(Dataset):
                 break
         else:
             # No luck after the Nth attempt. Fail.
-            raise ValueError('Failed to work on {!r} ({})'.format(
-                path, self.name))  # FIXME: better exception
+            raise LocalMountFailure('Failed to work on {!r} ({})'.format(
+                path, self.name))
 
     def end_work(self):
         # Leave directory, so it can be unmounted.
@@ -519,7 +534,7 @@ class ZfsDataset(Dataset):
         if not hasattr(self, '_get_data_path'):
             local_path = self.get_mount_path()
             if not local_path:
-                raise ValueError(
+                raise LocalFilesetMissing(
                     'path {!r} for {!r} does not exist'.format(
                         local_path, self.name))
             self._get_data_path = os.path.join(local_path, 'data')

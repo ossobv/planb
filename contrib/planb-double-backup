@@ -63,6 +63,9 @@ while true; do
     echo
 
     "$here/manual-zfssync.sh" "$USERATHOST" "$DESTPOOL" $DATASETS
+
+    "$here/manual-zfssync.sh" "$USERATHOST" "$DESTPOOL" --prune
+
     stop_master
 
     # The zfssync wipes this trigger. Re-set it.

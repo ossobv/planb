@@ -12,5 +12,6 @@ class Command(BaseCommand):
         for fileset in qs:
             Fileset.objects.filter(pk=fileset.pk).update(is_queued=True)
             task_id = schedule_manual_backup_job(fileset)
-            self.stdout.write(self.style.SUCCESS(
-                'Enqueued {} job as {}'.format(fileset, task_id)))
+            self.stdout.write(
+                self.style.SUCCESS('Enqueued {} job as {}'.format(fileset, task_id))
+            )

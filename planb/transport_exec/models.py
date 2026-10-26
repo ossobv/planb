@@ -21,17 +21,19 @@ logger = logging.getLogger(__name__)
 
 
 class Config(AbstractTransport):
-    transport_command = CommandField(help_text=_(  # FIXME: add env docs
-        'Program to run to do the transport (data import). It is '
-        'split by spaces and fed to execve(). '
-        'Useful variables are available in the environment.'))
+    transport_command = CommandField(
+        help_text=_(  # FIXME: add env docs
+            'Program to run to do the transport (data import). It is '
+            'split by spaces and fed to execve(). '
+            'Useful variables are available in the environment.'
+        )
+    )
 
     class Meta:
         db_table = TABLE_PREFIX  # or '{}_config'.format(TABLE_PREFIX)
 
     def __str__(self):
-        return 'exec transport {}'.format(
-            self.transport_command.replace(' \\\n', ' '))
+        return 'exec transport {}'.format(self.transport_command.replace(' \\\n', ' '))
 
     def get_change_url(self):
         return reverse('admin:transport_exec_config_change', args=(self.pk,))
@@ -56,7 +58,10 @@ class Config(AbstractTransport):
             # Mandatory:
             'PATH',
             # Nice to have for shell apps:
-            'HOME', 'PWD', 'SHELL', 'USER',
+            'HOME',
+            'PWD',
+            'SHELL',
+            'USER',
             # #'LANG', 'TZ',
             # Systemd/logging stuff:
             # #'JOURNAL_STREAM', 'LOGNAME', 'INVOCATION_ID',
@@ -69,12 +74,11 @@ class Config(AbstractTransport):
         env['planb_guid'] = settings.PLANB_GUID
         env['planb_fileset_id'] = str(self.fileset.id)
         env['planb_fileset_friendly_name'] = self.fileset.friendly_name
-        env['planb_snapshot_target'] = (
-            self.fileset.get_next_snapshot_name())
+        env['planb_snapshot_target'] = self.fileset.get_next_snapshot_name()
         env['planb_storage_name'] = (
-            self.fileset.get_dataset().name)  # XXX! zfs? how do we know?
-        env['planb_storage_destination'] = (
-            self.fileset.get_dataset().get_data_path())
+            self.fileset.get_dataset().name
+        )  # XXX! zfs? how do we know?
+        env['planb_storage_destination'] = self.fileset.get_dataset().get_data_path()
 
         return env
 
@@ -82,8 +86,7 @@ class Config(AbstractTransport):
         # FIXME: duplicate code with transport_rsync.Config.run_transport()
         cmd = self.generate_cmd()
         env = self.generate_env()
-        logger.info(
-            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
+        logger.info('Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
 
         # Close all DB connections before continuing with the rsync
         # command. Since it may take a while, the connection could get
@@ -95,16 +98,21 @@ class Config(AbstractTransport):
             try:
                 # FIXME: do we want timeout handling here?
                 output = check_output(
-                    cmd, env=env, return_stderr=stderr, preexec_fn=(
+                    cmd,
+                    env=env,
+                    return_stderr=stderr,
+                    preexec_fn=(
                         # Disable suspended_signals from parent:
-                        lambda: sigprocmask(SIG_SETMASK, SIGSET(), 0))
-                    ).decode('utf-8')
+                        lambda: sigprocmask(SIG_SETMASK, SIGSET(), 0)
+                    ),
+                ).decode('utf-8')
             except CalledProcessError as e:
-                logger.warning(
-                    'Failure during exec %r: %s', argsjoin(cmd), str(e))
+                logger.warning('Failure during exec %r: %s', argsjoin(cmd), str(e))
                 raise
 
         logger.info(
             'Exec success for %s transport:\n\n(stdout)\n\n%s\n(stderr)\n\n%s',
-            self.fileset.friendly_name, output,
-            b'\n'.join(stderr).decode('utf-8', 'replace'))
+            self.fileset.friendly_name,
+            output,
+            b'\n'.join(stderr).decode('utf-8', 'replace'),
+        )

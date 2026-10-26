@@ -32,6 +32,7 @@ class CommandFormField(forms.CharField):
     """
     We expect the value to be shlex.split()
     """
+
     def clean(self, value):
         value = super().clean(value)
         if not value:
@@ -39,26 +40,31 @@ class CommandFormField(forms.CharField):
 
         lines = value.strip().split('\n')
         lines[0] = ' '.join(lines[0].strip().split())
-        lines[1:] = ['    {}'.format(
-            ' '.join(line.strip().split())) for line in lines[1:]]
+        lines[1:] = [
+            '    {}'.format(' '.join(line.strip().split())) for line in lines[1:]
+        ]
 
         if len(lines) > 1:
             if any(not line.endswith(' \\') for line in lines[0:-1]):
-                raise forms.ValidationError(_(
-                    'Multiline commands need to use space-backslash to '
-                    'continue on the next line'))
+                raise forms.ValidationError(
+                    _(
+                        'Multiline commands need to use space-backslash to '
+                        'continue on the next line'
+                    )
+                )
             if lines[-1].endswith(' \\'):
-                raise forms.ValidationError(_(
-                    'Unexpected backslash on last line'))
+                raise forms.ValidationError(_('Unexpected backslash on last line'))
 
         command = lines[0].split()[0]
         if not command or command[0] != '/':
-            raise forms.ValidationError(_(
-                'Command {!r} needs to start with a /').format(command))
+            raise forms.ValidationError(
+                _('Command {!r} needs to start with a /').format(command)
+            )
 
         if not os.access(lines[0][0], os.X_OK, effective_ids=True):
-            raise forms.ValidationError(_(
-                'Command {!r} not found or no permissions').format(command))
+            raise forms.ValidationError(
+                _('Command {!r} not found or no permissions').format(command)
+            )
 
         return '\n'.join(lines)
 
@@ -75,11 +81,12 @@ class CommandField(models.CharField):
     def formfield(self, **kwargs):
         return super().formfield(
             form_class=CommandFormField,
-            widget=forms.Textarea(attrs={'cols': '100', 'rows': '10'}))
+            widget=forms.Textarea(attrs={'cols': '100', 'rows': '10'}),
+        )
 
 
 class MultiEmailField(models.Field):
-    description = "A multi e-mail field stored as a multi-lines text"
+    description = 'A multi e-mail field stored as a multi-lines text'
 
     def formfield(self, **kwargs):
         # This is a fairly standard way to set up some defaults
@@ -92,7 +99,7 @@ class MultiEmailField(models.Field):
         """Perform preliminary non-db specific value checks and conversions."""
         value = super().get_prep_value(value)
         if isinstance(value, list):
-            value = "\n".join(value)
+            value = '\n'.join(value)
         return value
 
     def from_db_value(self, value, expression, connection):

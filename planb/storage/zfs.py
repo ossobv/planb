@@ -32,11 +32,13 @@ class WorkonFailure(Exception):
 
 class LocalFilesetMissing(WorkonFailure):
     """Expected storage "fileset" was not found"""
+
     pass
 
 
 class LocalMountFailure(WorkonFailure):
     """Expected storage "fileset+snapshot" mount failed"""
+
     # (maybe the snapshot doesn't exist)
     pass
 
@@ -74,14 +76,16 @@ class PerformCommands:
         Do __perform_system_command, but with 'sudo'.
         """
         return self.__perform_system_command(
-            (self.__perform_sudo_binary,) + tuple(cmd), silent=silent)
+            (self.__perform_sudo_binary,) + tuple(cmd), silent=silent
+        )
 
     def _perform_binary_command(self, cmd, silent=False):
         """
         Do _perform_sudo_command, but for the supplied binary.
         """
         return self._perform_sudo_command(
-            (self.__perform_system_binary,) + tuple(cmd), silent=silent)
+            (self.__perform_system_binary,) + tuple(cmd), silent=silent
+        )
 
 
 class ZfsStorage(PerformCommands, Storage):
@@ -101,23 +105,19 @@ class ZfsStorage(PerformCommands, Storage):
         try:
             out = self._perform_binary_command(cmd).rstrip('\r\n')
         except CalledProcessError as e:
-            logger.warning(
-                'Error while calling: %r, %s', cmd, e.output.strip())
+            logger.warning('Error while calling: %r, %s', cmd, e.output.strip())
             out = None
         return out
 
-    def zfs_get_properties(
-            self, dataset_name, keys, snapname=None):
+    def zfs_get_properties(self, dataset_name, keys, snapname=None):
         if snapname is not None:
             dataset_name = '{}@{}'.format(dataset_name, snapname)
         property_names = ','.join(keys)
-        cmd = (
-            'get', '-Hpo', 'value', property_names, dataset_name)
+        cmd = ('get', '-Hpo', 'value', property_names, dataset_name)
         try:
             values = self._perform_binary_command(cmd)  # LF-separated
         except CalledProcessError as e:
-            logger.warning(
-                'Error while calling: %r, %s', cmd, e.output.strip())
+            logger.warning('Error while calling: %r, %s', cmd, e.output.strip())
             values = '0\n' * len(keys)  # YUCK.. odd default
 
         output = values.split('\n')
@@ -139,8 +139,11 @@ class ZfsStorage(PerformCommands, Storage):
         return int(self.zfs_get_properties(dataset_name, keys=('used',))[0])
 
     def zfs_get_referenced_size(self, dataset_name, snapname=None):
-        return int(self.zfs_get_properties(
-            dataset_name, keys=('referenced',), snapname=snapname)[0])
+        return int(
+            self.zfs_get_properties(
+                dataset_name, keys=('referenced',), snapname=snapname
+            )[0]
+        )
 
     def _zfs_get_key_location(self, dataset_name):
         # XXX: temporary key location.  In the near future, we want to
@@ -149,13 +152,11 @@ class ZfsStorage(PerformCommands, Storage):
         # on a write-only system.  After destroying the data, it may
         # take a while before the keys are really-really gone from the
         # disks.
-        key_location = '{}/{}/_key.bin'.format(
-            '/tank/_local/zfskeys', dataset_name)
+        key_location = '{}/{}/_key.bin'.format('/tank/_local/zfskeys', dataset_name)
         try:
             st = os.stat(key_location)
         except FileNotFoundError:
-            os.makedirs(
-                os.path.dirname(key_location), mode=0o700, exist_ok=True)
+            os.makedirs(os.path.dirname(key_location), mode=0o700, exist_ok=True)
             with open('/dev/random', 'rb') as rndfp:
                 with open(key_location + '.new', 'wb') as fp:
                     os.fchmod(fp.fileno(), 0o600)
@@ -163,24 +164,34 @@ class ZfsStorage(PerformCommands, Storage):
             os.rename(key_location + '.new', key_location)
         else:
             if st.st_size != 32:
-                raise AssertionError(
-                    'totally unexpected {}'.format(key_location))
+                raise AssertionError('totally unexpected {}'.format(key_location))
 
         return 'file://{}'.format(key_location)
 
     def _zfs_update_key_location(self, dataset_name):
         # XXX: temporary key location, has to be updated when moving datasets.
         orig_key_format, orig_key_location = self.zfs_get_properties(
-            dataset_name, ('keyformat', 'keylocation'))
+            dataset_name, ('keyformat', 'keylocation')
+        )
         assert orig_key_format == 'raw', (
-            dataset_name, orig_key_format, orig_key_location)
+            dataset_name,
+            orig_key_format,
+            orig_key_location,
+        )
         assert orig_key_location.startswith('file://'), (
-            dataset_name, orig_key_format, orig_key_location)
+            dataset_name,
+            orig_key_format,
+            orig_key_location,
+        )
 
         new_key_location = 'file://{}/{}/_key.bin'.format(
-            '/tank/_local/zfskeys', dataset_name)
+            '/tank/_local/zfskeys', dataset_name
+        )
         assert orig_key_location != new_key_location, (
-            dataset_name, orig_key_location, new_key_location)
+            dataset_name,
+            orig_key_location,
+            new_key_location,
+        )
 
         orig_path = os.path.dirname(orig_key_location[7:])
         new_path = os.path.dirname(new_key_location[7:])
@@ -188,8 +199,7 @@ class ZfsStorage(PerformCommands, Storage):
 
         try:
             # No need to set keyformat=raw; it's a readonly property.
-            self.zfs_set_properties(
-                dataset_name, {'keylocation': new_key_location})
+            self.zfs_set_properties(dataset_name, {'keylocation': new_key_location})
         except Exception:
             try:
                 os.rename(new_path, orig_path)
@@ -201,7 +211,7 @@ class ZfsStorage(PerformCommands, Storage):
         # For multi-slash paths, we may need to create parents as well.
         parts = dataset_name.split('/')
         for idx, last_part in enumerate(parts):
-            part = '/'.join(parts[0:(idx + 1)])
+            part = '/'.join(parts[0 : (idx + 1)])
             try:
                 cmd = ('get', '-o', 'value', '-Hp', 'type', part)
                 type_ = self._perform_binary_command(cmd).rstrip('\r\n')
@@ -217,20 +227,29 @@ class ZfsStorage(PerformCommands, Storage):
                     #
                     # # zfs get -Hovalue encryptionroot tank/example.com/home
                     # tank/example.com
-                    self._perform_binary_command((
-                        'create',
-                        '-o', 'canmount=noauto',
-                        '-o', 'encryption=on',
-                        '-o', 'keyformat=raw',
-                        '-o', 'keylocation={}'.format(key_location),
-                        part,
-                    ))
+                    self._perform_binary_command(
+                        (
+                            'create',
+                            '-o',
+                            'canmount=noauto',
+                            '-o',
+                            'encryption=on',
+                            '-o',
+                            'keyformat=raw',
+                            '-o',
+                            'keylocation={}'.format(key_location),
+                            part,
+                        )
+                    )
                 else:
-                    self._perform_binary_command((
-                        'create',
-                        '-o', 'canmount=noauto',
-                        part,
-                    ))
+                    self._perform_binary_command(
+                        (
+                            'create',
+                            '-o',
+                            'canmount=noauto',
+                            part,
+                        )
+                    )
             else:
                 assert type_ == 'filesystem', (dataset_name, part, type_)
 
@@ -257,13 +276,16 @@ class ZfsStorage(PerformCommands, Storage):
             self._perform_binary_command(('mount', dataset_name), silent=True)
         except CalledProcessError as e:
             # cannot mount 'tank/example.com': encryption key not loaded
-            if (b'encryption key not loaded' in e.errput
-                    and self.config['DATASETKEYS']):
+            if b'encryption key not loaded' in e.errput and self.config['DATASETKEYS']:
                 # Ah, we can fix. Assuming we actually have that key.
-                self._perform_binary_command((
-                    'load-key',
-                    '-L', self._zfs_get_key_location(dataset_name),
-                    dataset_name))
+                self._perform_binary_command(
+                    (
+                        'load-key',
+                        '-L',
+                        self._zfs_get_key_location(dataset_name),
+                        dataset_name,
+                    )
+                )
             else:
                 # "Unknown" error. Abort.
                 raise
@@ -282,15 +304,17 @@ class ZfsStorage(PerformCommands, Storage):
 
         self._zfs_rename_dataset_pre_setup(old_path)
 
-        self._perform_binary_command(
-            ('rename', old_dataset_name, new_dataset_name))
+        self._perform_binary_command(('rename', old_dataset_name, new_dataset_name))
         new_path = self.zfs_get_local_path(new_dataset_name)
 
         # Paths should be different:
         if old_path == new_path:
             logger.error(
                 'The paths %r for renamed dataset %r -> %r are equal',
-                old_path, old_dataset_name, new_dataset_name)
+                old_path,
+                old_dataset_name,
+                new_dataset_name,
+            )
 
         # Post-condition: we expect the path to be gone.
         if os.path.isdir(old_path):
@@ -298,7 +322,10 @@ class ZfsStorage(PerformCommands, Storage):
             # dataset, so keep going.
             logger.error(
                 'The old path %r was not removed for renamed dataset %r -> %r',
-                old_path, old_dataset_name, new_dataset_name)
+                old_path,
+                old_dataset_name,
+                new_dataset_name,
+            )
             if old_path == new_path:
                 new_path = None
 
@@ -339,9 +366,7 @@ class ZfsStorage(PerformCommands, Storage):
         self._perform_binary_command(cmd)
 
     def snapshot_list(self, dataset_name):
-        cmd = (
-            'list', '-d', '1', '-H', '-t', 'snapshot', '-o', 'name',
-            dataset_name)
+        cmd = ('list', '-d', '1', '-H', '-t', 'snapshot', '-o', 'name', dataset_name)
         try:
             out = self._perform_binary_command(cmd)
         except CalledProcessError as e:
@@ -364,8 +389,9 @@ class ZfsStorage(PerformCommands, Storage):
 
     def get_label(self):
         used, available = [
-            int(i) for i in self.zfs_get_properties(
-                self.poolname, keys=('used', 'available'))]
+            int(i)
+            for i in self.zfs_get_properties(self.poolname, keys=('used', 'available'))
+        ]
 
         if used and available:
             pct = '{pct:.0f}%'.format(pct=(100 * (used / (used + available))))
@@ -377,10 +403,17 @@ class ZfsStorage(PerformCommands, Storage):
 
     def get_datasets(self, parent=None):
         parent = self.poolname if parent is None else parent
-        output = self._perform_binary_command((
-            'list', '-r', '-t', 'filesystem,volume',
-            '-Hpo', 'name,used,type,planb:contains',
-            parent))
+        output = self._perform_binary_command(
+            (
+                'list',
+                '-r',
+                '-t',
+                'filesystem,volume',
+                '-Hpo',
+                'name,used,type,planb:contains',
+                parent,
+            )
+        )
 
         datasets = Datasets()
         for line in output.rstrip().split('\n'):
@@ -448,7 +481,8 @@ class ZfsDataset(Dataset):
     def set_dataset_type(self, type=None, contains=None):
         if type is None and contains is None:
             type, contains = self._storage.zfs_get_properties(
-                self.name, keys=('type', 'planb:contains'))
+                self.name, keys=('type', 'planb:contains')
+            )
 
         # planb:contains used to be unset, defaults to 'data'
         if contains == '-':
@@ -456,11 +490,10 @@ class ZfsDataset(Dataset):
 
         assert type in ('filesystem', 'volume'), (self.name, type)
         assert contains in (
-            'data',         # a regular filesystem inside
+            'data',  # a regular filesystem inside
             'filesystems',  # subdirectories (individually synced)
             # 'zvols',      # ...
-        ), 'Unexpected planb:contains {!r} for {!r}'.format(
-            contains, self.name)
+        ), 'Unexpected planb:contains {!r} for {!r}'.format(contains, self.name)
 
         self._dataset_type = (type, contains)
 
@@ -505,8 +538,9 @@ class ZfsDataset(Dataset):
                 break
         else:
             # No luck after the Nth attempt. Fail.
-            raise LocalMountFailure('Failed to work on {!r} ({})'.format(
-                path, self.name))
+            raise LocalMountFailure(
+                'Failed to work on {!r} ({})'.format(path, self.name)
+            )
 
     def end_work(self):
         # Leave directory, so it can be unmounted.
@@ -535,32 +569,34 @@ class ZfsDataset(Dataset):
             local_path = self.get_mount_path()
             if not local_path:
                 raise LocalFilesetMissing(
-                    'path {!r} for {!r} does not exist'.format(
-                        local_path, self.name))
+                    'path {!r} for {!r} does not exist'.format(local_path, self.name)
+                )
             self._get_data_path = os.path.join(local_path, 'data')
         return self._get_data_path
 
     def get_snapshot_path(self, snapshot):
-        '''
+        """
         Return the path to the hidden snapshot directory.
-        '''
-        return os.path.abspath(os.path.join(
-            self.get_data_path(), '../.zfs/snapshot', snapshot, 'data'))
+        """
+        return os.path.abspath(
+            os.path.join(self.get_data_path(), '../.zfs/snapshot', snapshot, 'data')
+        )
 
     def get_used_size(self):
         return self._storage.zfs_get_used_size(self.name)
 
     def get_referenced_size(self, snapname=None):
-        return self._storage.zfs_get_referenced_size(
-            self.name, snapname)
+        return self._storage.zfs_get_referenced_size(self.name, snapname)
 
     def rename_dataset(self, new_dataset_name):
         # Cannot rename while working from the dataset directory.
         # zfs rename will force a unmount/remount sequence for the filesystem
         # and any descendent file systems.
         assert not os.getcwd().startswith(self.get_mount_path()), (
-            'Cannot rename dataset {} while working from dataset directory '
-            '{}'.format(self.get_mount_path(), os.getcwd()))
+            'Cannot rename dataset {} while working from dataset directory {}'.format(
+                self.get_mount_path(), os.getcwd()
+            )
+        )
 
         self._storage.zfs_rename_dataset(self.name, new_dataset_name)
         self.name = new_dataset_name

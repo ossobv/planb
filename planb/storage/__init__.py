@@ -5,9 +5,10 @@ from django.utils.functional import SimpleLazyObject
 
 
 class StorageWrapper:
-    '''
+    """
     Public exposed API for the Storage class.
-    '''
+    """
+
     def __init__(self, storage):
         self._storage = storage
 
@@ -47,7 +48,8 @@ def load_storage_pools():
     if not isinstance(settings.PLANB_STORAGE_POOLS, dict):
         raise ImproperlyConfigured(
             'The PLANB_STORAGE_POOLS settings has been modified, check the '
-            'example settings reference.')
+            'example settings reference.'
+        )
     pools = {}
     for alias, config in settings.PLANB_STORAGE_POOLS.items():
         config.setdefault('ENGINE', 'planb.storage.dummy.DummyStorage')

@@ -19,7 +19,10 @@ from planb.common.fields import MultiEmailField
 from planb.signals import backup_done
 from planb.storage import storage_pools
 from planb.storage.base import (
-    DatasetNotFound, datetime_from_snapshot_name, get_snapshot_name)
+    DatasetNotFound,
+    datetime_from_snapshot_name,
+    get_snapshot_name,
+)
 from planb.utils import RETENTION_PERIOD_ADVANCED
 
 
@@ -28,14 +31,17 @@ logger = logging.getLogger(__name__)
 BOGODATE = datetime(1970, 1, 2, tzinfo=dt_timezone.utc)
 
 validate_retention = RegexValidator(
-    r'^(\d+[ymwdh],?)*$', message=_('Enter a valid value like 6m,4w,7d'))
+    r'^(\d+[ymwdh],?)*$', message=_('Enter a valid value like 6m,4w,7d')
+)
 validate_blacklist_hours = RegexValidator(
-    r'^((\d+(?:-\d+)?,?)*|none)$', message=_(
-        'Enter a valid value like 2,9-17 or none to disable blacklist hours'))
+    r'^((\d+(?:-\d+)?,?)*|none)$',
+    message=_('Enter a valid value like 2,9-17 or none to disable blacklist hours'),
+)
 
 
 class _DecoratedSnapshot:
     "Snapshot name decorated with date and diff"
+
     @classmethod
     def iterator(cls, sorted_snapshots):
         "Decorating snapshot iterator"
@@ -75,15 +81,15 @@ class _DecoratedSnapshot:
         return ''
 
     def _human_time(self, secs):
-        if secs < 300:      # <5m = 300s ('m' is reserved for month)
+        if secs < 300:  # <5m = 300s ('m' is reserved for month)
             return '{:.0f} second'.format(secs)
-        if secs < 18000:    # <5h
+        if secs < 18000:  # <5h
             return '{:.0f} hour'.format((secs + 1800) // 3600)
-        if secs < 432000:   # <5d
+        if secs < 432000:  # <5d
             return '{:.0f} day'.format((secs + 43200) // 86400)
         if secs < 1728000:  # <20d
             return '{:.0f} week'.format((secs + 302400) // 604800)
-        month = 2629800     # 365.25 * 86400 / 12
+        month = 2629800  # 365.25 * 86400 / 12
         return '{:.0f} month'.format((secs + month // 2) // month)
 
     def __str__(self):
@@ -94,6 +100,7 @@ class _StrIntSorted:
     """
     Quick and dirty sortable string
     """
+
     def __init__(self, s, val):
         self.s = s
         self.val = val
@@ -118,35 +125,48 @@ class _StrIntSorted:
 class HostGroup(models.Model):
     name = models.CharField(max_length=63, unique=True)
     notify_email = MultiEmailField(
-        blank=True, null=True,
-        help_text=_('Use a newline per emailaddress'))
+        blank=True, null=True, help_text=_('Use a newline per emailaddress')
+    )
     last_monthly_report = models.DateTimeField(blank=True, null=True)
-    notes = models.TextField(blank=True, help_text=_(
-        'Description, guidelines and agreements for the hostgroup.'))
+    notes = models.TextField(
+        blank=True,
+        help_text=_('Description, guidelines and agreements for the hostgroup.'),
+    )
 
     blacklist_hours = models.CharField(
-        _('Blacklist hours'), max_length=31, blank=True,
-        validators=[validate_blacklist_hours], help_text=_(
+        _('Blacklist hours'),
+        max_length=31,
+        blank=True,
+        validators=[validate_blacklist_hours],
+        help_text=_(
             'Specify hours during which backups are disabled using notation '
             'h,h-h or none to disable blacklist hours. When left empty the '
-            'system blacklist hours are used.'))
+            'system blacklist hours are used.'
+        ),
+    )
     retention = models.CharField(
-        max_length=31, blank=True, validators=[validate_retention],
+        max_length=31,
+        blank=True,
+        validators=[validate_retention],
         help_text=_(
             'The backup retention period using notation <n><period> separated '
             'by comma: 1y,6m,3w,15d. When left empty the system retention '
-            'periods are used.'))
+            'periods are used.'
+        ),
+    )
 
     def get_blacklist_hours(self):
         if self.blacklist_hours:
             return self.blacklist_hours
         return settings.PLANB_BLACKLIST_HOURS
+
     get_blacklist_hours.short_description = _('Blacklist hours')
 
     def get_retention(self):
         if self.retention:
             return self.retention
         return settings.PLANB_RETENTION
+
     get_retention.short_description = _('Retention')
 
     def __str__(self):
@@ -173,8 +193,8 @@ class FilesetLock(object):
     @cached_property
     def lock(self):
         return Redis.get_connection().lock(
-            'fileset:{}'.format(self._fileset_id), sleep=1,
-            timeout=self.timeout)
+            'fileset:{}'.format(self._fileset_id), sleep=1, timeout=self.timeout
+        )
 
     def __enter__(self):
         # Use blocking so the contained code is only executed when the lock is
@@ -207,57 +227,79 @@ class FilesetLock(object):
 
 class Fileset(models.Model):
     friendly_name = models.CharField(
-        verbose_name=_('Name'), max_length=63,
-        help_text=_('Short name, should be unique per host group.'))
+        verbose_name=_('Name'),
+        max_length=63,
+        help_text=_('Short name, should be unique per host group.'),
+    )
     hostgroup = models.ForeignKey(
-        HostGroup, related_name='filesets', on_delete=models.PROTECT)
-    notes = models.TextField(blank=True, help_text=_(
-        'Quick description/tips. The first line is shown in the list view.'))
+        HostGroup, related_name='filesets', on_delete=models.PROTECT
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text=_(
+            'Quick description/tips. The first line is shown in the list view.'
+        ),
+    )
     tags = models.ManyToManyField(Tag, blank=True)
 
     # The storage alias is selected when adding the Fileset. Available choices
     # are selected from the storage pools in the FilesetForm.
     storage_alias = models.CharField(_('Storage'), max_length=31)
     dataset_name = models.CharField(
-        verbose_name=_('Dataset name'), editable=False, max_length=254,
-        help_text=_('The complete dataset name for the storage.'))
+        verbose_name=_('Dataset name'),
+        editable=False,
+        max_length=254,
+        help_text=_('The complete dataset name for the storage.'),
+    )
 
-    last_ok = models.DateTimeField(
-        _('Last backup success'), blank=True, null=True)
-    last_run = models.DateTimeField(
-        _('Last backup attempt'), default=BOGODATE)
-    first_fail = models.DateTimeField(
-        _('First backup failure'), blank=True, null=True)
+    last_ok = models.DateTimeField(_('Last backup success'), blank=True, null=True)
+    last_run = models.DateTimeField(_('Last backup attempt'), default=BOGODATE)
+    first_fail = models.DateTimeField(_('First backup failure'), blank=True, null=True)
 
     total_size_mb = models.PositiveIntegerField(
-        default=0, db_index=True,
-        help_text=_('Estimated total backup size in MiB.'))
+        default=0, db_index=True, help_text=_('Estimated total backup size in MiB.')
+    )
     average_duration = models.PositiveIntegerField(
-        'Time', default=0,  # this value may vary..
-        help_text=_('Average duration of successful jobs in seconds.'))
+        'Time',
+        default=0,  # this value may vary..
+        help_text=_('Average duration of successful jobs in seconds.'),
+    )
 
     do_snapshot_size_listing = models.BooleanField(
-        _('Create disk usage summary'), blank=True, default=True,
+        _('Create disk usage summary'),
+        blank=True,
+        default=True,
         help_text=_(
             'Summarize disk usage after the transport. '
-            'This can be slow if there are many files.'))
+            'This can be slow if there are many files.'
+        ),
+    )
 
     is_enabled = models.BooleanField(default=True)
     is_running = models.BooleanField(default=False)
     is_queued = models.BooleanField(default=False)
 
     blacklist_hours = models.CharField(
-        _('Blacklist hours'), max_length=31, blank=True,
-        validators=[validate_blacklist_hours], help_text=_(
+        _('Blacklist hours'),
+        max_length=31,
+        blank=True,
+        validators=[validate_blacklist_hours],
+        help_text=_(
             'Specify hours during which backups are disabled using notation '
             'h,h-h or none to disable blacklist hours. When left empty the '
-            'hostgroup blacklist hours are used.'))
+            'hostgroup blacklist hours are used.'
+        ),
+    )
     retention = models.CharField(
-        max_length=31, blank=True, validators=[validate_retention],
+        max_length=31,
+        blank=True,
+        validators=[validate_retention],
         help_text=_(
             'The backup retention period using notation <n><period> separated '
             'by comma: 1y,6m,3w,15d. When left empty the hostgroup retention '
-            'periods are used.'))
+            'periods are used.'
+        ),
+    )
 
     def __str__(self):
         return '{} ({})'.format(self.friendly_name, self.id)
@@ -280,11 +322,9 @@ class Fileset(models.Model):
             transport_class = apps.get_model(transport_class_name)
             ret.extend(transport_class.objects.filter(fileset=self))
         if not ret:
-            raise ObjectDoesNotExist(
-                'no transport for {!r}'.format(self))
+            raise ObjectDoesNotExist('no transport for {!r}'.format(self))
         if len(ret) > 1:
-            raise MultipleObjectsReturned(
-                    'multiple transports for {!r}'.format(self))
+            raise MultipleObjectsReturned('multiple transports for {!r}'.format(self))
         return ret[0]
 
     @cached_property
@@ -292,9 +332,12 @@ class Fileset(models.Model):
         return storage_pools[self.storage_alias]
 
     def get_blacklist_hours(self):
-        return (self.blacklist_hours
-                or self.hostgroup.blacklist_hours
-                or settings.PLANB_BLACKLIST_HOURS)
+        return (
+            self.blacklist_hours
+            or self.hostgroup.blacklist_hours
+            or settings.PLANB_BLACKLIST_HOURS
+        )
+
     get_blacklist_hours.short_description = _('Blacklist hours')
 
     @property
@@ -316,15 +359,14 @@ class Fileset(models.Model):
             if retention:
                 return retention
         return settings.PLANB_RETENTION
+
     get_retention.short_description = _('Retention')
 
     @property
     def retention_map(self):
         if not hasattr(self, '_retention_map'):
             self._retention_map = {
-                i[-1]: int(i[:-1])
-                for i in self.get_retention().split(',')
-                if i
+                i[-1]: int(i[:-1]) for i in self.get_retention().split(',') if i
             }
         return self._retention_map
 
@@ -359,8 +401,8 @@ class Fileset(models.Model):
         }
         order = 'hdwmy'
         return ', '.join(
-            ngettext(*name_map[period], self.retention_map[period]) % {
-                'n': self.retention_map[period]}
+            ngettext(*name_map[period], self.retention_map[period])
+            % {'n': self.retention_map[period]}
             for period in sorted(self.retention_map, key=order.index)
             if self.retention_map[period] > 0
         )
@@ -385,8 +427,9 @@ class Fileset(models.Model):
         "Return efficiency between 0% (poor) and 99% (efficient)"
         try:
             worst_case = self.total_size / self.snapshot_count
-            efficiency = (100 * (self.snapshot_size - worst_case)
-                          / (self.total_size - worst_case))
+            efficiency = (
+                100 * (self.snapshot_size - worst_case) / (self.total_size - worst_case)
+            )
             efficiency = int(max(0, min(99, efficiency)))
             return _StrIntSorted('{:d}%'.format(efficiency), efficiency)
         except (ValueError, ZeroDivisionError):
@@ -410,8 +453,7 @@ class Fileset(models.Model):
 
     def rename_dataset(self, new_dataset_name):
         self.get_dataset().rename_dataset(new_dataset_name)
-        self.__class__.objects.filter(pk=self.pk).update(
-            dataset_name=new_dataset_name)
+        self.__class__.objects.filter(pk=self.pk).update(dataset_name=new_dataset_name)
 
         self.dataset_name = new_dataset_name
         if hasattr(self, '_get_dataset'):
@@ -476,8 +518,8 @@ class Fileset(models.Model):
                 break
         else:
             logger.warning(
-                '[%s] Backup disabled by retention policy: %s',
-                self, self.retention)
+                '[%s] Backup disabled by retention policy: %s', self, self.retention
+            )
             return True
 
         now = timezone.now()
@@ -510,12 +552,12 @@ class Fileset(models.Model):
         try:
             dataset = self.get_dataset()
         except DatasetNotFound:
-            return ['(dataset not found in storage {!r})'.format(
-                self.storage_alias)]
+            return ['(dataset not found in storage {!r})'.format(self.storage_alias)]
         snapshots = sorted(
             dataset.child_dataset_snapshot_list()
             if dataset.has_child_datasets()
-            else dataset.snapshot_list())
+            else dataset.snapshot_list()
+        )
         return _DecoratedSnapshot.iterator(snapshots)
 
     @property
@@ -523,8 +565,8 @@ class Fileset(models.Model):
         return self.get_dataset().has_child_datasets()
 
     def get_next_snapshot_name(self):
-        '''Generate and store the next snapshot name for transports that create
-        their own snapshots.'''
+        """Generate and store the next snapshot name for transports that create
+        their own snapshots."""
         if not hasattr(self, '_next_snapshot_name'):
             self._next_snapshot_name = get_snapshot_name()
         return self._next_snapshot_name
@@ -540,23 +582,28 @@ class Fileset(models.Model):
         # Using send_robust, because we do not want user-code to mess up
         # the rest of our state.
         backup_done.send_robust(
-            sender=self.__class__, fileset=instance, success=success)
+            sender=self.__class__, fileset=instance, success=success
+        )
 
     def save(self, *args, **kwargs):
         # Notify the same users who get ERROR / Success for backups that
         # the job was disabled/re-enabled.
         if self.pk:
-            old_enabled = Fileset.objects.values_list(
-                'is_enabled', flat=True).get(pk=self.pk)
+            old_enabled = Fileset.objects.values_list('is_enabled', flat=True).get(
+                pk=self.pk
+            )
             if self.is_enabled != old_enabled:
                 mail_admins(
                     'INFO: Backup {} of {}'.format(
-                        'ENABLED' if self.is_enabled else 'DISABLED', self),
-                    'Toggled is_enabled-flag on {}.\n'.format(self))
+                        'ENABLED' if self.is_enabled else 'DISABLED', self
+                    ),
+                    'Toggled is_enabled-flag on {}.\n'.format(self),
+                )
 
         if not self.dataset_name:
             self.dataset_name = self.storage.name_dataset(
-                self.hostgroup.name, self.friendly_name)
+                self.hostgroup.name, self.friendly_name
+            )
         return super().save(*args, **kwargs)
 
     class Meta:
@@ -575,39 +622,44 @@ class BackupRun(models.Model):
     Runs with success==True show sensible info. For others you may need
     to take (some of) the values with a grain of salt.
     """
+
     fileset = models.ForeignKey(Fileset, on_delete=models.CASCADE)
 
     attributes = models.TextField(
-        blank=True,
-        help_text=_('YAML-safe dictionary of backup run attributes.'))
+        blank=True, help_text=_('YAML-safe dictionary of backup run attributes.')
+    )
     started = models.DateTimeField(
-        auto_now_add=True, db_index=True,
-        help_text=_('When the backup run started.'))
+        auto_now_add=True, db_index=True, help_text=_('When the backup run started.')
+    )
     duration = models.PositiveIntegerField(
-        blank=True, null=True,
-        help_text=_('How long this backup run took in seconds.'))
+        blank=True, null=True, help_text=_('How long this backup run took in seconds.')
+    )
 
     success = models.BooleanField(
-        default=False, blank=True,
-        help_text=_('If the backup succeeded, the other values can be '
-                    'trusted.'))
-    error_text = models.TextField(
+        default=False,
         blank=True,
-        help_text=_('Error messages; non-empty only if success is False.'))
+        help_text=_('If the backup succeeded, the other values can be trusted.'),
+    )
+    error_text = models.TextField(
+        blank=True, help_text=_('Error messages; non-empty only if success is False.')
+    )
 
     total_size_mb = models.PositiveIntegerField(
-        default=0,
-        help_text=_('Estimated total backup size in MiB.'))
+        default=0, help_text=_('Estimated total backup size in MiB.')
+    )
     snapshot_size_mb = models.PositiveIntegerField(
-        default=0,
-        help_text=_('Estimated single backup size in MiB.'))
+        default=0, help_text=_('Estimated single backup size in MiB.')
+    )
     snapshot_size_listing = models.TextField(
         blank=True,
         # This will be populated by dutree-output.
-        help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'))
+        help_text=_('YAML-safe "PATH: SIZE<LF>"{n} dictionary of paths.'),
+    )
     snapshot_name = models.CharField(
-        max_length=30, blank=True,
-        help_text=_('Custom snapshot name; will not be auto-deleted if set'))
+        max_length=30,
+        blank=True,
+        help_text=_('Custom snapshot name; will not be auto-deleted if set'),
+    )
 
     @property
     def total_size(self):
@@ -632,14 +684,17 @@ class BackupRun(models.Model):
             except Exception as e:
                 raise ValueError(
                     'Parse error in snapshot_size_listing line {!r} '
-                    'in backuprun {} for fileset {}'.format(
-                        line, self, self.fileset_id)) from e
+                    'in backuprun {} for fileset {}'.format(line, self, self.fileset_id)
+                ) from e
         return list_
 
     def __str__(self):
         return '<BackupRun({} #{}-{}{})>'.format(
-            self.started.strftime('%Y-%m-%d'), self.fileset_id, self.pk,
-            '' if self.success else ' failed')
+            self.started.strftime('%Y-%m-%d'),
+            self.fileset_id,
+            self.pk,
+            '' if self.success else ' failed',
+        )
 
 
 @receiver(post_save, sender=Fileset)

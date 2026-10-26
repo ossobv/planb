@@ -34,8 +34,7 @@ class RetentionPeriod:
         # If the desired_dts is newer than the current snapshot or if we have
         # the same datetime as the previous clamped value we have to subtract
         # the delta value and clamp it again.
-        if dts >= snapshot_dts or (
-                previous_dts and dts == previous_dts - self.clamp):
+        if dts >= snapshot_dts or (previous_dts and dts == previous_dts - self.clamp):
             dts -= self.delta
         return dts
 
@@ -43,21 +42,24 @@ class RetentionPeriod:
 RETENTION_PERIOD_SECONDS = {
     'h': RetentionPeriod(
         clamp=relativedelta(minute=0, second=0, microsecond=0),
-        delta=relativedelta(hours=1)),
+        delta=relativedelta(hours=1),
+    ),
     'd': RetentionPeriod(
         clamp=relativedelta(hour=0, minute=0, second=0, microsecond=0),
-        delta=relativedelta(days=1)),
+        delta=relativedelta(days=1),
+    ),
     'w': RetentionPeriod(
-        clamp=relativedelta(
-            hour=0, minute=0, second=0, microsecond=0, weekday=SU(1)),
-        delta=relativedelta(days=7)),
+        clamp=relativedelta(hour=0, minute=0, second=0, microsecond=0, weekday=SU(1)),
+        delta=relativedelta(days=7),
+    ),
     'm': RetentionPeriod(
         clamp=relativedelta(day=1, hour=0, minute=0, second=0, microsecond=0),
-        delta=relativedelta(months=1)),
+        delta=relativedelta(months=1),
+    ),
     'y': RetentionPeriod(
-        clamp=relativedelta(
-            month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
-        delta=relativedelta(years=1)),
+        clamp=relativedelta(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+        delta=relativedelta(years=1),
+    ),
 }
 
 
@@ -83,8 +85,12 @@ def is_valid_custom_snapshot_prefix(snapname):
     # Snapshots prefixed with settings.PLANB_PREFIX are selected for
     # rotation and should not be used as a custom snapname.
     # The date is always suffixed to the name.
-    if (snapname in (None, '', 'planb', settings.PLANB_PREFIX)
-            or not SNAPNAME_PREFIX_RE.match(snapname)):
+    if snapname in (
+        None,
+        '',
+        'planb',
+        settings.PLANB_PREFIX,
+    ) or not SNAPNAME_PREFIX_RE.match(snapname):
         return False
     return True
 
@@ -103,7 +109,8 @@ class DatasetNotFound(Exception):
 
 
 class Storage(object):
-    'Private/friend parts for storage backends.'
+    "Private/friend parts for storage backends."
+
     @classmethod
     def ensure_defaults(cls, config):
         config.setdefault('NAME', cls.__name__)
@@ -120,7 +127,7 @@ class Storage(object):
         return self.name
 
     def get_datasets(self):
-        '''
+        """
         Return a list of Dataset objects found in the storage.
 
         Example implementation::
@@ -128,7 +135,7 @@ class Storage(object):
             return Datasets([
                 Dataset(zfs_storage, directory)
                 for directory in `zfs list -Hpo name`])
-        '''
+        """
         raise NotImplementedError()
 
     def get_dataset(self, dataset_name):
@@ -147,13 +154,13 @@ class Storage(object):
         raise NotImplementedError()
 
     def snapshot_rotate(self, dataset_name, retention_map):
-        '''
+        """
         Rotate the snapshots according to the retention parameters.
-        '''
+        """
         snapshots = []
         logger.info(
-            '[%s] Snapshots rotation using retention: %s',
-            dataset_name, retention_map)
+            '[%s] Snapshots rotation using retention: %s', dataset_name, retention_map
+        )
         for snapname in self.snapshot_list(dataset_name):
             try:
                 prefix, dts = parse_snapshot_name(snapname)
@@ -165,18 +172,18 @@ class Storage(object):
             if is_automated:
                 snapshots.append((dts, snapname))
             else:
-                logger.info(
-                    '[%s] Keeping manual snapshot %s', dataset_name, snapname)
+                logger.info('[%s] Keeping manual snapshot %s', dataset_name, snapname)
 
         snapshots = sorted(snapshots, reverse=True)
         logger.info(
-            '[%s] Available snapshots: %s', dataset_name,
-            [i[1] for i in snapshots])
+            '[%s] Available snapshots: %s', dataset_name, [i[1] for i in snapshots]
+        )
         if not snapshots:
             return []
 
         keep_snapshots = SnapshotRetentionManager(
-            dataset_name, snapshots, retention_map).get_snapshots_to_keep()
+            dataset_name, snapshots, retention_map
+        ).get_snapshots_to_keep()
         logger.info('[%s] Keeping snapshots: %s', dataset_name, keep_snapshots)
 
         # Delete the snapshots which are not kept.
@@ -203,15 +210,13 @@ class SnapshotRetentionManager:
         # Go through the retention configuration and decide which snapshots
         # should be kept.
         for period, retention in self.retention_map.items():
-            self.find_snapshots_for_retention_period(
-                period, retention, self.newest_dts)
+            self.find_snapshots_for_retention_period(period, retention, self.newest_dts)
             if len(self.keep_snapshots) == len(self.snapshots):
                 break
         # Return with the same ordering.
         return [i[1] for i in self.snapshots if i[1] in self.keep_snapshots]
 
-    def find_snapshots_for_retention_period(
-            self, period, retention, snapshot_dts):
+    def find_snapshots_for_retention_period(self, period, retention, snapshot_dts):
         retention_period = RETENTION_PERIOD_SECONDS[period]
         desired_dts = None
         # Add one extra backup so the configured retention is the minimum
@@ -223,9 +228,13 @@ class SnapshotRetentionManager:
             desired_dts = retention_period(snapshot_dts, desired_dts)
             previous_dts = snapshot_dts
             snapshot_dts = self.find_snapshot_for_desired_dts(
-                period, desired_dts, previous_dts)
-            if (snapshot_dts is None or snapshot_dts == previous_dts
-                    or len(self.keep_snapshots) == len(self.snapshots)):
+                period, desired_dts, previous_dts
+            )
+            if (
+                snapshot_dts is None
+                or snapshot_dts == previous_dts
+                or len(self.keep_snapshots) == len(self.snapshots)
+            ):
                 break
 
     def find_snapshot_for_desired_dts(self, period, desired_dts, previous_dts):
@@ -236,8 +245,7 @@ class SnapshotRetentionManager:
             if dts >= previous_dts:  # Skip snapshots newer than the previous.
                 continue
             difference = (desired_dts - dts).total_seconds()
-            if (best_difference is None
-                    or abs(difference) < abs(best_difference)):
+            if best_difference is None or abs(difference) < abs(best_difference):
                 best_difference = difference
                 best_snapshot = snapname
                 best_dts = dts
@@ -246,8 +254,12 @@ class SnapshotRetentionManager:
         if best_snapshot is not None:
             logger.debug(
                 '[%s] Select %s as best match for %s:%s with diff:%d',
-                self.dataset_name, best_snapshot, period,
-                desired_dts.strftime(SNAPNAME_DATETIME_FMT), best_difference)
+                self.dataset_name,
+                best_snapshot,
+                period,
+                desired_dts.strftime(SNAPNAME_DATETIME_FMT),
+                best_difference,
+            )
             self.keep_snapshots.add(best_snapshot)
         return best_dts
 
@@ -256,9 +268,11 @@ class Datasets(list):
     """
     A list of Dataset objects.
     """
+
     @staticmethod
     def get_database_class():
         from planb.models import Fileset
+
         return Fileset
 
     def sort(self, key=None, reverse=False):
@@ -315,9 +329,7 @@ class Datasets(list):
             elif ds.is_leaf:
                 # foo/bar/baz => ['foo', 'foo/bar']
                 components = ds.name.split('/')
-                parents = [
-                    '/'.join(components[0:i])
-                    for i in range(1, len(components))]
+                parents = ['/'.join(components[0:i]) for i in range(1, len(components))]
                 # ('foo' not in datasets_by_name) and
                 # ('foo/bar' not in datasets_by_name)
                 if all(i not in datasets_by_name for i in parents):
@@ -333,6 +345,7 @@ class Dataset(object):
 
     Storage(zfs pools)->Dataset(directory)->Snapshot(directory snapshot)
     """
+
     @staticmethod
     def sortkey_by_name(dataset):
         """
@@ -346,9 +359,14 @@ class Dataset(object):
         O(n^2) times.
         """
         return (
-            (dataset._database_object
-                and dataset._database_object.hostgroup.name or ''),
-            dataset._storage.name, dataset.name)
+            (
+                dataset._database_object
+                and dataset._database_object.hostgroup.name
+                or ''
+            ),
+            dataset._storage.name,
+            dataset.name,
+        )
 
     def __init__(self, storage, name):
         self._storage = storage
@@ -369,7 +387,7 @@ class Dataset(object):
     @property
     def exists_in_database(self):
         assert self._database_object is not None
-        return (self._database_object is not False)
+        return self._database_object is not False
 
     @property
     def is_leaf(self):
@@ -435,25 +453,23 @@ class Dataset(object):
         return self._storage.snapshot_rotate(self.name, retention_map)
 
     def child_dataset_snapshot_rotate(self, retention_map):
-        '''
+        """
         Rotate the snapshots for all child datasets and return all unique
         destroyed snapshots.
-        '''
+        """
         if not self.has_child_datasets():
             raise ValueError('Dataset has no child datasets')
         # Call the storage directly, child datasets are not guaranteed to be
         # recursion safe.
         destroyed = set()
         for dataset in self.get_child_datasets():
-            destroyed.update(
-                self._storage.snapshot_rotate(
-                    dataset.name, retention_map))
+            destroyed.update(self._storage.snapshot_rotate(dataset.name, retention_map))
         return list(destroyed)
 
     def child_dataset_snapshot_list(self):
-        '''
+        """
         Returns snapshots which are available for *all* child datasets.
-        '''
+        """
         if not self.has_child_datasets():
             raise ValueError('Dataset has no child datasets')
 
@@ -462,8 +478,7 @@ class Dataset(object):
             if snapshots is None:
                 snapshots = set(self._storage.snapshot_list(dataset.name))
             else:
-                snapshots.intersection_update(
-                    self._storage.snapshot_list(dataset.name))
+                snapshots.intersection_update(self._storage.snapshot_list(dataset.name))
         return snapshots
 
     @contextmanager

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9*/_.-]*$')
 
-'''
+"""
 Backups are run asynchronous with entry points:
  - planb.tasks.conditional_run
  - planb.tasks.unconditional_run
@@ -48,7 +48,7 @@ unconditional_run:
 
 finalize_run:
  - sends the planb.signals.backup_done signal.
-'''
+"""
 
 
 if not DQConf.SIGNAL_NAMES:
@@ -57,7 +57,7 @@ if not DQConf.SIGNAL_NAMES:
     DQConf.SIGNAL_NAMES = {
         getattr(signal, n): n
         for n in dir(signal)
-        if n.startswith("SIG") and "_" not in n
+        if n.startswith('SIG') and '_' not in n
     }
 
 
@@ -72,15 +72,13 @@ class handle_exit_signals:
         # signal.signal(signum, signal.SIG_IGN)  # ignore further invocations?
         raise SystemExit(128 | signum)
 
-    all_signals = (
-        signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM)
+    all_signals = (signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM)
 
     def __enter__(self):
         # Make sure we exit using an exception (and thus the context handler).
         self._prev_handlers = []
         for signum in self.all_signals:
-            self._prev_handlers.append(
-                signal.signal(signum, self.signal_as_systemexit))
+            self._prev_handlers.append(signal.signal(signum, self.signal_as_systemexit))
 
     def __exit__(self, type, value, traceback):
         # Reset the original handler.
@@ -97,8 +95,7 @@ def systemd_unescape(value):
 def yaml_safe_str(value):
     if _yaml_safe_re.match(value):
         return value
-    return '"{}"'.format(
-        value.replace('\\', '\\\\').replace('"', '\\"'))
+    return '"{}"'.format(value.replace('\\', '\\\\').replace('"', '\\"'))
 
 
 def yaml_digits(value):
@@ -108,8 +105,8 @@ def yaml_digits(value):
     assert '.' not in value
     off = len(value) % 3
     return ','.join(
-        value[max(0, i + off - 3):(i + off)]
-        for i in range(0, len(value) + 1, 3)).lstrip(',')
+        value[max(0, i + off - 3) : (i + off)] for i in range(0, len(value) + 1, 3)
+    ).lstrip(',')
 
 
 # Sync called task; spawns async.
@@ -122,8 +119,8 @@ def schedule_conditional_backup_job(fileset, after=None):
     """
     assert after is None or isinstance(after, datetime.timedelta), after
     return _schedule_backup_job(
-        'planb.tasks.conditional_run', (fileset.pk,),
-        after=after)
+        'planb.tasks.conditional_run', (fileset.pk,), after=after
+    )
 
 
 # Sync called task; spawns async.
@@ -132,8 +129,8 @@ def schedule_manual_backup_job(fileset, custom_snapname=None):
     Schedule the specified fileset to be backed up immediately.
     """
     return _schedule_backup_job(
-        'planb.tasks.manual_run', (fileset.pk, custom_snapname),
-        after=None)
+        'planb.tasks.manual_run', (fileset.pk, custom_snapname), after=None
+    )
 
 
 # Sync called task; spawns async.
@@ -143,8 +140,8 @@ def schedule_unconditional_backup_job(fileset, after=None):
     """
     assert after is None or isinstance(after, datetime.timedelta), after
     return _schedule_backup_job(
-        'planb.tasks.unconditional_run', (fileset.pk,),
-        after=after)
+        'planb.tasks.unconditional_run', (fileset.pk,), after=after
+    )
 
 
 def _schedule_backup_job(func_name, args, after=None):
@@ -154,14 +151,19 @@ def _schedule_backup_job(func_name, args, after=None):
     if after:
         when = datetime.datetime.now() + after
         schedule(
-            func_name, *args,
-            broker=broker, hook='planb.tasks.finalize_run',
-            repeats=-1, next_run=when, schedule_type=Schedule.ONCE)
+            func_name,
+            *args,
+            broker=broker,
+            hook='planb.tasks.finalize_run',
+            repeats=-1,
+            next_run=when,
+            schedule_type=Schedule.ONCE,
+        )
         task_id = None
     else:
         task_id = async_task(
-            func_name, *args,
-            broker=broker, hook='planb.tasks.finalize_run')
+            func_name, *args, broker=broker, hook='planb.tasks.finalize_run'
+        )
     return task_id
 
 
@@ -172,8 +174,12 @@ def schedule_rename_job(fileset, new_namespace, new_name):
     """
     new_dataset_name = fileset.storage.name_dataset(new_namespace, new_name)
     return async_task(
-        'planb.tasks.rename_run', fileset.pk, fileset.dataset_name,
-        new_dataset_name, broker=get_broker(settings.Q_MAIN_QUEUE))
+        'planb.tasks.rename_run',
+        fileset.pk,
+        fileset.dataset_name,
+        new_dataset_name,
+        broker=get_broker(settings.Q_MAIN_QUEUE),
+    )
 
 
 # Sync called task; spawns async.
@@ -182,8 +188,11 @@ def schedule_dutree_job(fileset, backuprun):
     Schedule a task to run dutree for the fileset/backuprun.
     """
     return async_task(
-        'planb.tasks.dutree_run', fileset.pk, backuprun.pk,
-        broker=get_broker(settings.Q_DUTREE_QUEUE))
+        'planb.tasks.dutree_run',
+        fileset.pk,
+        backuprun.pk,
+        broker=get_broker(settings.Q_DUTREE_QUEUE),
+    )
 
 
 # Sync called task; spawns zero or more async tasks.
@@ -233,6 +242,7 @@ def finalize_run(task):
 
 class DelayBackup(RuntimeError):
     "Request to delay the backup / retry in a while."
+
     pass
 
 
@@ -253,26 +263,29 @@ class JobSpawner:
         # If the amount exceeds the save limit we may lose the backup_done
         # signals for a number of backups.
         if enabled_filesets * 2 + 50 > DQConf.SAVE_LIMIT:
-            logger.warning('Enabled filesets (%d) are close to exceeding the '
-                           'minimum django-q save limit (%d). You should '
-                           'increase the save limit', enabled_filesets,
-                           DQConf.SAVE_LIMIT)
+            logger.warning(
+                'Enabled filesets (%d) are close to exceeding the '
+                'minimum django-q save limit (%d). You should '
+                'increase the save limit',
+                enabled_filesets,
+                DQConf.SAVE_LIMIT,
+            )
 
         for fileset in self._enum_eligible_filesets():
             schedule_conditional_backup_job(fileset)
             logger.info('[%s] Scheduled backup', fileset)
 
     def _enum_eligible_filesets(self):
-        fileset_qs = (
-            Fileset.objects
-            .filter(is_enabled=True, is_running=False, is_queued=False)
-            .order_by('last_run'))  # order by last attempt
+        fileset_qs = Fileset.objects.filter(
+            is_enabled=True, is_running=False, is_queued=False
+        ).order_by('last_run')  # order by last attempt
 
         for fileset in fileset_qs:
             # We have a fileset_id, lock it. If changed is 0, we did not do
             # a change, ergo we did not lock it. Move along.
-            changed = Fileset.objects.filter(
-                pk=fileset.pk, is_queued=False).update(is_queued=True)
+            changed = Fileset.objects.filter(pk=fileset.pk, is_queued=False).update(
+                is_queued=True
+            )
             if not changed:
                 logger.info('[%s] Skipped because already locked', fileset)
                 continue
@@ -280,17 +293,19 @@ class JobSpawner:
             # Check if the daily exists already.
             if not fileset.should_backup():
                 # Unlock.
-                Fileset.objects.filter(
-                    pk=fileset.pk, is_queued=True).update(is_queued=False)
+                Fileset.objects.filter(pk=fileset.pk, is_queued=True).update(
+                    is_queued=False
+                )
                 continue
 
             # Check if we failed recently.
             if fileset.first_fail and (
-                    (timezone.now() - fileset.last_run).total_seconds()
-                    < 3600):
+                (timezone.now() - fileset.last_run).total_seconds() < 3600
+            ):
                 # Unlock.
-                Fileset.objects.filter(
-                    pk=fileset.pk, is_queued=True).update(is_queued=False)
+                Fileset.objects.filter(pk=fileset.pk, is_queued=True).update(
+                    is_queued=False
+                )
                 logger.info('[%s] Skipped because of recent failure', fileset)
                 continue
 
@@ -318,10 +333,12 @@ class FilesetRunner:
         # also include productive download time.
         a_week_ago = timezone.now() - datetime.timedelta(days=7)
         durations = list(
-            BackupRun.objects
-            .filter(fileset_id=self._fileset_id, started__gte=a_week_ago)
+            BackupRun.objects.filter(
+                fileset_id=self._fileset_id, started__gte=a_week_ago
+            )
             .exclude(duration=None)
-            .values_list('duration', 'success'))
+            .values_list('duration', 'success')
+        )
         if not durations:
             return 0  # impossible.. we should have backupruns if we call this
 
@@ -339,14 +356,17 @@ class FilesetRunner:
         if fileset.is_in_blacklist_hours:
             logger.info(
                 '[%s] Skipped because of blacklist hours: %s',
-                fileset, fileset.get_blacklist_hours())
+                fileset,
+                fileset.get_blacklist_hours(),
+            )
             # We could retry this, but we don't need to. The jobs are
             # rescheduled every hour, so the next hour we'll arrive here
             # too and do the same time-check.
             # #self.retry(eta=now.replace(hour=17))  # @task(bind=True)
             # Instead, we do this:
             Fileset.objects.filter(pk=fileset.pk).update(
-                is_queued=False, is_running=False)
+                is_queued=False, is_running=False
+            )
             return
 
         return self.unconditional_run()
@@ -357,20 +377,25 @@ class FilesetRunner:
         fileset = Fileset.objects.get(pk=self._fileset_id)
 
         # The task is delayed, but it has been scheduled/queued.
-        logger.info('[%s] Manually requested backup%s', fileset, (
-            ' (-> {})'.format(custom_snapname) if custom_snapname else ''))
+        logger.info(
+            '[%s] Manually requested backup%s',
+            fileset,
+            (' (-> {})'.format(custom_snapname) if custom_snapname else ''),
+        )
         if not fileset.is_running:
             # Hack so we get success mail. (Only update first_fail if it
             # was unset.)
             Fileset.objects.filter(pk=fileset.pk, first_fail=None).update(
-                first_fail=BOGODATE)
+                first_fail=BOGODATE
+            )
 
             # Run fileset. May raise an error. Always restores queued/running.
             self.unconditional_run(custom_snapname=custom_snapname)
 
     def unconditional_run(self, custom_snapname=None):
         assert (custom_snapname or custom_snapname is None) and (
-            custom_snapname != 'planb'), custom_snapname
+            custom_snapname != 'planb'
+        ), custom_snapname
 
         if not self._fileset_lock.is_acquired():
             raise ValueError('Cannot use fileset without acquiring lock')
@@ -382,7 +407,8 @@ class FilesetRunner:
         t0 = time.time()
         logger.info('[%s] Starting backup', fileset)
         run = BackupRun.objects.create(
-            fileset_id=fileset.pk, snapshot_name=(custom_snapname or ''))
+            fileset_id=fileset.pk, snapshot_name=(custom_snapname or '')
+        )
         dataset = fileset.get_dataset()
         try:
             # Lock and open dataset for work.
@@ -430,12 +456,16 @@ class FilesetRunner:
         if soon:
             logger.info(
                 'failure in %r transport (%s); rescheduling in +%ds...',
-                fileset.friendly_name, e, soon.total_seconds())
+                fileset.friendly_name,
+                e,
+                soon.total_seconds(),
+            )
             schedule_unconditional_backup_job(fileset, after=soon)
             # Queueing for a lot later. By setting is_queued=True, we avoid
             # another auto-schedule within the hour.
             Fileset.objects.filter(pk=fileset.pk).update(
-                is_queued=True, is_running=False)
+                is_queued=True, is_running=False
+            )
         else:
             # Log exception with traceback. We could pass it along
             # for Django-Q but it logs errors instead of exceptions and
@@ -444,19 +474,24 @@ class FilesetRunner:
 
         # Store failure on the run fileset.
         BackupRun.objects.filter(pk=run.pk).update(
-            duration=(time.time() - t0), success=False, error_text=str(e))
+            duration=(time.time() - t0), success=False, error_text=str(e)
+        )
 
         # Cache values on the fileset.
         Fileset.objects.filter(pk=fileset.pk).update(
-            last_run=now)    # don't overwrite last_ok
-        (Fileset.objects.filter(pk=fileset.pk)
-         .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
-         .update(first_fail=now))  # overwrite first_fail only if unset
+            last_run=now
+        )  # don't overwrite last_ok
+        (
+            Fileset.objects.filter(pk=fileset.pk)
+            .filter(Q(first_fail=None) | Q(first_fail=BOGODATE))
+            .update(first_fail=now)
+        )  # overwrite first_fail only if unset
 
     def _unconditional_run_work(self, fileset, dataset, run, t0):
         # Set title, create log, get transport config.
-        setproctitle('[backing up %d: %s]: transporting' % (
-            fileset.pk, fileset.friendly_name))
+        setproctitle(
+            '[backing up %d: %s]: transporting' % (fileset.pk, fileset.friendly_name)
+        )
         first_fail = fileset.first_fail
         transport = fileset.get_transport()
         # Fixate the snapshot name if the transport creates snapshots.
@@ -468,8 +503,9 @@ class FilesetRunner:
         dataset.flush()
 
         # Update snapshots.
-        setproctitle('[backing up %d: %s]: snapshots' % (
-            fileset.pk, fileset.friendly_name))
+        setproctitle(
+            '[backing up %d: %s]: snapshots' % (fileset.pk, fileset.friendly_name)
+        )
 
         # We rotate *before* creating new snapshots: the new rotate code might
         # otherwise deem the latest backup to be superfluous and immediately
@@ -513,10 +549,13 @@ class FilesetRunner:
             snapshot_size_listing = 'summary_disabled: 0'
 
         # Include transport export in attributes.
-        attributes = safe_dump({
-            'snapshot': snapshot,
-            'do_snapshot_size_listing': fileset.do_snapshot_size_listing},
-            default_flow_style=False)
+        attributes = safe_dump(
+            {
+                'snapshot': snapshot,
+                'do_snapshot_size_listing': fileset.do_snapshot_size_listing,
+            },
+            default_flow_style=False,
+        )
 
         # Store run info.
         BackupRun.objects.filter(pk=run.pk).update(
@@ -525,16 +564,18 @@ class FilesetRunner:
             success=True,
             total_size_mb=total_size_mb,
             snapshot_size_mb=snapshot_size_mb,
-            snapshot_size_listing=snapshot_size_listing)
+            snapshot_size_listing=snapshot_size_listing,
+        )
 
         # Cache values on the fileset.
         now = timezone.now()
         Fileset.objects.filter(pk=fileset.pk).update(
-            last_ok=now,                        # success
-            last_run=now,                       # now
-            first_fail=None,                    # no failure
+            last_ok=now,  # success
+            last_run=now,  # now
+            first_fail=None,  # no failure
             average_duration=self.get_average_duration(),
-            total_size_mb=total_size_mb)       # "disk usage"
+            total_size_mb=total_size_mb,
+        )  # "disk usage"
 
         # Mail if failed recently.
         if first_fail:  # last job was not okay
@@ -543,10 +584,9 @@ class FilesetRunner:
             else:
                 msg = (
                     'Backing up {} which was failing since {}.\n\n'
-                    'Now all is well again.\n'.format(
-                        fileset, first_fail))
-            mail_admins(
-                'OK: Backup success of {}'.format(fileset), msg)
+                    'Now all is well again.\n'.format(fileset, first_fail)
+                )
+            mail_admins('OK: Backup success of {}'.format(fileset), msg)
 
     def dutree_run(self, run_id):
         if not self._fileset_lock.is_acquired():
@@ -572,8 +612,7 @@ class FilesetRunner:
             if dataset.has_child_datasets():
                 self._snapshot_info_from_child_datasets(dataset, snapshot, run)
             else:
-                self._snapshot_info_from_dutree(
-                    fileset, dataset, snapshot, run)
+                self._snapshot_info_from_dutree(fileset, dataset, snapshot, run)
         finally:
             setproctitle(oldproctitle)
 
@@ -587,14 +626,13 @@ class FilesetRunner:
             # NOTE: An underscore without trailing "_" is undefined. Leave it,
             # so we don't get blah_non_cool turning into blah<LF>non<LF>cool.
             subset_name = systemd_unescape(
-                subset.name[(len(dataset.name) + 1):].replace('_x', '\\x'))
+                subset.name[(len(dataset.name) + 1) :].replace('_x', '\\x')
+            )
 
             size = subset.get_referenced_size(snapshot)
             snapshot_size += size
             snapshot_size_listing.append(
-                '{}: {}'.format(
-                    yaml_safe_str(subset_name),
-                    yaml_digits(size))
+                '{}: {}'.format(yaml_safe_str(subset_name), yaml_digits(size))
             )
 
         BackupRun.objects.filter(pk=run.pk).update(
@@ -606,20 +644,19 @@ class FilesetRunner:
         path = dataset.get_snapshot_path(snapshot)
         try:
             with dataset.workon(path):
-                setproctitle('[backing up %d: %s]: dutree' % (
-                    fileset.pk, fileset.friendly_name))
+                setproctitle(
+                    '[backing up %d: %s]: dutree' % (fileset.pk, fileset.friendly_name)
+                )
 
                 # NOTE: PlanB ObjSync produces the planb-objsync.cur file
                 # listings which we can read _way_ faster than traversing the
                 # filesystem.  Use those if available.
                 # Note: planb-swiftsync.cur was the old name of this file.
-                for objsync_name in (
-                        'planb-objsync.cur', 'planb-swiftsync.cur'):
+                for objsync_name in ('planb-objsync.cur', 'planb-swiftsync.cur'):
                     objsync_path = os.path.join(path, '..', objsync_name)
                     if os.path.isfile(objsync_path):
                         # Prefix with 'path'. We strip it below.
-                        duscan = PlanbSwiftSyncDuScan(
-                            objsync_path, root_name=path)
+                        duscan = PlanbSwiftSyncDuScan(objsync_path, root_name=path)
                         break
                 else:
                     duscan = Scanner(path)
@@ -627,13 +664,13 @@ class FilesetRunner:
                 dutree = duscan.scan(use_apparent_size=False)
 
                 # Get snapshot size and tree.
-                snapshot_size_mb = (
-                    dutree.use_size() + 524288) >> 20  # bytes to MiB
+                snapshot_size_mb = (dutree.use_size() + 524288) >> 20  # bytes to MiB
                 snapshot_size_yaml = '\n'.join(
                     '{}: {}'.format(
-                        yaml_safe_str(i.name()[len(path):]),
-                        yaml_digits(i.use_size()))
-                    for i in dutree.get_leaves())
+                        yaml_safe_str(i.name()[len(path) :]), yaml_digits(i.use_size())
+                    )
+                    for i in dutree.get_leaves()
+                )
                 BackupRun.objects.filter(pk=run.pk).update(
                     snapshot_size_mb=snapshot_size_mb,
                     snapshot_size_listing=snapshot_size_yaml,
@@ -641,12 +678,12 @@ class FilesetRunner:
         except Exception as e:
             logger.exception('[%s] Failed dutree scan', fileset)
             # Append dutree error to error_text, leave success flag as is.
-            error_text = (
-                BackupRun.objects.filter(pk=run.pk)
-                .values_list('error_text', flat=True)[0])
+            error_text = BackupRun.objects.filter(pk=run.pk).values_list(
+                'error_text', flat=True
+            )[0]
             BackupRun.objects.filter(pk=run.pk).update(
                 snapshot_size_listing='summary_error: 0',
-                error_text=('{}\n{}'.format(error_text, e).strip())
+                error_text=('{}\n{}'.format(error_text, e).strip()),
             )
         else:
             logger.info('[%s] Completed dutree scan', fileset)
@@ -659,7 +696,8 @@ class FilesetRunner:
         fileset = Fileset.objects.get(pk=self._fileset_id)
         if fileset.is_running:
             Fileset.objects.filter(pk=fileset.pk).update(
-                is_queued=False, is_running=False)
+                is_queued=False, is_running=False
+            )
 
         # This is never not success, as we handled all cases in the
         # unconditional_run, we hope.
@@ -681,12 +719,16 @@ class FilesetRunner:
             # The fileset dataset name has changed since starting this job.
             logger.warning(
                 '[%s] Fileset name to %r cancelled, dataset %r does '
-                'not match current %r', fileset, new_dataset_name,
-                old_dataset_name, fileset.dataset_name)
+                'not match current %r',
+                fileset,
+                new_dataset_name,
+                old_dataset_name,
+                fileset.dataset_name,
+            )
             return
 
         logger.info(
-            '[%s] Rename from %r to %r',
-            fileset, old_dataset_name, new_dataset_name)
+            '[%s] Rename from %r to %r', fileset, old_dataset_name, new_dataset_name
+        )
         fileset.rename_dataset(new_dataset_name)
         logger.info('[%s] Rename to %r complete', fileset, new_dataset_name)

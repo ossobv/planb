@@ -12,32 +12,34 @@ class PlanbTestCase(PlanbTestCase):
     def test_rename_fileset(self):
         fileset = FilesetFactory(storage_alias='zfs')
         old_name = fileset.storage.name_dataset(
-            fileset.hostgroup.name, fileset.friendly_name)
+            fileset.hostgroup.name, fileset.friendly_name
+        )
         self.assertEqual(old_name, fileset.dataset_name)
         fileset.hostgroup.name = 'some-other'
         fileset.hostgroup.save()
         new_name = fileset.storage.name_dataset(
-            fileset.hostgroup.name, fileset.friendly_name)
+            fileset.hostgroup.name, fileset.friendly_name
+        )
 
-        with patch.object(fileset.storage._storage,
-                          '_perform_binary_command') as mock_zfs, \
-                patch('os.mkdir') as mock_mkdir, \
-                patch('os.rmdir') as mock_rmdir:
+        with (
+            patch.object(
+                fileset.storage._storage, '_perform_binary_command'
+            ) as mock_zfs,
+            patch('os.mkdir') as mock_mkdir,
+            patch('os.rmdir') as mock_rmdir,
+        ):
             mock_zfs.side_effect = [
-                '/' + old_name,     # get dataset mountpoint
-                '',                 # rename
-                '/' + new_name,     # get dataset mountpoint
+                '/' + old_name,  # get dataset mountpoint
+                '',  # rename
+                '/' + new_name,  # get dataset mountpoint
             ]
 
             # Rename: checks mountpoints, does rename, makes dir
             fileset.rename_dataset(new_name)
 
-            mock_zfs.assert_any_call(
-                ('get', '-Ho', 'value', 'mountpoint', old_name))
-            mock_zfs.assert_any_call(
-                ('rename', old_name, new_name))
-            mock_zfs.assert_any_call(
-                ('get', '-Ho', 'value', 'mountpoint', new_name))
+            mock_zfs.assert_any_call(('get', '-Ho', 'value', 'mountpoint', old_name))
+            mock_zfs.assert_any_call(('rename', old_name, new_name))
+            mock_zfs.assert_any_call(('get', '-Ho', 'value', 'mountpoint', new_name))
 
             mock_rmdir.assert_called_with('/' + old_name)  # old mountpoint
             mock_mkdir.assert_called_with('/' + new_name)  # new mountpoint
@@ -48,15 +50,15 @@ class PlanbTestCase(PlanbTestCase):
         fileset = FilesetFactory(storage_alias='dummy')
         with patch('planb.storage.base.datetime') as m:
             m.datetime.now.return_value = datetime.datetime(
-                2020, 5, 3, 14, 42, tzinfo=datetime.timezone.utc)
+                2020, 5, 3, 14, 42, tzinfo=datetime.timezone.utc
+            )
             # snapshot create will always create a snapshot.
             # The snapshot name is a utc timestamp.
-            self.assertEqual(
-                fileset.snapshot_create(), 'planb-20200503T1442Z')
+            self.assertEqual(fileset.snapshot_create(), 'planb-20200503T1442Z')
             m.datetime.now.return_value = datetime.datetime(
-                2020, 5, 3, 15, 31, tzinfo=datetime.timezone.utc)
-            self.assertEqual(
-                fileset.snapshot_create(), 'planb-20200503T1531Z')
+                2020, 5, 3, 15, 31, tzinfo=datetime.timezone.utc
+            )
+            self.assertEqual(fileset.snapshot_create(), 'planb-20200503T1531Z')
 
     @override_settings(PLANB_BLACKLIST_HOURS='9-17')
     @patch('planb.models.timezone')
@@ -81,7 +83,8 @@ class PlanbTestCase(PlanbTestCase):
         self.assertFalse(fileset.is_in_blacklist_hours)
         # Using fileset settings, for example to skip during some heavy tasks.
         fileset = FilesetFactory(
-            blacklist_hours='2,9-17', hostgroup__blacklist_hours='11-14')
+            blacklist_hours='2,9-17', hostgroup__blacklist_hours='11-14'
+        )
         self.assertEqual(fileset.get_blacklist_hours(), '2,9-17')
         timezone.now.return_value = datetime.datetime(2020, 5, 3, 1, 42)
         self.assertFalse(fileset.is_in_blacklist_hours)
@@ -103,15 +106,14 @@ class PlanbTestCase(PlanbTestCase):
         fileset = FilesetFactory(hostgroup__retention='12m,3y')
         self.assertEqual(fileset.retention_map, {'m': 12, 'y': 3})
         # Using fileset settings.
-        fileset = FilesetFactory(
-            retention='36h,7d', hostgroup__retention='12m,3y')
+        fileset = FilesetFactory(retention='36h,7d', hostgroup__retention='12m,3y')
         self.assertEqual(fileset.retention_map, {'h': 36, 'd': 7})
 
     @override_settings(PLANB_RETENTION='')
     def test_should_backup(self):
         fileset = FilesetFactory(
-            average_duration=19172, first_fail=timezone.now(),
-            is_enabled=False)
+            average_duration=19172, first_fail=timezone.now(), is_enabled=False
+        )
         # Fileset disabled.
         self.assertFalse(fileset.should_backup())
         fileset.is_enabled = True
@@ -142,13 +144,16 @@ class PlanbTestCase(PlanbTestCase):
         with patch('planb.models.timezone') as m:
             # Time since last backup is just 5 hours.
             fileset.last_ok = datetime.datetime(
-                2020, 5, 19, 19, tzinfo=datetime.timezone.utc)
+                2020, 5, 19, 19, tzinfo=datetime.timezone.utc
+            )
             m.now.return_value = datetime.datetime(
-                2020, 5, 20, tzinfo=datetime.timezone.utc)
+                2020, 5, 20, tzinfo=datetime.timezone.utc
+            )
             self.assertTrue(fileset.should_backup())
             # Same day of the month, one month later at midnight.
             m.now.return_value = datetime.datetime(
-                2020, 6, 19, tzinfo=datetime.timezone.utc)
+                2020, 6, 19, tzinfo=datetime.timezone.utc
+            )
             self.assertTrue(fileset.should_backup())
 
         # Backup is running.

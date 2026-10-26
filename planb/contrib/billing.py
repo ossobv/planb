@@ -44,13 +44,13 @@ class BossoBillingPoster(BasePoster):
         }
 
     def post(self, data):
-        logger.info('%s: pushing "%s"',  self.__class__.__name__, data)
+        logger.info('%s: pushing "%s"', self.__class__.__name__, data)
         assert data
         data = urlencode(data).encode('utf-8')
 
         req = Request(
-            method='POST', url=self.url,
-            headers=self.get_headers(), data=data)
+            method='POST', url=self.url, headers=self.get_headers(), data=data
+        )
         try:
             fp = urlopen(req)
             resp = fp.read()
@@ -63,25 +63,24 @@ class BossoBillingPoster(BasePoster):
 
         if response == 'OK':
             pass
-        elif (('Backup history with this '
-               'Name and Date already exists') in response):
+        elif ('Backup history with this Name and Date already exists') in response:
             logger.warning(response)
         else:
             logger.error(response)
 
     def format_data(self, hostgroup, fileset, report_date):
         return {
-            'name': '{}-{}'.format(
-                hostgroup.name, fileset.friendly_name),
+            'name': '{}-{}'.format(hostgroup.name, fileset.friendly_name),
             'date': report_date,
-            'size': fileset.total_size_mb << 20  # MiB to B
+            'size': fileset.total_size_mb << 20,  # MiB to B
         }
 
 
 class BossoRESTPoster(BasePoster):
     UNIQUE_ERROR = [
         'The fields relation_code, item_code, service_code, date must make a '
-        'unique set.']
+        'unique set.'
+    ]
 
     def __init__(self, url, auth_token, use_batch=True):
         super().__init__(url, use_batch)
@@ -96,13 +95,12 @@ class BossoRESTPoster(BasePoster):
         }
 
     def post(self, data):
-        logger.info('%s: pushing "%s"',  self.__class__.__name__, data)
+        logger.info('%s: pushing "%s"', self.__class__.__name__, data)
         url = '{}create_many/'.format(self.url) if self.use_batch else self.url
         try:
             response = self.session.post(url, json=data)
         except requests.RequestException:
-            logger.exception(
-                '%s: error during POST', self.__class__.__name__)
+            logger.exception('%s: error during POST', self.__class__.__name__)
             return
 
         if 200 <= response.status_code < 300:
@@ -114,8 +112,7 @@ class BossoRESTPoster(BasePoster):
             try:
                 response.raise_for_status()
             except requests.RequestException:
-                logger.exception(
-                    '%s: error during POST', self.__class__.__name__)
+                logger.exception('%s: error during POST', self.__class__.__name__)
 
     def handle_error_response(self, data, error):
         if self.use_batch:
@@ -162,15 +159,14 @@ def daily_hostgroup_report(data_poster, hostgroup_qs=None):
     if hostgroup_qs is None:
         hostgroup_qs = HostGroup.objects.all()
     today = date.today()
-    today_is_first_day_of_the_month = (today.day == 1)
+    today_is_first_day_of_the_month = today.day == 1
     first_day_of_this_month = today.replace(day=1)
 
     for hostgroup in hostgroup_qs.order_by('name'):
         for fileset in (
-                # Find filesets which succeeded at least once.
-                hostgroup.filesets.exclude(last_ok=None)
-                .order_by('friendly_name')):
-
+            # Find filesets which succeeded at least once.
+            hostgroup.filesets.exclude(last_ok=None).order_by('friendly_name')
+        ):
             if not fileset.is_enabled:
                 # Always push data for disabled hosts on the first of the month
                 # so the hostgroup can get billed for it.

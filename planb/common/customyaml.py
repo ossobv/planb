@@ -11,6 +11,7 @@ class CustomYaml(object):
     The ugly backslash (\\b) hack signifies that we prefer the data to
     be on the previous line.
     """
+
     # No need for double quotes around these:
     _yaml_safe_re = re.compile(r'^[a-z/_.][a-z0-9/_.-]*$')
 
@@ -62,8 +63,7 @@ class CustomYaml(object):
         for key, value in dict_.items():
             subret = self._from_obj(value)
             if subret[0] == '\b':
-                ret.append('{}: {}'.format(
-                    self._from_atom(key), subret[1]))
+                ret.append('{}: {}'.format(self._from_atom(key), subret[1]))
                 ret.extend(subret[2:])
             else:
                 ret.append('{}:'.format(self._from_atom(key)))
@@ -95,6 +95,4 @@ class CustomYaml(object):
             return string
         if '\n' in string:
             raise NotImplementedError('did not expect LF here')
-        return '"{}"'.format(
-            str(string).replace('\\', '\\\\')
-            .replace('"', '\\"'))
+        return '"{}"'.format(str(string).replace('\\', '\\\\').replace('"', '\\"'))

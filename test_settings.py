@@ -60,11 +60,11 @@ DATABASES = {
     'default': {
         # Choose 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',    # Or path to database file if using sqlite3.
-        'USER': '',    # Not used with sqlite3.
-        'PASSWORD': '',   # Not used with sqlite3.
-        'HOST': '',         # Empty for localhost. Not used with sqlite3.
-        'PORT': '',         # Empty for default. Not used with sqlite3.
+        'NAME': ':memory:',  # Or path to database file if using sqlite3.
+        'USER': '',  # Not used with sqlite3.
+        'PASSWORD': '',  # Not used with sqlite3.
+        'HOST': '',  # Empty for localhost. Not used with sqlite3.
+        'PORT': '',  # Empty for default. Not used with sqlite3.
         'OPTIONS': {},
     }
 }
@@ -81,10 +81,10 @@ ALLOWED_HOSTS = ('testserver',)
 
 SECRET_KEY = 'T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y_T3$TK3Y'
 
-#STATIC_ROOT = '/srv/http/planb.example.com/static'
+# STATIC_ROOT = '/srv/http/planb.example.com/static'
 
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
 
 # XXX synchronous mode isn't fully supported by django-q and causes problems
 # with transactions in the calling context.
-#Q_CLUSTER['sync'] = True
+# Q_CLUSTER['sync'] = True

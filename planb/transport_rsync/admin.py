@@ -10,28 +10,56 @@ from .models import Config
 
 class ConfigAdmin(admin.ModelAdmin):
     fieldsets = (
-        (None, {'fields': (
-            'fileset', 'host', 'src_dir', 'includes', 'excludes',
-        )}),
-        ('Transport options', {'fields': (
-            'user', 'use_sudo', 'use_ionice', 'use_donotrund', 'transport',
-        )}),
-        ('Advanced options', {'fields': (
-            'flags', 'rsync_path', 'ionice_path',
-        )}),
+        (
+            None,
+            {
+                'fields': (
+                    'fileset',
+                    'host',
+                    'src_dir',
+                    'includes',
+                    'excludes',
+                )
+            },
+        ),
+        (
+            'Transport options',
+            {
+                'fields': (
+                    'user',
+                    'use_sudo',
+                    'use_ionice',
+                    'use_donotrund',
+                    'transport',
+                )
+            },
+        ),
+        (
+            'Advanced options',
+            {
+                'fields': (
+                    'flags',
+                    'rsync_path',
+                    'ionice_path',
+                )
+            },
+        ),
     )
 
     form = modelform_factory(Config, form=FilesetRefForm)
-    readonly_change_fields = (
-        'fileset',
-    )
+    readonly_change_fields = ('fileset',)
 
     list_display = (
-        'fileset', 'host', 'user', 'options',
+        'fileset',
+        'host',
+        'user',
+        'options',
     )
 
     search_fields = (
-        'host', 'fileset__friendly_name', 'fileset__hostgroup__name',
+        'host',
+        'fileset__friendly_name',
+        'fileset__hostgroup__name',
         'fileset__notes',
     )
 
@@ -53,11 +81,13 @@ class ConfigAdmin(admin.ModelAdmin):
         if object.use_ionice:
             ret.append('ionice')
         if object.includes:
-            ret.append('incl=%d:%x' % (
-                len(object.includes.split(' ')), crc(object.includes)))
+            ret.append(
+                'incl=%d:%x' % (len(object.includes.split(' ')), crc(object.includes))
+            )
         if object.excludes:
-            ret.append('excl=%d:%x' % (
-                len(object.excludes.split(' ')), crc(object.excludes)))
+            ret.append(
+                'excl=%d:%x' % (len(object.excludes.split(' ')), crc(object.excludes))
+            )
         return ', '.join(ret)
 
 

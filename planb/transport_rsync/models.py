@@ -8,8 +8,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
 from planb.common.fields import FilelistField
-from planb.common.subprocess2 import (
-    CalledProcessError, argsjoin, check_output)
+from planb.common.subprocess2 import CalledProcessError, argsjoin, check_output
 from planb.tasks import RetryBackupAfterAWhile, RetryBackupSoon
 from planb.transport import AbstractTransport
 from planb.utils import lazysetting
@@ -37,25 +36,27 @@ class Config(AbstractTransport):
 
     src_dir = models.CharField(max_length=254, default='/')
     includes = FilelistField(
-        max_length=1023, default=lazysetting('PLANB_DEFAULT_INCLUDES'))
-    excludes = FilelistField(
-        max_length=1023, blank=True)
+        max_length=1023, default=lazysetting('PLANB_DEFAULT_INCLUDES')
+    )
+    excludes = FilelistField(max_length=1023, blank=True)
 
     transport = TransportChoices()
     user = models.CharField(
-        max_length=254, default=lazysetting(
-            'PLANB_RSYNC_USER', 'remotebackup'))
+        max_length=254, default=lazysetting('PLANB_RSYNC_USER', 'remotebackup')
+    )
 
     use_sudo = models.BooleanField(default=True)
     use_ionice = models.BooleanField(default=True)
     use_donotrund = models.BooleanField(
-        verbose_name=_('Use do-not-run.d'), default=True, help_text=_(
-            'Delay backup when /var/lib/planb/do-not-run.d has files.'))
+        verbose_name=_('Use do-not-run.d'),
+        default=True,
+        help_text=_('Delay backup when /var/lib/planb/do-not-run.d has files.'),
+    )
 
     rsync_path = models.CharField(
-        max_length=255, default=lazysetting('PLANB_RSYNC_BIN'))
-    ionice_path = models.CharField(
-        max_length=31, default='/usr/bin/ionice', blank=True)
+        max_length=255, default=lazysetting('PLANB_RSYNC_BIN')
+    )
+    ionice_path = models.CharField(max_length=31, default='/usr/bin/ionice', blank=True)
 
     # When files have legacy/Latin-1 encoding, you'll get rsync exit
     # code 23 and this message:
@@ -63,13 +64,17 @@ class Config(AbstractTransport):
     #   Invalid or incomplete multibyte or wide character (84)
     # Solution, add: --iconv=utf8,latin1
     flags = models.CharField(
-        max_length=511, blank=True, default='',
+        max_length=511,
+        blank=True,
+        default='',
         help_text=_(
             'Default "", add "--no-perms --chmod=D0700,F600" '
             'for (windows) hosts without permission bits, add '
             '"--iconv=utf8,latin1" for hosts with files with legacy (Latin-1) '
             'encoding, add "--bwlimit=" for hosts with no bandwidth limit, '
-            'add "--compress-choice=lz4" for newer compression.'))
+            'add "--compress-choice=lz4" for newer compression.'
+        ),
+    )
 
     class Meta:
         db_table = TABLE_PREFIX  # or '{}_config'.format(TABLE_PREFIX)
@@ -132,8 +137,7 @@ class Config(AbstractTransport):
     def get_transport_ssh_known_hosts_d(self):
         # FIXME: assert that there is no nastiness in $HOME? This value
         # is placed in the rsync ssh options call later on.
-        known_hosts_d = (
-            os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d'))
+        known_hosts_d = os.path.join(os.environ.get('HOME', ''), '.ssh/known_hosts.d')
         try:
             os.makedirs(known_hosts_d, 0o755)
         except FileExistsError:
@@ -168,8 +172,10 @@ class Config(AbstractTransport):
         known_hosts_file = os.path.join(known_hosts_d, self.host)
 
         args = [
-            '-o', 'HashKnownHosts=no',
-            '-o', 'UserKnownHostsFile={}'.format(known_hosts_file),
+            '-o',
+            'HashKnownHosts=no',
+            '-o',
+            'UserKnownHostsFile={}'.format(known_hosts_file),
         ]
         if os.path.exists(os.path.join(known_hosts_d, self.host)):
             # If the file exists, check the keys.
@@ -186,11 +192,11 @@ class Config(AbstractTransport):
 
     def get_transport_ssh_uri(self):
         src_dir = (
-            self.src_dir
-            if self.src_dir.endswith('/')
-            else '{}/'.format(self.src_dir))
+            self.src_dir if self.src_dir.endswith('/') else '{}/'.format(self.src_dir)
+        )
         return '{userhost}:{src_dir}'.format(
-            userhost=self.get_transport_ssh_userhost(), src_dir=src_dir)
+            userhost=self.get_transport_ssh_userhost(), src_dir=src_dir
+        )
 
     def get_transport_rsync_uri(self):
         return '{o.host}::{o.src_dir}'.format(o=self)
@@ -198,11 +204,13 @@ class Config(AbstractTransport):
     def get_transport_args(self, remote_shell):
         if self.transport == TransportChoices.SSH:
             remote_shell = '--rsh={} {}'.format(
-                remote_shell, ' '.join(self.get_transport_ssh_options()))
+                remote_shell, ' '.join(self.get_transport_ssh_options())
+            )
             retval = (
                 remote_shell,
                 self.get_transport_ssh_rsync_path(),
-                self.get_transport_ssh_uri())
+                self.get_transport_ssh_uri(),
+            )
 
         elif self.transport == TransportChoices.RSYNC:
             if remote_shell:
@@ -210,8 +218,7 @@ class Config(AbstractTransport):
             retval = (self.get_transport_rsync_uri(),)
 
         else:
-            raise NotImplementedError(
-                'Unknown transport: %r' % (self.transport,))
+            raise NotImplementedError('Unknown transport: %r' % (self.transport,))
 
         return retval
 
@@ -228,22 +235,23 @@ class Config(AbstractTransport):
 
             for idx, flag in enumerate(flags):
                 if flag == '-e':
-                    if (len(flags) > (idx + 1)
-                            and flags[idx + 1].startswith('ssh ')):
+                    if len(flags) > (idx + 1) and flags[idx + 1].startswith('ssh '):
                         remote_shell = flags[idx + 1]
-                        flags = flags[0:idx] + flags[idx + 2:]
+                        flags = flags[0:idx] + flags[idx + 2 :]
                         break
                     else:
                         raise NotImplementedError(
-                            'parsing -e failed: {!r}'.format(flags))
+                            'parsing -e failed: {!r}'.format(flags)
+                        )
                 elif flag.startswith('--rsh='):
                     if flag.startswith('--rsh=ssh '):
                         remote_shell = flag[6:]
-                        flags = flags[0:idx] + flags[idx + 1:]
+                        flags = flags[0:idx] + flags[idx + 1 :]
                         break
                     else:
                         raise NotImplementedError(
-                            'parsing --rsh= failed: {!r}'.format(flags))
+                            'parsing --rsh= failed: {!r}'.format(flags)
+                        )
 
         flags = tuple(flags)
         return flags, remote_shell
@@ -261,13 +269,15 @@ class Config(AbstractTransport):
             + self.get_transport_ssh_options()
             + (remote_userhost,)
             + ('find', '/var/lib/planb/do-not-run.d', '-type', 'f')
-            + ('||', 'true'))
+            + ('||', 'true')
+        )
         return args
 
     def generate_rsync_command(self):
         """
         Returns ('rsync', 'remotehost', 'args'...
         """
+
         def in_arg(arg, other_list):
             if arg.startswith('--') and '=' in arg:
                 # Easy: --option=value
@@ -294,18 +304,18 @@ class Config(AbstractTransport):
             '--stats',
             # -a, --archive; equals -rlptgoD (no -H,-A,-X)
             '--recursive',  # -r
-            '--links',      # -l
+            '--links',  # -l
             # > rsync 3.2.3 is affected by lack of:
             # > https://github.com/WayneD/rsync/commit/
             # >   9dd62525f3b98d692e031f22c02be8f775966503
             # > see: https://bugs.gentoo.org/777483
-            '--perms',      # -p
-            '--times',      # -t
+            '--perms',  # -p
+            '--times',  # -t
             # '--group' <-- not '-g'
             # '--owner' <-- not '-o'
             # '--numeric-ids' <-- only useful if we use group/owner
-            '--devices',    # -D (won't work without root though)
-            '--specials',   # -D
+            '--devices',  # -D (won't work without root though)
+            '--specials',  # -D
             # Work around rsync bug in 3.1.0. Possibly not needed when
             # we (also) use --whole-file.
             # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
@@ -319,9 +329,11 @@ class Config(AbstractTransport):
             # accessible anymore. Make sure our user has rx access.
             '--chmod=Du+rx',
             # Limit bandwidth a bit by default.
-            '--bwlimit=10M')
+            '--bwlimit=10M',
+        )
         used_simple_args = tuple(
-            arg for arg in simple_args if not in_arg(arg, rsync_flags))
+            arg for arg in simple_args if not in_arg(arg, rsync_flags)
+        )
 
         transport_args = self.get_transport_args(remote_shell=remote_shell)
 
@@ -332,7 +344,8 @@ class Config(AbstractTransport):
             + self.create_include_string()
             + ('--exclude=*',)
             + transport_args
-            + (data_dir,))
+            + (data_dir,)
+        )
 
         return args
 
@@ -353,20 +366,19 @@ class Config(AbstractTransport):
         # NOTE: We cannot place this in all transports. It is
         # ssh-specific that we're able to do this.
         cmd = self.generate_find_norun_command()
-        logger.info(
-            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
+        logger.info('Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
         stderr = []
         output = check_output(cmd, return_stderr=stderr).decode('utf-8')
         if output != '':
             output = output.strip().split('\n')
             raise RetryBackupSoon(
                 'cannot backup %r right now, because do-not-run.d files '
-                'exist: %r' % (self.fileset.friendly_name, output))
+                'exist: %r' % (self.fileset.friendly_name, output)
+            )
 
     def _do_actual_transport(self):
         cmd = self.generate_rsync_command()
-        logger.info(
-            'Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
+        logger.info('Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
 
         stderr = []
         try:
@@ -376,7 +388,8 @@ class Config(AbstractTransport):
             returncode, output = e.returncode, e.output
             errstr = RSYNC_EXITCODES.get(returncode, 'Return code not matched')
             logger.warning(
-                'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e))
+                'code: %s\nmsg: %s\nexception: %s', returncode, errstr, str(e)
+            )
             if returncode in (RSYNC_ERR_VANISHED_SOURCE,):
                 # "Partial transfer due to vanished source files"
                 # We need to handle this with some grace. If this is due to a
@@ -386,11 +399,14 @@ class Config(AbstractTransport):
                 # complete.
                 raise RetryBackupAfterAWhile(
                     'rsync backup of %r has vanished source files; '
-                    'retrying in a bit' % (self.fileset.friendly_name,))
+                    'retrying in a bit' % (self.fileset.friendly_name,)
+                )
             raise
 
         logger.info(
-            'rsync exited with code %s for %s:'
-            '\n\n(stdout)\n\n%s\n(stderr)\n\n%s',
-            returncode, self.fileset.friendly_name, output,
-            b'\n'.join(stderr).decode('utf-8', 'replace'))
+            'rsync exited with code %s for %s:\n\n(stdout)\n\n%s\n(stderr)\n\n%s',
+            returncode,
+            self.fileset.friendly_name,
+            output,
+            b'\n'.join(stderr).decode('utf-8', 'replace'),
+        )

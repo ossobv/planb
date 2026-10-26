@@ -34,25 +34,29 @@ class EnqueueJob(View):
             # Our URL is /bla/bla/123/enqueue/.
             # Drop the "enqueue/".
             # FIXME: Should use proper reverse() instead!
-            self.request.path_info.rsplit('/', 2)[0] + '/')
+            self.request.path_info.rsplit('/', 2)[0] + '/'
+        )
 
     def enqueue(self, fileset, custom_snapname):
         if fileset.is_queued or fileset.is_running:
             messages.add_message(
-                self.request, messages.ERROR,
-                'A backup job for this fileset was already queued/running!')
+                self.request,
+                messages.ERROR,
+                'A backup job for this fileset was already queued/running!',
+            )
             return False
 
         # Spawn a single run.
         Fileset.objects.filter(pk=fileset.pk).update(is_queued=True)
-        task_id = schedule_manual_backup_job(
-            fileset, custom_snapname=custom_snapname)
+        task_id = schedule_manual_backup_job(fileset, custom_snapname=custom_snapname)
         if custom_snapname:
             messages.add_message(
-                self.request, messages.INFO,
-                'Spawned job %s for PERMANENT archive with name %r.' % (
-                    task_id, custom_snapname))
+                self.request,
+                messages.INFO,
+                'Spawned job %s for PERMANENT archive with name %r.'
+                % (task_id, custom_snapname),
+            )
         else:
             messages.add_message(
-                self.request, messages.INFO,
-                'Spawned job %s as requested.' % (task_id,))
+                self.request, messages.INFO, 'Spawned job %s as requested.' % (task_id,)
+            )

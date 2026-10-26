@@ -11,7 +11,7 @@ from django_q.conf import Conf
 
 class Command(BaseCommand):
     # Translators: help text for qcluster management command
-    help = _("Start Django Q Cluster for a queue.")
+    help = _('Start Django Q Cluster for a queue.')
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -23,14 +23,16 @@ class Command(BaseCommand):
         )
         default_queue = (
             os.environ.get('Q_CLUSTER_QUEUE', settings.Q_MAIN_QUEUE)
-            or settings.Q_MAIN_QUEUE)
+            or settings.Q_MAIN_QUEUE
+        )
         parser.add_argument(
             '--queue',
             action='store',
             dest='queue',
             default=default_queue,
             help='Run qcluster for the given queue, defaults to {!r}.'.format(
-                default_queue),
+                default_queue
+            ),
         )
 
     def execute(self, *args, **options):
@@ -47,7 +49,9 @@ class Command(BaseCommand):
         if env_queue != queue:
             raise CommandError(
                 'conflicting Q_CLUSTER_QUEUE env/option: {!r} != {!r}'.format(
-                    env_queue, queue))
+                    env_queue, queue
+                )
+            )
 
         settings.Q_CLUSTER_QUEUE = queue
         settings_q = settings.Q_CLUSTER
@@ -61,8 +65,11 @@ class Command(BaseCommand):
         assert dummy_sentinel.pool_size == settings_q['workers']
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS(
-            'Starting qcluster for queue {!r}'.format(options['queue'])))
+        self.stdout.write(
+            self.style.SUCCESS(
+                'Starting qcluster for queue {!r}'.format(options['queue'])
+            )
+        )
         q = Cluster(get_broker(options['queue']))
         q.start()
         if options.get('run_once', False):

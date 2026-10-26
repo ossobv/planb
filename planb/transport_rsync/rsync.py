@@ -2,10 +2,12 @@ RSYNC_EXITCODES = {
     1: 'Syntax or usage error',
     2: 'Protocol incompatibility',
     3: 'Errors selecting input/output files, dirs',
-    4: ('Requested action not supported: an attempt was made to '
+    4: (
+        'Requested action not supported: an attempt was made to '
         'manipulate 64-bit files on a platform that cannot support '
         'them; oran option was specified that is supported by the '
-        'client and not by the server.'),
+        'client and not by the server.'
+    ),
     5: 'Error starting client-server protocol',
     6: 'Daemon unable to append to log-file',
     10: 'Error in socket I/O',

@@ -29,10 +29,12 @@ class HostAsConfig(object):
         if self._config.with_schedule:
             ret.update([self.get_schedule()])
 
-        ret.update([
-            self.get_paths(),
-            self.get_notes(),
-        ])
+        ret.update(
+            [
+                self.get_paths(),
+                self.get_notes(),
+            ]
+        )
 
         return ret
 
@@ -47,13 +49,18 @@ class HostAsConfig(object):
         return ('schedule', 'nightly')
 
     def get_retention(self):
-        return ('retention', OrderedDict((
-            ('hourly', self._host.hourly_retention),
-            ('daily', self._host.daily_retention),
-            ('weekly', self._host.weekly_retention),
-            ('monthly', self._host.monthly_retention),
-            ('yearly', self._host.yearly_retention),
-        )))
+        return (
+            'retention',
+            OrderedDict(
+                (
+                    ('hourly', self._host.hourly_retention),
+                    ('daily', self._host.daily_retention),
+                    ('weekly', self._host.weekly_retention),
+                    ('monthly', self._host.monthly_retention),
+                    ('yearly', self._host.yearly_retention),
+                )
+            ),
+        )
 
     def get_paths(self):
         try:
@@ -63,13 +70,18 @@ class HostAsConfig(object):
             return ('paths', 'NO TRANSPORT CONFIGURED')
         if not isinstance(transport, RSyncConfig):
             return ('paths', 'TRANSPORT DOES NOT SPECIFY PATHS')
-        return ('paths', OrderedDict((
-            # Root of the filesystem. Should be '/'. In the future we
-            # could put something else in here, like '/encrypted-root/'.
-            self.get_root(),
-            self.get_includes(),
-            self.get_excludes(),
-        )))
+        return (
+            'paths',
+            OrderedDict(
+                (
+                    # Root of the filesystem. Should be '/'. In the future we
+                    # could put something else in here, like '/encrypted-root/'.
+                    self.get_root(),
+                    self.get_includes(),
+                    self.get_excludes(),
+                )
+            ),
+        )
 
     def _split_paths(self, list_):
         paths = []
@@ -79,10 +91,14 @@ class HostAsConfig(object):
 
                 if False:
                     from random import choice
+
                     comment = choice(
-                        ['Because this directory is\nawesome for the win!\n',
-                         "here's the p0rn"]
-                        + [None] * 8)
+                        [
+                            'Because this directory is\nawesome for the win!\n',
+                            "here's the p0rn",
+                        ]
+                        + [None] * 8
+                    )
 
                 paths.append({path: comment} if comment else path)
 
@@ -94,14 +110,12 @@ class HostAsConfig(object):
     def get_includes(self):
         # A list of "glob" names to include; started from 'root'
         # without that slash.
-        return ('include', self._split_paths(
-            self._host.get_transport().includes))
+        return ('include', self._split_paths(self._host.get_transport().includes))
 
     def get_excludes(self):
         # A list of "glob" names to exclude; started from 'root'
         # without that slash.
-        return ('exclude', self._split_paths(
-            self._host.get_transport().excludes))
+        return ('exclude', self._split_paths(self._host.get_transport().excludes))
 
     def get_notes(self):
         return ('notes', self._host.notes)
@@ -121,20 +135,40 @@ class Command(BaseCommand):
     help = 'Export host configuration to JSON or YAML'
 
     def add_arguments(self, parser):
-        parser.add_argument('--minimal', action='store_true', help=(
-            'Do not show retention/schedule'))
         parser.add_argument(
-            '--json', action='store_const', const='json', dest='output',
-            help=('Output configuration as JSON'))
+            '--minimal', action='store_true', help=('Do not show retention/schedule')
+        )
         parser.add_argument(
-            '--yaml', action='store_const', const='yaml', dest='output',
-            help=('Output configuration as YAML'))
-        parser.add_argument('--with-disabled', action='store_true', help=(
-            'Also list disabled (inactive) hosts'))
-        parser.add_argument('groups', nargs='?', default='*', help=(
-            'Which hostgroups to operate on, allows globbing'))
-        parser.add_argument('hosts', nargs='?', default='*', help=(
-            'Which filesets to operate on, allows globbing'))
+            '--json',
+            action='store_const',
+            const='json',
+            dest='output',
+            help=('Output configuration as JSON'),
+        )
+        parser.add_argument(
+            '--yaml',
+            action='store_const',
+            const='yaml',
+            dest='output',
+            help=('Output configuration as YAML'),
+        )
+        parser.add_argument(
+            '--with-disabled',
+            action='store_true',
+            help=('Also list disabled (inactive) hosts'),
+        )
+        parser.add_argument(
+            'groups',
+            nargs='?',
+            default='*',
+            help=('Which hostgroups to operate on, allows globbing'),
+        )
+        parser.add_argument(
+            'hosts',
+            nargs='?',
+            default='*',
+            help=('Which filesets to operate on, allows globbing'),
+        )
 
         parser.set_defaults(json=True)
 
@@ -142,8 +176,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         filesets = self.get_filesets(
-            options['groups'], options['hosts'],
-            with_disabled=options['with_disabled'])
+            options['groups'], options['hosts'], with_disabled=options['with_disabled']
+        )
         listingconfig = HostAsConfigListingConfig()
 
         if options['minimal']:
@@ -158,14 +192,16 @@ class Command(BaseCommand):
     def hosts2json(self, filesets, listingconfig):
         for fileset in filesets:
             jsonblob = HostAsConfig(fileset, listingconfig).to_json()
-            self.stdout.write('/* {} */\n\n{}\n\n'.format(
-                fileset.unique_name, jsonblob))
+            self.stdout.write(
+                '/* {} */\n\n{}\n\n'.format(fileset.unique_name, jsonblob)
+            )
 
     def hosts2yaml(self, filesets, listingconfig):
         for fileset in filesets:
             yamlblob = HostAsConfig(fileset, listingconfig).to_yaml()
-            self.stdout.write('---\n# {}\n\n{}\n\n'.format(
-                fileset.unique_name, yamlblob))
+            self.stdout.write(
+                '---\n# {}\n\n{}\n\n'.format(fileset.unique_name, yamlblob)
+            )
 
     def get_filesets(self, groups_glob, hosts_glob, with_disabled=False):
         groups = HostGroup.objects.all()
@@ -173,11 +209,12 @@ class Command(BaseCommand):
         if not with_disabled:
             hosts = hosts.exclude(is_enabled=False)
 
-        groups = [
-            group for group in groups if fnmatch(group.name, groups_glob)]
+        groups = [group for group in groups if fnmatch(group.name, groups_glob)]
         hosts = [
-            host for host in (
-                hosts.filter(hostgroup__in=groups)
-                .prefetch_related('hostgroup'))
-            if fnmatch(host.friendly_name, hosts_glob)]
+            host
+            for host in (
+                hosts.filter(hostgroup__in=groups).prefetch_related('hostgroup')
+            )
+            if fnmatch(host.friendly_name, hosts_glob)
+        ]
         return hosts

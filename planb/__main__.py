@@ -1,5 +1,4 @@
-from importlib.metadata import (
-    PackageNotFoundError, version as metadata_version)
+from importlib.metadata import PackageNotFoundError, version as metadata_version
 import os
 import sys
 
@@ -80,20 +79,21 @@ def main():
     # ${PLANB_ENVFILE}, /etc/planb/envvars or ./envvars to get USER,
     # PYTHONPATH and DJANGO_SETTINGS_MODULE.
     if 'DJANGO_SETTINGS_MODULE' not in os.environ:
-        try_load_envvars((
-            os.environ.get('PLANB_ENVFILE'),
-            '/etc/planb/envvars',
-            './envvars'))
+        try_load_envvars(
+            (os.environ.get('PLANB_ENVFILE'), '/etc/planb/envvars', './envvars')
+        )
 
     # Try becoming the PlanB user.
     try_become_user(os.environ.get('USER'))
 
     # Test reading the setting file.
     from importlib import import_module
+
     import_module(os.environ['DJANGO_SETTINGS_MODULE'])
 
     # Monkey patch get_version so it adds the planb version.
     from django.core.management import django, execute_from_command_line
+
     setattr(django, 'get_version', get_version)
     # Move to the django-admin wrapper.
     execute_from_command_line()

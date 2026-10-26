@@ -1,11 +1,14 @@
 import os
 
 _DEFAULT_DIRS = tuple(
-    'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'
-    .split(' '))
+    'root etc home data srv var/backups var/spool/cron var/www usr/local/bin'.split(' ')
+)
 _DEFAULT_FILES = tuple(
-    (i + '*') for i in  # files need a '*' in them
-    'var/lib/dpkg/status var/lib/psdiff.db var/log/auth'.split(' '))
+    (i + '*')
+    for i in 'var/lib/dpkg/status var/lib/psdiff.db var/log/auth'.split(  # files need a '*' in them
+        ' '
+    )
+)
 PLANB_DEFAULT_INCLUDES = ' '.join(sorted(_DEFAULT_DIRS + _DEFAULT_FILES))
 
 
@@ -74,7 +77,6 @@ INSTALLED_APPS = (
     'planb.common',  # for loading templatetags
     'planb.transport_exec',
     'planb.transport_rsync',
-
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -82,7 +84,6 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'django.contrib.sitemaps',
     'django.contrib.staticfiles',
-
     'django_q',
     'kleides_dssoclient',
 )
@@ -96,13 +97,13 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
 ]
 PLANB_USER_GROUP = 'PlanB user'
-KLEIDES_DSSO_ENDPOINT = None    # None if not using kleides_dssoclient auth
+KLEIDES_DSSO_ENDPOINT = None  # None if not using kleides_dssoclient auth
 
 # FIXME: can we populate this automatically through INSTALLED_APPS?
 # ... or we might want to use this to "order"/sort the preferred transports
 PLANB_TRANSPORTS = [
-    'transport_rsync.Config',   # common
-    'transport_exec.Config',    # rare
+    'transport_rsync.Config',  # common
+    'transport_exec.Config',  # rare
 ]
 
 # Q_CLUSTER_QUEUE is the queue the qcluster worker should process.
@@ -115,10 +116,10 @@ Q_DUTREE_QUEUE = 'dutree'
 Q_DUTREE_WORKERS = 3
 
 Q_CLUSTER = {
-    'name': 'planb',    # redis prefix AND default broker (yuck!)
-    'workers': 10,      # how many workers to process tasks simultaneously
-    'timeout': 86300,   # almost a day
-    'retry': 86400,     # an entire day (needed??)
+    'name': 'planb',  # redis prefix AND default broker (yuck!)
+    'workers': 10,  # how many workers to process tasks simultaneously
+    'timeout': 86300,  # almost a day
+    'retry': 86400,  # an entire day (needed??)
     'catch_up': False,  # no catching up of missed scheduled tasks
     'compress': False,  # don't care about payload size
     # The save limit must exceed the amount of enabled filesets * 2 + a little.
@@ -150,7 +151,8 @@ LOGGING = {
         'simple': {
             'format': (
                 '%(asctime)s [planb/%(process)5d] '
-                '[%(levelname)-3.3s] %(message)s (%(name)s)'),
+                '[%(levelname)-3.3s] %(message)s (%(name)s)'
+            ),
         },
         'notime': {
             'format': '%(name)s - %(levelname)s/%(process)s - %(message)s',
@@ -164,12 +166,12 @@ LOGGING = {
         'mail_admins_err': {
             'level': 'ERROR',
             'filters': ['require_debug_false'],
-            'class': 'planb.common.log2.AdminEmailHandler'  # django.utils.log
+            'class': 'planb.common.log2.AdminEmailHandler',  # django.utils.log
         },
         'mail_admins_warn': {
             'level': 'WARNING',
             'filters': ['require_debug_false'],
-            'class': 'planb.common.log2.AdminEmailHandler'  # django.utils.log
+            'class': 'planb.common.log2.AdminEmailHandler',  # django.utils.log
         },
         'console': {
             'level': 'DEBUG',
@@ -223,7 +225,7 @@ LOGGING = {
         'py.warnings': {
             'handlers': ['console'],
         },
-    }
+    },
 }
 
 PLANB_PREFIX = 'planb'

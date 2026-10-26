@@ -81,7 +81,9 @@ skip-magic-trailing-comma = false
 docstring-code-format = false
 
 [tool.ruff.lint]
-ignore = []
+ignore = [
+    "E501",
+]
 select = [
     "C",
     "E",

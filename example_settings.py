@@ -60,11 +60,11 @@ DATABASES = {
     'default': {
         # Choose 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'FIXME',    # Or path to database file if using sqlite3.
-        'USER': 'FIXME',    # Not used with sqlite3.
-        'PASSWORD': 'FIXMEFIXMEFIXME',   # Not used with sqlite3.
-        'HOST': '',         # Empty for localhost. Not used with sqlite3.
-        'PORT': '',         # Empty for default. Not used with sqlite3.
+        'NAME': 'FIXME',  # Or path to database file if using sqlite3.
+        'USER': 'FIXME',  # Not used with sqlite3.
+        'PASSWORD': 'FIXMEFIXMEFIXME',  # Not used with sqlite3.
+        'HOST': '',  # Empty for localhost. Not used with sqlite3.
+        'PORT': '',  # Empty for default. Not used with sqlite3.
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         },
@@ -81,7 +81,7 @@ if False:
 ALLOWED_HOSTS = ('planb', 'planb.example.com')
 
 # Please replace this with the output of: pwgen -ys 58
-SECRET_KEY = r'''pwgen -ys 58'''
+SECRET_KEY = r"""pwgen -ys 58"""
 
 STATIC_ROOT = '/srv/http/planb.example.com/static'
 

@@ -7,8 +7,7 @@ from django.core import mail
 from django.core.management import call_command
 from django.test import override_settings
 
-from planb.factories import (
-    BackupRunFactory, FilesetFactory, HostGroupFactory)
+from planb.factories import BackupRunFactory, FilesetFactory, HostGroupFactory
 from planb.models import Fileset
 from planb.storage.dummy import DummyStorage
 from planb.tests.base import PlanbTestCase
@@ -21,19 +20,18 @@ class CommandTestCase(PlanbTestCase):
 
     def run_command(self, *args, **kwargs):
         stdout, stderr = StringIO(), StringIO()
-        call_command(
-            *args, **kwargs, no_color=True, stdout=stdout, stderr=stderr)
+        call_command(*args, **kwargs, no_color=True, stdout=stdout, stderr=stderr)
         return stdout.getvalue(), stderr.getvalue()
 
     def test_bclone(self):
         fileset = FilesetFactory()
         RsyncConfigFactory(fileset=fileset)
         stdout, stderr = self.run_command(
-            'bclone', fileset.pk, 'fileset-clone', 'copy.host.co')
+            'bclone', fileset.pk, 'fileset-clone', 'copy.host.co'
+        )
         fileset_copy = Fileset.objects.get(friendly_name='fileset-clone')
         # Note that the output also contains a backup queue message.
-        self.assertIn(
-            'Cloned {} to {}'.format(fileset, fileset_copy), stdout)
+        self.assertIn('Cloned {} to {}'.format(fileset, fileset_copy), stdout)
         self.assertEqual(fileset_copy.get_transport().host, 'copy.host.co')
 
     def test_blist(self):
@@ -51,11 +49,17 @@ class CommandTestCase(PlanbTestCase):
             item['{#PLANB}'] = '$host'
         expected = [
             {
-                '{#ID}': db01.pk, '{#NAME}': 'local-db01',
-                '{#PLANB}': '$host', '{#ETA_MAX}': 0},
+                '{#ID}': db01.pk,
+                '{#NAME}': 'local-db01',
+                '{#PLANB}': '$host',
+                '{#ETA_MAX}': 0,
+            },
             {
-                '{#ID}': web01.pk, '{#NAME}': 'local-web01',
-                '{#PLANB}': '$host', '{#ETA_MAX}': 0},
+                '{#ID}': web01.pk,
+                '{#NAME}': 'local-web01',
+                '{#PLANB}': '$host',
+                '{#ETA_MAX}': 0,
+            },
         ]
         self.assertEqual(expected, decoded)
 
@@ -66,8 +70,7 @@ class CommandTestCase(PlanbTestCase):
         self.assertEqual(stdout, TEST_BLIST)
 
     def test_bqcluster(self):
-        stdout, stderr = self.run_command(
-            'bqcluster', queue='test', run_once=True)
+        stdout, stderr = self.run_command('bqcluster', queue='test', run_once=True)
         self.assertIn("Starting qcluster for queue 'test'", stdout)
 
     def test_bqueue(self):
@@ -81,35 +84,40 @@ class CommandTestCase(PlanbTestCase):
         self.assertIn('Dropped 1 jobs from Task queue', stdout)
         self.assertIn('Dropped 1 jobs from DB queue', stdout)
 
-    @override_settings(
-        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_breport(self):
         fileset = FilesetFactory(
             friendly_name='desktop01.local',
-            hostgroup__name='local', hostgroup__notify_email='test@local',
-            total_size_mb=94950, last_ok='2019-11-29T13:47Z',
-            last_run='2019-11-29T13:47Z')
+            hostgroup__name='local',
+            hostgroup__notify_email='test@local',
+            total_size_mb=94950,
+            last_ok='2019-11-29T13:47Z',
+            last_run='2019-11-29T13:47Z',
+        )
         BackupRunFactory(
-            fileset=fileset, success=True, total_size_mb=94950,
-            snapshot_size_mb=84950, snapshot_size_listing=TEST_DUTREE_LISTING)
+            fileset=fileset,
+            success=True,
+            total_size_mb=94950,
+            snapshot_size_mb=84950,
+            snapshot_size_listing=TEST_DUTREE_LISTING,
+        )
 
         stdout, stderr = self.run_command('breport', output='email')
         message = mail.outbox[0]
         self.assertEqual(message.to, ['test@local'])
-        self.assertEqual(
-            message.subject, 'Example Company backup report "local"')
+        self.assertEqual(message.subject, 'Example Company backup report "local"')
         self.assertEqual(message.body, TEST_BREPORT)
         if which('rst2html') is not None:
             attachment = message.attachments[0]
             self.assertEqual(attachment[0], 'pretty_report.html')
             self.assertIn(
                 '<title>PlanB backup report for &quot;local&quot;</title>',
-                attachment[1])
+                attachment[1],
+            )
             self.assertEqual(attachment[2], 'text/html')
 
     def test_confexport(self):
-        fileset = FilesetFactory(
-            friendly_name='desktop', hostgroup__name='local')
+        fileset = FilesetFactory(friendly_name='desktop', hostgroup__name='local')
         RsyncConfigFactory(fileset=fileset)
         stdout, stderr = self.run_command('confexport', output='json')
         self.assertEqual(stdout, TEST_CONFEXPORT_JSON)
@@ -120,18 +128,17 @@ class CommandTestCase(PlanbTestCase):
         # Create a standalone clean dummy storage for this test.
         storage = DummyStorage({'NAME': 'DummyPool I'}, 'dummy')
         test_pools = {'dummy': storage}
-        with \
-                patch(
-                    'planb.management.commands.slist.storage_pools',
-                    test_pools), \
-                patch('planb.models.storage_pools', test_pools):
+        with (
+            patch('planb.management.commands.slist.storage_pools', test_pools),
+            patch('planb.models.storage_pools', test_pools),
+        ):
             dataset = FilesetFactory(
-                friendly_name='storage', hostgroup__name='local',
-                storage_alias='dummy').get_dataset()
+                friendly_name='storage', hostgroup__name='local', storage_alias='dummy'
+            ).get_dataset()
             dataset.set_disk_usage(84883399164)
             dataset = FilesetFactory(
-                friendly_name='desktop', hostgroup__name='local',
-                storage_alias='dummy').get_dataset()
+                friendly_name='desktop', hostgroup__name='local', storage_alias='dummy'
+            ).get_dataset()
             dataset.set_disk_usage(60630999402)
             # a dataset not mapped to a fileset.
             dataset = storage.get_dataset('cold/other_host')
@@ -141,17 +148,17 @@ class CommandTestCase(PlanbTestCase):
             self.assertEqual(stdout, TEST_SLIST)
 
 
-TEST_BLIST = '''[local]
+TEST_BLIST = """[local]
 db01                            rsync transport database1.local
 web01                           exec transport /bin/magic
 
 [remote]
 stats                           MISSING_TRANSPORT
 
-'''
+"""
 
 
-TEST_CONFEXPORT_JSON = '''/* local-desktop */
+TEST_CONFEXPORT_JSON = """/* local-desktop */
 
 {
   "retention": {
@@ -183,9 +190,9 @@ TEST_CONFEXPORT_JSON = '''/* local-desktop */
   "notes": ""
 }
 
-'''
+"""
 
-TEST_CONFEXPORT_YAML = '''---
+TEST_CONFEXPORT_YAML = """---
 # local-desktop
 
 retention:
@@ -213,10 +220,10 @@ paths:
   exclude: []
 notes: ""
 
-'''
+"""
 
 
-TEST_DUTREE_LISTING = '''\
+TEST_DUTREE_LISTING = """\
 /.local/share/baloo/index: 13,719,351,296
 /.local/share/*: 7,878,635,520
 "/.steam/steam/steamapps/common/Left 4 Dead 2/left4dead2/": 7,099,121,664
@@ -227,10 +234,10 @@ TEST_DUTREE_LISTING = '''\
 "/Pictures/": 6,761,598,976
 /dev/: 6,166,724,608
 /download/: 5,009,948,672
-/*: 9,679,134,720'''
+/*: 9,679,134,720"""
 
 
-TEST_SLIST = '''; (nogroup)
+TEST_SLIST = """; (nogroup)
 ; (when purging, do not forget to remove encryption keys from zfskeys dir)
 ; (see planb-zfskeys-check contrib tool)
 cold/other_host                                         253.0 GB  id=NONE
@@ -239,10 +246,10 @@ cold/other_host                                         253.0 GB  id=NONE
 local-desktop                                            56.5 GB  id=2
 local-storage                                            79.1 GB  id=1
 
-'''
+"""
 
 
-TEST_BREPORT = '''\
+TEST_BREPORT = """\
 PlanB backup report for "local"
 ===============================
 
@@ -318,4 +325,4 @@ Warning: there are no snapshots available for this host.
 | PlanB, the Example Company backup service
 | Please contact support@example.com if anything is amiss
 
-'''  # noqa
+"""  # noqa

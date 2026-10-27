@@ -23,8 +23,11 @@ try:
     from boto3 import client as S3Client
     from botocore.client import Config as S3Config
 except ImportError:
-    warnings.warn('No boto3? You probably need to {!r}'.format(
-        'apt-get install python3-boto3 --no-install-recommends'))
+    warnings.warn(
+        'No boto3? You probably need to {!r}'.format(
+            'apt-get install python3-boto3 --no-install-recommends'
+        )
+    )
     sys.exit(1)
 else:
     from botocore.exceptions import ClientError as S3ClientError
@@ -32,8 +35,11 @@ else:
 try:
     from swiftclient import Connection as SwiftConnection
 except ImportError:
-    warnings.warn('No swiftclient? You probably need to {!r}'.format(
-        'apt-get install python3-swiftclient --no-install-recommends'))
+    warnings.warn(
+        'No swiftclient? You probably need to {!r}'.format(
+            'apt-get install python3-swiftclient --no-install-recommends'
+        )
+    )
     sys.exit(1)
 else:
     from swiftclient.exceptions import ClientException as SwiftClientError
@@ -121,8 +127,10 @@ logging.basicConfig(
     level=logging.INFO,
     format=(
         '%(asctime)s [planb-objsync:%(threadName)-10.10s] '
-        '[%(levelname)-3.3s] %(message)s'),
-    handlers=[logging.StreamHandler()])
+        '[%(levelname)-3.3s] %(message)s'
+    ),
+    handlers=[logging.StreamHandler()],
+)
 log = logging.getLogger()
 
 
@@ -134,8 +142,10 @@ def _signal_handler(signo, _stack_frame):
         # If we have no threads, we can abort immediately.
         log.info('Killing self because of signal %d', signo)
         sys.exit(128 + signo)  # raises SystemExit()
-_MT_ABORT = 0                   # noqa -- aborting?
-_MT_HAS_THREADS = False         # do we have threads at all?
+
+
+_MT_ABORT = 0  # noqa -- aborting?
+_MT_HAS_THREADS = False  # do we have threads at all?
 
 signal.signal(signal.SIGHUP, _signal_handler)
 signal.signal(signal.SIGINT, _signal_handler)
@@ -147,6 +157,7 @@ class PathExcluder:
     """
     Excludes path from remote_path in listing.
     """
+
     def __init__(self, container, exclude_rules):
         assert '/' not in container, container
         self.container = container
@@ -181,6 +192,7 @@ class PathTranslator:
 
         (provide remote paths on stdin)
     """
+
     def __init__(self, data_path, container, translations, single_container):
         assert '/' not in container, container
         assert isinstance(single_container, bool)
@@ -191,8 +203,7 @@ class PathTranslator:
         for translation_rule in translations:
             container_match, needle, replacement = translation_rule.split('=')
             if container == container_match or container_match == '*':
-                self.replacements.append((
-                    re.compile(needle), replacement))
+                self.replacements.append((re.compile(needle), replacement))
 
     def __call__(self, remote_path):
         for needle, replacement in self.replacements:
@@ -214,12 +225,15 @@ class ConfigParserMultiValues(OrderedDict):
     """
     Accept duplicate keys in the RawConfigParser.
     """
+
     def __setitem__(self, key, value):
         # The RawConfigParser does a second pass. First lists are passed.
         # Secondly concatenated strings are passed.
-        assert isinstance(value, (
-            ConfigParserMultiValues, SectionProxy, list, str)), (
-                key, value, type(value))
+        assert isinstance(value, (ConfigParserMultiValues, SectionProxy, list, str)), (
+            key,
+            value,
+            type(value),
+        )
 
         # For the second pass, we could do an optional split by LF. But that
         # makes it harder to notice when this breaks. Instead, just skip the
@@ -241,14 +255,13 @@ class SyncConfig:
 
     def read_inifile(self, inifile, section):
         configparser = RawConfigParser(
-            strict=False, empty_lines_in_values=False,
-            dict_type=ConfigParserMultiValues)
+            strict=False, empty_lines_in_values=False, dict_type=ConfigParserMultiValues
+        )
         configparser.read([inifile])
         try:
             config = configparser[section]
         except KeyError:
-            raise ValueError(
-                'no section {!r} found in {!r}'.format(section, inifile))
+            raise ValueError('no section {!r} found in {!r}'.format(section, inifile))
 
         self.read_planb_config(config)
 
@@ -259,8 +272,8 @@ class SyncConfig:
             self.read_swift_config(config)
         else:
             raise ValueError(
-                f'Unsupported type {self.sync_type!r} in {section!r} of '
-                f'{inifile!r}')
+                f'Unsupported type {self.sync_type!r} in {section!r} of {inifile!r}'
+            )
 
     def read_planb_config(self, config):
         # Accept multiple planb_translate keys. But also accept
@@ -284,7 +297,8 @@ class SyncConfig:
         # This is probably because the object has X-Object-Manifest and is a
         # Dynamic Large Object (DLO).
         self.all_containers_have_segments = (
-            config.get('planb_container_has_segments', [''])[-1] == 'always')
+            config.get('planb_container_has_segments', [''])[-1] == 'always'
+        )
 
         # CA bundle to verify server certificates.
         # Defaults to true to enable verification and use the client CA bundle.
@@ -297,7 +311,9 @@ class SyncConfig:
         # Adopt 60 seconds as the planb default.
         timeouts = config.get('planb_timeout', ['60, 60'])[-1].split(',')
         self.connect_timeout, self.read_timeout = (
-            float(timeouts[0]), float(timeouts[-1]))
+            float(timeouts[0]),
+            float(timeouts[-1]),
+        )
 
     def read_s3_config(self, config):
         self.s3_access_key_id = config['access_key_id'][-1]
@@ -307,15 +323,13 @@ class SyncConfig:
 
     def read_swift_config(self, config):
         self.swift_authver = config.get('auth_version', ['1'])[-1]
-        self.swift_auth = config['auth'][-1]   # authurl
+        self.swift_auth = config['auth'][-1]  # authurl
         self.swift_user = config['user'][-1]
         self.swift_key = config['key'][-1]
         # auth_version v3:
         self.swift_project = config.get('tenant', [None])[-1]  # project
-        self.swift_pdomain = (
-            config.get('tenant_domain', [None])[-1])    # project-domain
-        self.swift_udomain = (
-            config.get('domain', [None])[-1])           # user-domain
+        self.swift_pdomain = config.get('tenant_domain', [None])[-1]  # project-domain
+        self.swift_udomain = config.get('domain', [None])[-1]  # user-domain
         if self.ca_cert in (True, False):
             self.swift_insecure = bool(not self.ca_cert)
             self.swift_cacert = None
@@ -331,11 +345,10 @@ class SyncConfig:
 
         if not storage.endswith('/data'):
             raise ValueError(
-                'expected storage path to end in /data, got {!r}'.format(
-                    storage))
+                'expected storage path to end in /data, got {!r}'.format(storage)
+            )
         if not os.path.exists(storage):
-            raise ValueError(
-                'data_path does not exist: {!r}'.format(storage))
+            raise ValueError('data_path does not exist: {!r}'.format(storage))
 
         self.data_path = storage
         self.metadata_path = storage.rsplit('/', 1)[0]
@@ -346,8 +359,8 @@ class SyncConfig:
 
     def get_translator(self, container, single_container):
         return PathTranslator(
-            self.data_path, container, self.planb_translations,
-            single_container)
+            self.data_path, container, self.planb_translations, single_container
+        )
 
 
 class SyncConfigPathTranslators(dict):
@@ -365,7 +378,8 @@ class SyncConfigPathTranslators(dict):
             translator = super().__getitem__(container)
         except KeyError:
             translator = self._config.get_translator(
-                container, single_container=self._single_container)
+                container, single_container=self._single_container
+            )
             super().__setitem__(container, translator)
         return translator
 
@@ -394,7 +408,7 @@ class ObjectLine:
         self.path = path
         assert not self.path.startswith(('\\', '/', './', '../')), self.path
         assert '/../' not in self.path, self.path  # disallow harmful path
-        assert '/./' not in self.path, self.path   # disallow awkward path
+        assert '/./' not in self.path, self.path  # disallow awkward path
 
     @classmethod
     def from_s3_line(cls, obj):
@@ -415,8 +429,11 @@ class ObjectLine:
         #      'RestoreExpiryDate': datetime(2015, 1, 1)
         #  }}
         return cls(
-            obj=obj, size=obj['Size'], path=obj['Key'],
-            modified=obj['LastModified'].strftime('%Y-%m-%dT%H:%M:%S.%f'))
+            obj=obj,
+            size=obj['Size'],
+            path=obj['Key'],
+            modified=obj['LastModified'].strftime('%Y-%m-%dT%H:%M:%S.%f'),
+        )
 
     @classmethod
     def from_swift_line(cls, obj):
@@ -428,8 +445,8 @@ class ObjectLine:
         assert len(obj['last_modified']) == 26, obj
         assert obj['last_modified'][10] == 'T', obj
         return cls(
-            obj=obj, size=obj['bytes'], modified=obj['last_modified'],
-            path=obj['name'])
+            obj=obj, size=obj['bytes'], modified=obj['last_modified'], path=obj['name']
+        )
 
 
 class ObjectHeaders:
@@ -502,11 +519,13 @@ class ListLine:
 
         if container:
             assert '|' not in container, (
-                'unescaping can only cope with pipe in path: {!r} + {!r}'
-                .format(container, path))
-            return cls('{}|{}|{}|{}\n'.format(
-                container, path.replace('|', '||'),
-                tms, size))
+                'unescaping can only cope with pipe in path: {!r} + {!r}'.format(
+                    container, path
+                )
+            )
+            return cls(
+                '{}|{}|{}|{}\n'.format(container, path.replace('|', '||'), tms, size)
+            )
 
         return cls('{}|{}|{}\n'.format(path.replace('|', '||'), tms, size))
 
@@ -541,7 +560,8 @@ class ListLine:
             self.path = path.replace('||', '|')
 
         assert self.container is None or self.container, (
-            'bad container in line: {!r}'.format(line))
+            'bad container in line: {!r}'.format(line)
+        )
         self.line = line
         self.container_path = (self.container, self.path)
 
@@ -557,16 +577,20 @@ class ListLine:
             dates, us = self._modified.split('.', 1)
             dates = int(
                 datetime.strptime(dates, '%Y-%m-%dT%H:%M:%S')
-                .replace(tzinfo=timezone.utc).timestamp())
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+            )
             assert len(us) == 6
             self._modified_cache = 1000000000 * dates + 1000 * int(us)
         return self._modified_cache
 
     def __eq__(self, other):
-        return (self.size == other.size
-                and self.container == other.container
-                and self.container_path == other.container_path
-                and self.path == other.path)
+        return (
+            self.size == other.size
+            and self.container == other.container
+            and self.container_path == other.container_path
+            and self.path == other.path
+        )
 
 
 class SyncWorkerStatus:
@@ -584,6 +608,7 @@ class SyncWorkerStatus:
     >>> sum([s, s])
     <SwiftSyncWorkerStatus({config_errors: 2, failed_fetches: 0})>
     """
+
     __slots__ = ('config_errors', 'failed_fetches', 'unhandled_errors')
 
     def __init__(self):
@@ -609,9 +634,11 @@ class SyncWorkerStatus:
         return self.__add__(self.__class__())
 
     def __str__(self):
-        return '{{{}}}'.format(', '.join(
-            '{}: {}'.format(attr, getattr(self, attr))
-            for attr in self.__slots__))
+        return '{{{}}}'.format(
+            ', '.join(
+                '{}: {}'.format(attr, getattr(self, attr)) for attr in self.__slots__
+            )
+        )
 
     def __repr__(self):
         return '<SwiftSyncWorkerStatus({})>'.format(str(self))
@@ -627,50 +654,49 @@ class BaseSyncClient:
         return self.get_client()
 
     def clone(self):
-        '''
+        """
         Return a copy of the client that is safe to use in a new thread.
-        '''
+        """
         return self.__class__(self.config, self.container)
 
     def get_client(self):
-        '''
+        """
         Return the client to interface with the object storage.
-        '''
+        """
         raise NotImplementedError()
 
     def get_containers(self):
-        '''
+        """
         Return a list of container names in the object storage.
-        '''
+        """
         raise NotImplementedError()
 
     def get_container(self, name):
-        '''
+        """
         Return an iterator for the object listing of the container.
-        '''
+        """
         raise NotImplementedError()
 
     def head_object(self, container, name):
-        '''
+        """
         Return a dict with headers of the object in the container.
-        '''
+        """
         raise NotImplementedError()
 
     def get_object(self, container, name):
-        '''
+        """
         Return a (dict, stream) with headers and object data of the object in
         the container.
-        '''
+        """
         raise NotImplementedError()
 
     def is_valid_etag(self, etag):
-        '''
+        """
         Validate the etag value for the client.
-        '''
+        """
         return bool(
-            etag
-            and len(etag) == 32
-            and all(i in '0123456789abcdef' for i in etag))
+            etag and len(etag) == 32 and all(i in '0123456789abcdef' for i in etag)
+        )
 
 
 class S3SyncClient(BaseSyncClient):
@@ -680,12 +706,16 @@ class S3SyncClient(BaseSyncClient):
     def get_client(self):
         config = S3Config(
             connect_timeout=self.config.connect_timeout,
-            read_timeout=self.config.read_timeout)
+            read_timeout=self.config.read_timeout,
+        )
         return S3Client(
-            's3', aws_access_key_id=self.config.s3_access_key_id,
+            's3',
+            aws_access_key_id=self.config.s3_access_key_id,
             aws_secret_access_key=self.config.s3_secret_access_key,
-            endpoint_url=self.config.s3_endpoint, verify=self.config.s3_verify,
-            config=config)
+            endpoint_url=self.config.s3_endpoint,
+            verify=self.config.s3_verify,
+            config=config,
+        )
 
     @lru_cache
     def get_containers(self):
@@ -698,8 +728,7 @@ class S3SyncClient(BaseSyncClient):
         # no NextContinuationToken.
         # If the ContinuationToken is given is must be valid.
         while params.get('ContinuationToken') != '':
-            response = self.client.list_buckets(
-                MaxBuckets=self.MAX_RESULTS, **params)
+            response = self.client.list_buckets(MaxBuckets=self.MAX_RESULTS, **params)
             if 'Buckets' not in response:  # Page break falls on last object.
                 break
             for container in response['Buckets']:
@@ -715,13 +744,13 @@ class S3SyncClient(BaseSyncClient):
         # If the ContinuationToken is given is must be valid.
         while params.get('ContinuationToken') != '':
             response = self.client.list_objects_v2(
-                Bucket=name, MaxKeys=self.MAX_RESULTS, **params)
+                Bucket=name, MaxKeys=self.MAX_RESULTS, **params
+            )
             if 'Contents' not in response:  # Page break falls on last object.
                 break
             for line in response['Contents']:
                 yield ObjectLine.from_s3_line(line)
-            params['ContinuationToken'] = response.get(
-                'NextContinuationToken', '')
+            params['ContinuationToken'] = response.get('NextContinuationToken', '')
 
     def get_object(self, container, name):
         response = self.client.get_object(Bucket=container, Key=name)
@@ -798,9 +827,9 @@ class S3SyncClient(BaseSyncClient):
         return bool('-' in headers.get('etag', ''))
 
     def is_valid_etag(self, etag):
-        '''
+        """
         Validate the etag value for the client.
-        '''
+        """
         # The S3 multipart etag is a md5 hash with a parts count.
         # {md5(''.join(md5(part) for part in parts))}-{len(parts)}
         if super().is_valid_etag(etag):
@@ -828,21 +857,30 @@ class SwiftSyncClient(BaseSyncClient):
                 'user_domain_name': self.config.swift_udomain,
             }
             client = SwiftConnection(
-                auth_version='3', authurl=self.config.swift_auth,
-                user=self.config.swift_user, key=self.config.swift_key,
-                os_options=os_options, insecure=self.config.swift_insecure,
-                cacert=self.config.swift_cacert, timeout=timeout)
+                auth_version='3',
+                authurl=self.config.swift_auth,
+                user=self.config.swift_user,
+                key=self.config.swift_key,
+                os_options=os_options,
+                insecure=self.config.swift_insecure,
+                cacert=self.config.swift_cacert,
+                timeout=timeout,
+            )
 
         elif self.config.swift_authver == '1':
             client = SwiftConnection(
-                auth_version='1', authurl=self.config.swift_auth,
-                user=self.config.swift_user, key=self.config.swift_key,
-                tenant_name='UNUSED', insecure=self.config.swift_insecure,
-                cacert=self.config.swift_cacert, timeout=timeout)
+                auth_version='1',
+                authurl=self.config.swift_auth,
+                user=self.config.swift_user,
+                key=self.config.swift_key,
+                tenant_name='UNUSED',
+                insecure=self.config.swift_insecure,
+                cacert=self.config.swift_cacert,
+                timeout=timeout,
+            )
 
         else:
-            raise NotImplementedError(
-                'auth_version? {!r}'.format(self.swift_authver))
+            raise NotImplementedError('auth_version? {!r}'.format(self.swift_authver))
 
         return client
 
@@ -872,7 +910,8 @@ class SwiftSyncClient(BaseSyncClient):
                 if self.container == name:
                     new = Container(name)
                     if force_segments or (
-                            '{}_segments'.format(name) in container_names):
+                        '{}_segments'.format(name) in container_names
+                    ):
                         new.has_segments = True
                     selected_containers.append(new)
                     break
@@ -881,14 +920,17 @@ class SwiftSyncClient(BaseSyncClient):
             # it. And only add X_segments containers if there is no X
             # container.
             else:
-                if (name.endswith('_segments')
-                        and name.rsplit('_', 1)[0] in container_names):
+                if (
+                    name.endswith('_segments')
+                    and name.rsplit('_', 1)[0] in container_names
+                ):
                     # Don't add X_segments, because X exists.
                     pass
                 else:
                     new = Container(name)
                     if force_segments or (
-                            '{}_segments'.format(name) in container_names):
+                        '{}_segments'.format(name) in container_names
+                    ):
                         new.has_segments = True
                     selected_containers.append(new)
 
@@ -897,17 +939,17 @@ class SwiftSyncClient(BaseSyncClient):
         return selected_containers
 
     def get_container(self, container):
-        '''
+        """
         Return an iterator for the object listing of the container.
-        '''
+        """
         marker = ''  # "start _after_ marker"
         prev_marker = 'anything_except_the_empty_string'
         limit = 10000
         while True:
             assert marker != prev_marker, marker  # loop trap
             resp_headers, lines = self.client.get_container(
-                container, full_listing=False, limit=limit,
-                marker=marker)
+                container, full_listing=False, limit=limit, marker=marker
+            )
             for idx, line in enumerate(lines):
                 yield ObjectLine.from_swift_line(line)
             if not lines or (idx + 1 < limit):
@@ -916,7 +958,8 @@ class SwiftSyncClient(BaseSyncClient):
 
     def get_object(self, container, name):
         return self.client.get_object(
-            container, name, resp_chunk_size=(16 * 1024 * 1024))
+            container, name, resp_chunk_size=(16 * 1024 * 1024)
+        )
 
     def head_object(self, container, name):
         return self.client.head_object(container, name)
@@ -934,7 +977,8 @@ class ObjectSync:
         # Init translators. They're done lazily, so we don't need to know which
         # containers exist yet.
         self._translators = SyncConfigPathTranslators(
-            self.config, single_container=bool(container))
+            self.config, single_container=bool(container)
+        )
 
         # Get data path. Chdir into it so no unmounting can take place.
         data_path = config.data_path
@@ -957,10 +1001,10 @@ class ObjectSync:
         # downloading/overwriting.
 
     def _migrate_swift_to_obj_db(self):
-        '''
+        """
         Rename the `planb-swiftsync.cur` database to `planb-objsync.cur`.
         Note: only use when `self._filelock` is ours.
-        '''
+        """
         # Skip if the new database exists.
         if os.path.isfile(self._path_cur):
             return
@@ -976,15 +1020,15 @@ class ObjectSync:
         try:
             # Get lock on the old metadata location.
             old_lock_fd = os.open(
-                old_filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                old_filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            )
         except FileExistsError:
             # Failed to get lock.
             log.error('Failed to get %r lock', old_filelock)
             sys.exit(1)
         else:
             # Check again after gaining the lock.
-            if (not os.path.isfile(self._path_cur)
-                    and os.path.isfile(old_path_cur)):
+            if not os.path.isfile(self._path_cur) and os.path.isfile(old_path_cur):
                 os.rename(old_path_cur, self._path_cur)
         finally:
             if old_lock_fd is not None:
@@ -999,7 +1043,8 @@ class ObjectSync:
         try:
             # Get lock.
             lock_fd = os.open(
-                self._filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                self._filelock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            )
         except FileExistsError:
             # Failed to get lock.
             log.error('Failed to get %r lock', self._filelock)
@@ -1034,8 +1079,10 @@ class ObjectSync:
         for idx, tarr in enumerate(times[0:-1]):
             tarr[1] = times[idx + 1][1] - tarr[1]
         times.pop()
-        log.info('Total time used: {%s}', ', '.join(
-            '{}: {:.1f}'.format(tn, tt) for tn, tt in times))
+        log.info(
+            'Total time used: {%s}',
+            ', '.join('{}: {:.1f}'.format(tn, tt) for tn, tt in times),
+        )
 
         # If we bailed out with failures, but without an exception, we'll
         # still clear out the list. Perhaps the list was bad and we simply
@@ -1044,14 +1091,17 @@ class ObjectSync:
         log.info('Sync done (status: %s)', status)
 
         if status:
-            if (not status.config_errors
-                    and not status.unhandled_errors
-                    and sum(tarr[1] for tarr in times) > 1800):
+            if (
+                not status.config_errors
+                and not status.unhandled_errors
+                and sum(tarr[1] for tarr in times) > 1800
+            ):
                 # Sync took more than 30 minutes and there were no
                 # terrible failures. Exit 0.
                 log.warning(
                     'Not bailing out with exit 1 because this is a '
-                    'slow job. Next backup run will fix/resume')
+                    'slow job. Next backup run will fix/resume'
+                )
             else:
                 raise SystemExit(1)
 
@@ -1152,7 +1202,8 @@ class ObjectSync:
                 log.info('Fetching new list for %r', container)
                 for line in self.client.get_container(container):
                     self._make_new_list_add_line(
-                        dest, fmt, self.client, container, line)
+                        dest, fmt, self.client, container, line
+                    )
         os.rename(path_tmp, self._path_new)
 
     def _make_new_list_add_line(self, dest, fmt, client, container, record):
@@ -1174,16 +1225,17 @@ class ObjectSync:
             except client.ClientError as e:
                 # 404?
                 log.warning(
-                    'File %r %r disappeared from under us '
-                    'when doing a HEAD (%s)',
-                    container, record.path, e)
+                    'File %r %r disappeared from under us when doing a HEAD (%s)',
+                    container,
+                    record.path,
+                    e,
+                )
                 # Skip record.
                 return
 
-        dest.write(fmt.format(
-            record.path.replace('|', '||'),
-            record.modified,
-            record.size))
+        dest.write(
+            fmt.format(record.path.replace('|', '||'), record.modified, record.size)
+        )
 
     def _make_diff_lists(self):
         """
@@ -1204,10 +1256,12 @@ class ObjectSync:
             cur_fp = open(self._path_cur, 'r')
 
         try:
-            with open(self._path_new, 'r') as new_fp, \
-                    open(self._path_del, 'w') as del_fp, \
-                    open(self._path_add, 'w') as add_fp, \
-                    open(self._path_utime, 'w') as utime_fp:
+            with (
+                open(self._path_new, 'r') as new_fp,
+                open(self._path_del, 'w') as del_fp,
+                open(self._path_add, 'w') as add_fp,
+                open(self._path_utime, 'w') as utime_fp,
+            ):
                 os.chmod(self._path_del, 0o600)
                 os.chmod(self._path_add, 0o600)
                 os.chmod(self._path_utime, 0o600)
@@ -1217,12 +1271,12 @@ class ObjectSync:
                     # We already have it if in both:
                     both=(lambda line: None),
                     # We have it in both, but only the timestamp differs:
-                    difftime=(lambda leftline, rightline: (
-                        utime_fp.write(rightline))),
+                    difftime=(lambda leftline, rightline: utime_fp.write(rightline)),
                     # Remove when only in cur_fp:
                     leftonly=(lambda line: del_fp.write(line)),
                     # Add when only in new_fp:
-                    rightonly=(lambda line: add_fp.write(line)))
+                    rightonly=(lambda line: add_fp.write(line)),
+                )
         finally:
             cur_fp.close()
 
@@ -1231,8 +1285,7 @@ class ObjectSync:
         Update planb-objsync.cur by adding all from added_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
-        with open(self._path_cur, 'r') as cur_fp, \
-                open(path_tmp, 'w') as tmp_fp:
+        with open(self._path_cur, 'r') as cur_fp, open(path_tmp, 'w') as tmp_fp:
             os.chmod(path_tmp, 0o600)
             llc = _ListLineComm(cur_fp, added_fp)
             llc.act(
@@ -1241,8 +1294,9 @@ class ObjectSync:
                 # Keep it if we added it now:
                 rightonly=(lambda line: tmp_fp.write(line)),
                 # This should not happen:
-                both=None,      # existed _and_ added?
-                difftime=None)  # existed _and_ changed?
+                both=None,  # existed _and_ added?
+                difftime=None,
+            )  # existed _and_ changed?
         os.rename(path_tmp, self._path_cur)
 
     def update_cur_list_from_deleted(self, deleted_fp):
@@ -1250,8 +1304,7 @@ class ObjectSync:
         Update planb-objsync.cur by removing all from deleted_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
-        with open(self._path_cur, 'r') as cur_fp, \
-                open(path_tmp, 'w') as tmp_fp:
+        with open(self._path_cur, 'r') as cur_fp, open(path_tmp, 'w') as tmp_fp:
             os.chmod(path_tmp, 0o600)
             llc = _ListLineComm(cur_fp, deleted_fp)
             llc.act(
@@ -1260,8 +1313,9 @@ class ObjectSync:
                 # Keep it if we didn't touch it:
                 leftonly=(lambda line: tmp_fp.write(line)),
                 # This should not happen:
-                difftime=None,   # existed _and_ added?
-                rightonly=None)  # deleted something which didn't exist?
+                difftime=None,  # existed _and_ added?
+                rightonly=None,
+            )  # deleted something which didn't exist?
         os.rename(path_tmp, self._path_cur)
 
     def update_cur_list_from_updated(self, updated_fp):
@@ -1269,19 +1323,18 @@ class ObjectSync:
         Update planb-objsync.cur by updating all from updated_fp.
         """
         path_tmp = '{}.tmp'.format(self._path_cur)
-        with open(self._path_cur, 'r') as cur_fp, \
-                open(path_tmp, 'w') as tmp_fp:
+        with open(self._path_cur, 'r') as cur_fp, open(path_tmp, 'w') as tmp_fp:
             os.chmod(path_tmp, 0o600)
             llc = _ListLineComm(cur_fp, updated_fp)
             llc.act(
                 # Replace it if we updated it:
-                difftime=(lambda leftline, rightline: (
-                    tmp_fp.write(rightline))),
+                difftime=(lambda leftline, rightline: tmp_fp.write(rightline)),
                 # Keep it if we didn't touch it:
                 leftonly=(lambda line: tmp_fp.write(line)),
                 # This should not happen:
                 both=None,
-                rightonly=None)
+                rightonly=None,
+            )
         os.rename(path_tmp, self._path_cur)
 
 
@@ -1324,6 +1377,7 @@ class SyncMultiWorkerBase(threading.Thread):
     """
     Multithreaded SwiftSyncWorkerBase class.
     """
+
     class AbortThread(Exception):
         pass
 
@@ -1409,8 +1463,10 @@ class SyncMultiWorkerBase(threading.Thread):
                 dst_path = translators[container](record.path)
                 if dst_path.endswith('/'):
                     log.warning(
-                        ('Skipping record %r (from %r) because of trailing '
-                         'slash'), dst_path, record.container_path)
+                        ('Skipping record %r (from %r) because of trailing slash'),
+                        dst_path,
+                        record.container_path,
+                    )
                     self.status.config_errors += 1
                     continue
 
@@ -1436,8 +1492,12 @@ class SyncMultiWorkerBase(threading.Thread):
     def _check_etag_valid(self, record, container, etag, obj_stat):
         if not self._client.is_valid_etag(etag):
             log.error(
-                'File %r %r presented bad etag %s in %r', container,
-                record.path, etag, obj_stat)
+                'File %r %r presented bad etag %s in %r',
+                container,
+                record.path,
+                etag,
+                obj_stat,
+            )
             raise self.ProcessRecordError()
 
     def _add_new_record_dir(self, path):
@@ -1451,8 +1511,7 @@ class SyncMultiWorkerBase(threading.Thread):
             with open(path, 'wb') as out_fp:
                 # The obj is a chunked object and you you must fully read
                 # the object's contents before making another request.
-                resp_headers, obj = self._client.get_object(
-                    container, record.path)
+                resp_headers, obj = self._client.get_object(container, record.path)
 
                 # Check etag validity.
                 etag = ObjectHeaders.etag(resp_headers)
@@ -1462,14 +1521,16 @@ class SyncMultiWorkerBase(threading.Thread):
                     raise NotImplementedError(
                         '0-sized files with X-Object-Manifest? '
                         'cont={!r}, path={!r}, size={!r}, hdrs={!r}'.format(
-                            container, record.path, record.size, resp_headers))
+                            container, record.path, record.size, resp_headers
+                        )
+                    )
 
                 m = md5()
                 for data in obj:
                     if _MT_ABORT:
                         raise SyncMultiWorkerBase.AbortThread(
-                            'early abort during {}'.format(
-                                record.container_path))
+                            'early abort during {}'.format(record.container_path)
+                        )
                     out_fp.write(data)
                     m.update(data)
 
@@ -1486,19 +1547,18 @@ class SyncMultiWorkerBase(threading.Thread):
             os.utime(path, ns=(record.modified, record.modified))
         except OSError as e:
             log.error(
-                'Download failure for %r (from %r): %s',
-                path, record.container_path, e)
+                'Download failure for %r (from %r): %s', path, record.container_path, e
+            )
             try:
                 # FIXME: also remove directories we just created?
                 os.unlink(path)
             except (FileNotFoundError, OSError) as e2:  # ENAMETOOLONG(?)
-                log.error(
-                    'Got exception %r/%s during unlink %s', e2, e2, path)
+                log.error('Got exception %r/%s during unlink %s', e2, e2, path)
             raise e
         except Exception as e:
             log.warning(
-                'Download failure for %r (from %r): %s',
-                path, record.container_path, e)
+                'Download failure for %r (from %r): %s', path, record.container_path, e
+            )
             if isinstance(e, IsADirectoryError):
                 pass
             else:
@@ -1517,8 +1577,11 @@ class SyncMultiWorkerBase(threading.Thread):
                 obj_stat = self._client.head_object(container, record.path)
             except self._client.ClientError as e:
                 log.warning(
-                    'File %r %r disappeared from under us when doing a HEAD '
-                    '(%s)', container, record.path, e)
+                    'File %r %r disappeared from under us when doing a HEAD (%s)',
+                    container,
+                    record.path,
+                    e,
+                )
                 transient = True
             else:
                 modified = ObjectHeaders.xtimestamp(obj_stat)
@@ -1526,12 +1589,20 @@ class SyncMultiWorkerBase(threading.Thread):
                     # BEWARE: Unchanged mtime, but changed filesize? Problem.
                     log.error(
                         'Filesize mismatch for %r (from %r): %d != %d',
-                        path, record.container_path, record.size, local_size)
+                        path,
+                        record.container_path,
+                        record.size,
+                        local_size,
+                    )
                     transient = False
                 else:
                     log.warning(
                         'File changed during operation %r (from %r): %d != %d',
-                        path, record.container_path, record.size, local_size)
+                        path,
+                        record.container_path,
+                        record.size,
+                        local_size,
+                    )
                     transient = True
 
             # FIXME: also remove directories we just created?
@@ -1559,6 +1630,7 @@ class SyncMultiUpdater(SyncMultiWorkerBase):
     """
     Multithreaded SwiftSyncUpdater.
     """
+
     def process_record(self, record, container, dst_path):
         """
         Process a single record: download it.
@@ -1570,7 +1642,10 @@ class SyncMultiUpdater(SyncMultiWorkerBase):
         except self._client.ClientError as e:
             log.warning(
                 'File %r %r disappeared from under us when doing a HEAD (%s)',
-                container, record.path, e)
+                container,
+                record.path,
+                e,
+            )
             raise self.ProcessRecordTransientError()
 
         etag = ObjectHeaders.etag(obj_stat)
@@ -1579,27 +1654,32 @@ class SyncMultiUpdater(SyncMultiWorkerBase):
         # To guard against odd races, we must also check the record against
         # this new head. This also asserts that the file size is still the
         # same.
-        new_record = ListLine.from_object_head(
-            record.container, record.path, obj_stat)
+        new_record = ListLine.from_object_head(record.container, record.path, obj_stat)
         if new_record.line != record.line:
             # 'container|index.latest|2025-04-07T08:08:13.322000|8\n'
             # 'container|index.latest|2025-04-07T08:08:13.000000|8\n'
             lst_rest, lst_mtime, lst_size = record.line.rsplit('|', 2)
             new_rest, new_mtime, new_size = new_record.line.rsplit('|', 2)
             new_mtime_without_0 = new_mtime.rstrip('0')
-            if (lst_rest == new_rest
-                    and lst_size == new_size
-                    and new_mtime_without_0.endswith('.')
-                    and lst_mtime.startswith(new_mtime_without_0)):
+            if (
+                lst_rest == new_rest
+                and lst_size == new_size
+                and new_mtime_without_0.endswith('.')
+                and lst_mtime.startswith(new_mtime_without_0)
+            ):
                 # NOTE: This is not a problem for non-dynamic_large_object;
                 # the etag will be checked too.
                 log.warning(
                     'LastModifiedDisrepancyWorkaround, accepting %r == %r',
-                    record.line, new_record.line)
+                    record.line,
+                    new_record.line,
+                )
             else:
                 log.warning(
                     'File was updated in the mean time? %r != %r',
-                    record.line, new_record.line)
+                    record.line,
+                    new_record.line,
+                )
                 raise self.ProcessRecordTransientError()
 
         # If the length is the same, we might be looking at an existing object.
@@ -1638,9 +1718,9 @@ class SyncMultiUpdater(SyncMultiWorkerBase):
                 m.update(buf)
 
         hexdigest = m.hexdigest()
-        assert (
-            len(hexdigest) == 32
-            and all(i in '0123456789abcdef' for i in hexdigest)), hexdigest
+        assert len(hexdigest) == 32 and all(
+            i in '0123456789abcdef' for i in hexdigest
+        ), hexdigest
 
         return hexdigest
 
@@ -1657,14 +1737,21 @@ class SyncBase:
         global _MT_ABORT, _MT_HAS_THREADS
 
         log.info(
-            '%s: Starting %d %s downloader threads', self.__class__.__name__,
-            self._thread_count, self.worker_class.__name__)
+            '%s: Starting %d %s downloader threads',
+            self.__class__.__name__,
+            self._thread_count,
+            self.worker_class.__name__,
+        )
 
         threads = [
             self.worker_class(
-                objsync=self._objsync, source=self._source,
-                offset=idx, threads=self._thread_count)
-            for idx in range(self._thread_count)]
+                objsync=self._objsync,
+                source=self._source,
+                offset=idx,
+                threads=self._thread_count,
+            )
+            for idx in range(self._thread_count)
+        ]
 
         if self._thread_count == 1:
             try:
@@ -1682,15 +1769,19 @@ class SyncBase:
                     thread.status.unhandled_errors += 1
                     if exc_type == SyncMultiWorkerBase.AbortThread:
                         log.warning(
-                            'Thread aborted with %s in %r',
-                            exc_value, thread.name)
+                            'Thread aborted with %s in %r', exc_value, thread.name
+                        )
                     else:
-                        traceback = ''.join(format_exception(
-                            exc_type, exc_value, exc_tb))
+                        traceback = ''.join(
+                            format_exception(exc_type, exc_value, exc_tb)
+                        )
                         log.warning(
                             'Got unhandled %s %s in %r. %s',
-                            exc_type.__name__, exc_value, thread.name,
-                            traceback)
+                            exc_type.__name__,
+                            exc_value,
+                            thread.name,
+                            traceback,
+                        )
             _MT_HAS_THREADS = False
 
             success_fps = [th.take_success_file() for th in threads]
@@ -1749,7 +1840,10 @@ class SyncBase:
                     prev_fp.seek(0)
                     log.info(
                         '%s: Merging success lists (%d into %d)',
-                        self.__class__.__name__, added_size, prev_size)
+                        self.__class__.__name__,
+                        added_size,
+                        prev_size,
+                    )
                     llc = _ListLineComm(prev_fp, added_fp)
                     llc.act(
                         # Die if we encounter a file twice:
@@ -1758,7 +1852,8 @@ class SyncBase:
                         # Keep it if we already had it:
                         leftonly=(lambda line: combined_fp.write(line)),
                         # Keep it if we added it now:
-                        rightonly=(lambda line: combined_fp.write(line)))
+                        rightonly=(lambda line: combined_fp.write(line)),
+                    )
                     combined_fp.flush()
 
                     # We don't need left anymore. Make combined the new left.
@@ -1798,7 +1893,9 @@ class SyncAdder(SyncBase):
             if size:
                 log.info(
                     '%s: Merging %d bytes of added files into current',
-                    self.__class__.__name__, size)
+                    self.__class__.__name__,
+                    size,
+                )
                 success_fp.seek(0)
                 self._objsync.update_cur_list_from_added(success_fp)
         finally:
@@ -1822,7 +1919,9 @@ class SyncUpdater(SyncBase):
             if size:
                 log.info(
                     '%s: Merging %d bytes of updated files into current',
-                    self.__class__.__name__, size)
+                    self.__class__.__name__,
+                    size,
+                )
                 success_fp.seek(0)
                 self._objsync.update_cur_list_from_updated(success_fp)
         finally:
@@ -1863,8 +1962,11 @@ def _comm_lineiter(fp):
     for line in it:
         record = ListLine(line)
         if prev_record.container_path >= record.container_path:
-            raise ValueError('data (sorting?) error: {!r} vs. {!r}'.format(
-                prev_record.container_path, record.container_path))
+            raise ValueError(
+                'data (sorting?) error: {!r} vs. {!r}'.format(
+                    prev_record.container_path, record.container_path
+                )
+            )
         yield record
         prev_record = record
 
@@ -1887,6 +1989,7 @@ class _ListLineComm:
             # Add when only in new_fp:
             rightonly=(lambda line: add_fp.write(line)))
     """
+
     def __init__(self, left, right):
         self._left_src = left
         self._right_src = right
@@ -1911,8 +2014,11 @@ class _ListLineComm:
     def _process_main(self):  # noqa: C901
         # Make local
         act_both, act_difftime, act_leftonly, act_rightonly = (
-            self._act_both, self._act_difftime,
-            self._act_leftonly, self._act_rightonly)
+            self._act_both,
+            self._act_difftime,
+            self._act_leftonly,
+            self._act_rightonly,
+        )
 
         left_iter, left = self._setup(self._left_src)
         right_iter, right = self._setup(self._right_src)
@@ -1985,38 +2091,63 @@ class _ListLineTest(TestCase):
     def test_pipe_in_path(self):
         self._eq(
             'containerx|path/to||esc|2021-02-03T12:34:56.654321|1234',
-            'containerx', 'path/to|esc', 1612355696654321000, 1234)
+            'containerx',
+            'path/to|esc',
+            1612355696654321000,
+            1234,
+        )
         self._eq(
             'path/to||esc|2021-02-03T12:34:56.654321|1234',
-            None, 'path/to|esc', 1612355696654321000, 1234)
+            None,
+            'path/to|esc',
+            1612355696654321000,
+            1234,
+        )
         self._eq(
             '||path/with/starting/pipe|2021-02-03T12:34:56.654321|1234',
-            None, '|path/with/starting/pipe', 1612355696654321000, 1234)
+            None,
+            '|path/with/starting/pipe',
+            1612355696654321000,
+            1234,
+        )
         self._eq(
             'path/with/ending/pipe|||2021-02-03T12:34:56.654321|1234',
-            None, 'path/with/ending/pipe|', 1612355696654321000, 1234)
+            None,
+            'path/with/ending/pipe|',
+            1612355696654321000,
+            1234,
+        )
         self._eq(
             '||path/with/both|||2021-02-03T12:34:56.654321|1234',
-            None, '|path/with/both|', 1612355696654321000, 1234)
+            None,
+            '|path/with/both|',
+            1612355696654321000,
+            1234,
+        )
         self._eq(
             'container|||||pipefest|||2021-02-03T12:34:56.654321|1234',
-            'container', '||pipefest|', 1612355696654321000, 1234)
-        self.assertRaises(
-            Exception,
-            ListLine, 'too|few')
-        self.assertRaises(
-            AssertionError,
-            ListLine, 'lots|of|unescaped|2021-02-03T12:34:56.654321|1234')
-        self.assertRaises(
-            AssertionError,
-            ListLine, 'lots|of|one||escaped|2021-02-03T12:34:56.654321|1234')
+            'container',
+            '||pipefest|',
+            1612355696654321000,
+            1234,
+        )
+        self.assertRaises(Exception, ListLine, 'too|few')
         self.assertRaises(
             AssertionError,
-            ListLine, '|emptycontainer|2021-02-03T12:34:56.654321|1234')
+            ListLine,
+            'lots|of|unescaped|2021-02-03T12:34:56.654321|1234',
+        )
+        self.assertRaises(
+            AssertionError,
+            ListLine,
+            'lots|of|one||escaped|2021-02-03T12:34:56.654321|1234',
+        )
+        self.assertRaises(
+            AssertionError, ListLine, '|emptycontainer|2021-02-03T12:34:56.654321|1234'
+        )
 
     def test_with_container(self):
-        ll = ListLine(
-            'contx|path/to/somewhere|2021-02-03T12:34:56.654321|1234')
+        ll = ListLine('contx|path/to/somewhere|2021-02-03T12:34:56.654321|1234')
         self.assertEqual(ll.container, 'contx')
         self.assertEqual(ll.container_path, ('contx', 'path/to/somewhere'))
         self.assertEqual(ll.path, 'path/to/somewhere')
@@ -2024,8 +2155,7 @@ class _ListLineTest(TestCase):
         self.assertEqual(ll.size, 1234)
 
     def test_no_container(self):
-        ll = ListLine(
-            'nocontainer/to/somewhere|2021-02-03T12:34:57.654321|12345')
+        ll = ListLine('nocontainer/to/somewhere|2021-02-03T12:34:57.654321|12345')
         self.assertEqual(ll.container, None)
         self.assertEqual(ll.container_path, (None, 'nocontainer/to/somewhere'))
         self.assertEqual(ll.path, 'nocontainer/to/somewhere')
@@ -2033,62 +2163,71 @@ class _ListLineTest(TestCase):
         self.assertEqual(ll.size, 12345)
 
     def test_comm_lineiter_good(self):
-        a = '''\
+        a = """\
 contx|a|2021-02-03T12:34:56.654321|1234
 contx|ab|2021-02-03T12:34:56.654321|1234
 contx|b|2021-02-03T12:34:56.654321|1234
-conty|a|2021-02-03T12:34:56.654321|1234'''.split('\n')
+conty|a|2021-02-03T12:34:56.654321|1234""".split('\n')
         it = _comm_lineiter(a)
         values = list(it)
-        self.assertEqual(values, [
-            ListLine('contx|a|2021-02-03T12:34:56.654321|1234'),
-            ListLine('contx|ab|2021-02-03T12:34:56.654321|1234'),
-            ListLine('contx|b|2021-02-03T12:34:56.654321|1234'),
-            ListLine('conty|a|2021-02-03T12:34:56.654321|1234')])
+        self.assertEqual(
+            values,
+            [
+                ListLine('contx|a|2021-02-03T12:34:56.654321|1234'),
+                ListLine('contx|ab|2021-02-03T12:34:56.654321|1234'),
+                ListLine('contx|b|2021-02-03T12:34:56.654321|1234'),
+                ListLine('conty|a|2021-02-03T12:34:56.654321|1234'),
+            ],
+        )
 
     def test_comm_lineiter_error(self):
-        a = '''\
+        a = """\
 contx|a|2021-02-03T12:34:56.654321|1234
 contx|c|2021-02-03T12:34:56.654321|1234
-contx|b|2021-02-03T12:34:56.654321|1234'''.split('\n')
+contx|b|2021-02-03T12:34:56.654321|1234""".split('\n')
         it = _comm_lineiter(a)
         self.assertRaises(ValueError, list, it)
 
 
 class _ListLineCommTest(TestCase):
     def test_mixed(self):
-        a = '''\
+        a = """\
 a|2021-02-03T12:34:56.654321|1234
 b|2021-02-03T12:34:56.654321|1234
-c|2021-02-03T12:34:56.654321|1234'''.split('\n')
-        b = '''\
+c|2021-02-03T12:34:56.654321|1234""".split('\n')
+        b = """\
 a|2021-02-03T12:34:56.654321|1234
 b2|2021-02-03T12:34:56.654321|1234
 b3|2021-02-03T12:34:56.654321|1234
 c|2021-02-03T12:34:56.654321|1234
-c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
+c2|2021-02-03T12:34:56.654321|1234""".split('\n')
         act_both, act_left, act_right = [], [], []
         llc = _ListLineComm(a, b)
         llc.act(
             both=(lambda line: act_both.append(line)),
             difftime=None,
             leftonly=(lambda line: act_left.append(line)),
-            rightonly=(lambda line: act_right.append(line)))
-        self.assertEqual(act_both, [
-            'a|2021-02-03T12:34:56.654321|1234',
-            'c|2021-02-03T12:34:56.654321|1234'])
-        self.assertEqual(act_left, [
-            'b|2021-02-03T12:34:56.654321|1234'])
-        self.assertEqual(act_right, [
-            'b2|2021-02-03T12:34:56.654321|1234',
-            'b3|2021-02-03T12:34:56.654321|1234',
-            'c2|2021-02-03T12:34:56.654321|1234'])
+            rightonly=(lambda line: act_right.append(line)),
+        )
+        self.assertEqual(
+            act_both,
+            ['a|2021-02-03T12:34:56.654321|1234', 'c|2021-02-03T12:34:56.654321|1234'],
+        )
+        self.assertEqual(act_left, ['b|2021-02-03T12:34:56.654321|1234'])
+        self.assertEqual(
+            act_right,
+            [
+                'b2|2021-02-03T12:34:56.654321|1234',
+                'b3|2021-02-03T12:34:56.654321|1234',
+                'c2|2021-02-03T12:34:56.654321|1234',
+            ],
+        )
 
     def test_oneonly(self):
-        a = '''\
+        a = """\
 a|2021-02-03T12:34:56.654321|1234
 b|2021-02-03T12:34:56.654321|1234
-c|2021-02-03T12:34:56.654321|1234'''.split('\n')
+c|2021-02-03T12:34:56.654321|1234""".split('\n')
 
         act_both, act_left, act_right = [], [], []
         llc = _ListLineComm(a, [])
@@ -2096,7 +2235,8 @@ c|2021-02-03T12:34:56.654321|1234'''.split('\n')
             both=(lambda line: act_both.append(line)),
             difftime=None,
             leftonly=(lambda line: act_left.append(line)),
-            rightonly=(lambda line: act_right.append(line)))
+            rightonly=(lambda line: act_right.append(line)),
+        )
         self.assertEqual((act_both, act_left, act_right), ([], a, []))
 
         act_both, act_left, act_right = [], [], []
@@ -2105,68 +2245,85 @@ c|2021-02-03T12:34:56.654321|1234'''.split('\n')
             both=(lambda line: act_both.append(line)),
             difftime=None,
             leftonly=(lambda line: act_left.append(line)),
-            rightonly=(lambda line: act_right.append(line)))
+            rightonly=(lambda line: act_right.append(line)),
+        )
         self.assertEqual((act_both, act_left, act_right), ([], [], a))
 
     def test_difftime(self):
-        a = '''\
+        a = """\
 a|2021-02-03T12:34:56.654321|1234
 b|2021-02-03T12:34:56.654321|1234
-c|2021-02-03T12:34:56.654321|1234'''.split('\n')
-        b = '''\
+c|2021-02-03T12:34:56.654321|1234""".split('\n')
+        b = """\
 a|2021-02-03T12:34:56.654322|1234
 b2|2021-02-03T12:34:56.654321|1234
 b3|2021-02-03T12:34:56.654321|1234
 c|2021-02-03T12:34:56.654322|1234
-c2|2021-02-03T12:34:56.654321|1234'''.split('\n')
+c2|2021-02-03T12:34:56.654321|1234""".split('\n')
         act_both, act_difftime, act_left, act_right = [], [], [], []
         llc = _ListLineComm(a, b)
         llc.act(
             both=(lambda line: act_both.append(line)),
-            difftime=(lambda leftline, rightline: (
-                act_difftime.append((leftline, rightline)))),
+            difftime=(
+                lambda leftline, rightline: act_difftime.append((leftline, rightline))
+            ),
             leftonly=(lambda line: act_left.append(line)),
-            rightonly=(lambda line: act_right.append(line)))
+            rightonly=(lambda line: act_right.append(line)),
+        )
         self.assertEqual(act_both, [])
-        self.assertEqual(act_difftime, [
-            ('a|2021-02-03T12:34:56.654321|1234',
-             'a|2021-02-03T12:34:56.654322|1234'),
-            ('c|2021-02-03T12:34:56.654321|1234',
-             'c|2021-02-03T12:34:56.654322|1234')])
-        self.assertEqual(act_left, [
-            'b|2021-02-03T12:34:56.654321|1234'])
-        self.assertEqual(act_right, [
-            'b2|2021-02-03T12:34:56.654321|1234',
-            'b3|2021-02-03T12:34:56.654321|1234',
-            'c2|2021-02-03T12:34:56.654321|1234'])
+        self.assertEqual(
+            act_difftime,
+            [
+                (
+                    'a|2021-02-03T12:34:56.654321|1234',
+                    'a|2021-02-03T12:34:56.654322|1234',
+                ),
+                (
+                    'c|2021-02-03T12:34:56.654321|1234',
+                    'c|2021-02-03T12:34:56.654322|1234',
+                ),
+            ],
+        )
+        self.assertEqual(act_left, ['b|2021-02-03T12:34:56.654321|1234'])
+        self.assertEqual(
+            act_right,
+            [
+                'b2|2021-02-03T12:34:56.654321|1234',
+                'b3|2021-02-03T12:34:56.654321|1234',
+                'c2|2021-02-03T12:34:56.654321|1234',
+            ],
+        )
 
 
 class Cli:
     def __init__(self):
         parser = ArgumentParser()
         parser.add_argument(
-            '-c', '--config', metavar='configpath', default='~/.rclone.conf',
-            help='inifile location')
+            '-c',
+            '--config',
+            metavar='configpath',
+            default='~/.rclone.conf',
+            help='inifile location',
+        )
         parser.add_argument('inisection')
         parser.add_argument(
-            '--test-path-translate', action='store_true',
-            help='test path translation with paths from stdin')
+            '--test-path-translate',
+            action='store_true',
+            help='test path translation with paths from stdin',
+        )
         parser.add_argument('container', nargs='?')
         parser.add_argument('--all-containers', action='store_true')
         self.args = parser.parse_args()
 
         if self.args.test_path_translate:
             if not bool(self.args.container):
-                parser.error(
-                    'specify the container to test path translations on')
+                parser.error('specify the container to test path translations on')
         if not (bool(self.args.container) ^ bool(self.args.all_containers)):
             parser.error('either specify a container or --all-containers')
 
     @cached_property
     def config(self):
-        return SyncConfig(
-            os.path.expanduser(self.args.config),
-            self.args.inisection)
+        return SyncConfig(os.path.expanduser(self.args.config), self.args.inisection)
 
     @property
     def client(self):
@@ -2196,8 +2353,7 @@ class Cli:
         objsync.sync()
 
     def test_path_translate(self, container):
-        translator = self.config.get_translator(
-            container, single_container=True)
+        translator = self.config.get_translator(container, single_container=True)
         try:
             while True:
                 rpath = input()

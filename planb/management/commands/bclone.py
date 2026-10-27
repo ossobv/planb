@@ -14,7 +14,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         template = Fileset.objects.get(pk=options['fileset_id'])
         copy = template.clone(
-            friendly_name=options['friendly_name'],
-            transport__host=options['host'])
-        self.stdout.write(self.style.SUCCESS('Cloned {} to {}'.format(
-            template, copy)))
+            friendly_name=options['friendly_name'], transport__host=options['host']
+        )
+        self.stdout.write(self.style.SUCCESS('Cloned {} to {}'.format(template, copy)))

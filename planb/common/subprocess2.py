@@ -1,9 +1,7 @@
 from __future__ import absolute_import
 from re import compile as re_compile
 from shlex import quote as shell_quote
-from subprocess import (
-    CalledProcessError as OrigCalledProcessError,
-    PIPE, Popen)
+from subprocess import CalledProcessError as OrigCalledProcessError, PIPE, Popen
 
 
 class CalledProcessError(OrigCalledProcessError):
@@ -11,7 +9,8 @@ class CalledProcessError(OrigCalledProcessError):
     Version of subprocess.CalledProcessError that also shows the stdout
     and stderr data if available.
     """
-    _anychar_re = re_compile(br'[A-Za-z]')  # bytestring-re
+
+    _anychar_re = re_compile(rb'[A-Za-z]')  # bytestring-re
 
     def __init__(self, returncode, cmd, stdout, stderr):
         super().__init__(returncode=returncode, cmd=cmd, output=stdout)
@@ -28,9 +27,10 @@ class CalledProcessError(OrigCalledProcessError):
         # blobs. Trim it if it's too large:
         if len(text) >= 256 * 1024:
             text = (
-                text[0:(128 * 1024)]
+                text[0 : (128 * 1024)]
                 + '\n[... truncated ...]\n'
-                + text[-(128 * 1024):])
+                + text[-(128 * 1024) :]
+            )
 
         if text.endswith('\n'):
             text = text[0:-1]
@@ -68,9 +68,13 @@ class CalledProcessError(OrigCalledProcessError):
         short_cmd = self.cmd if isinstance(self.cmd, str) else self.cmd[0]
 
         # Make a meaningful first line.
-        ret = ['{cmd}: "{stderr}" (exit {code})'.format(
-            cmd=short_cmd, stderr=self._short_stderr.replace('"', '""'),
-            code=self.returncode)]
+        ret = [
+            '{cmd}: "{stderr}" (exit {code})'.format(
+                cmd=short_cmd,
+                stderr=self._short_stderr.replace('"', '""'),
+                code=self.returncode,
+            )
+        ]
 
         if stderr:
             ret.append('STDERR:\n{}'.format(stderr))
@@ -91,12 +95,12 @@ def check_call(cmd, *, env=None, preexec_fn=None, shell=False, timeout=None):
     Note that stdout/stderr are still captured so we have more
     informative exceptions.
     """
-    check_output(
-        cmd, env=env, preexec_fn=preexec_fn, shell=shell, timeout=timeout)
+    check_output(cmd, env=env, preexec_fn=preexec_fn, shell=shell, timeout=timeout)
 
 
-def check_output(cmd, *, env=None, preexec_fn=None, return_stderr=None,
-                 shell=False, timeout=None):
+def check_output(
+    cmd, *, env=None, preexec_fn=None, return_stderr=None, shell=False, timeout=None
+):
     """
     Run command with arguments and return its output.
 
@@ -113,8 +117,14 @@ def check_output(cmd, *, env=None, preexec_fn=None, return_stderr=None,
     fp, ret, stdout, stderr = None, -1, '', ''
     try:
         fp = Popen(
-            cmd, stdin=None, stdout=PIPE, stderr=PIPE, env=env,
-            preexec_fn=preexec_fn, shell=shell)
+            cmd,
+            stdin=None,
+            stdout=PIPE,
+            stderr=PIPE,
+            env=env,
+            preexec_fn=preexec_fn,
+            shell=shell,
+        )
         stdout, stderr = fp.communicate()
         ret = fp.wait()
         fp = None
@@ -133,10 +143,16 @@ def argsjoin(cmd):
     """
     Return cmd-tuple as a quoted string, safe to pass to a shell.
     """
+
     def is_safe(arg):
-        return all(i in (
-            'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-            '09123456789_=-+.,/~') for i in arg)
+        return all(
+            i
+            in (
+                'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+                '09123456789_=-+.,/~'
+            )
+            for i in arg
+        )
 
     args = []
     for arg in cmd:

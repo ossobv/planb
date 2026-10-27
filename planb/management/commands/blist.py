@@ -14,18 +14,17 @@ class Command(BaseCommandWithZabbix):
     help = 'Lists filesets'
 
     def add_arguments(self, parser):
-        parser.add_argument('--summary', action='store_true', help=(
-            'Show summary'))
-        parser.add_argument('--double', action='store_true', help=(
-            'Filesets with double-backup'))
+        parser.add_argument('--summary', action='store_true', help=('Show summary'))
+        parser.add_argument(
+            '--double', action='store_true', help=('Filesets with double-backup')
+        )
 
         return super().add_arguments(parser)
 
     def handle(self, *args, **options):
-        qs = (
-            Fileset.objects
-            .prefetch_related('hostgroup')
-            .order_by('hostgroup__name', 'friendly_name'))
+        qs = Fileset.objects.prefetch_related('hostgroup').order_by(
+            'hostgroup__name', 'friendly_name'
+        )
 
         if options['summary']:
             assert options['zabbix']
@@ -54,8 +53,11 @@ class Command(BaseCommandWithZabbix):
             except ObjectDoesNotExist:
                 transport = 'MISSING_TRANSPORT'
 
-            ret.append('{fileset.friendly_name:30s}  {transport}'.format(
-                fileset=fileset, transport=transport))
+            ret.append(
+                '{fileset.friendly_name:30s}  {transport}'.format(
+                    fileset=fileset, transport=transport
+                )
+            )
 
         if ret:
             ret.append('')
@@ -72,21 +74,29 @@ class Command(BaseCommandWithZabbix):
         # This is added to the default backup timeout in zabbix to trigger a
         # failed backup error.
         two_weeks_ago = timezone.now() - timedelta(days=14)
-        qs = qs.annotate(maximum_duration=Max(
-            'backuprun__duration', default=0,
-            filter=Q(backuprun__started__gte=two_weeks_ago)))
+        qs = qs.annotate(
+            maximum_duration=Max(
+                'backuprun__duration',
+                default=0,
+                filter=Q(backuprun__started__gte=two_weeks_ago),
+            )
+        )
 
         hostname = socket.gethostname()
-        data = [{
-            '{#ID}': fileset.pk,
-            '{#NAME}': fileset.unique_name,
-            # Round ETA down to the nearest hour and set a maximum of 2 days.
-            # maximum_duration can be None if the only backuprun in 2 weeks
-            # is still running.
-            '{#ETA_MAX}': min(
-                3600 * round((fileset.maximum_duration or 0) / 3600),
-                86400 * 2),
-            '{#PLANB}': hostname} for fileset in qs]
+        data = [
+            {
+                '{#ID}': fileset.pk,
+                '{#NAME}': fileset.unique_name,
+                # Round ETA down to the nearest hour and set a maximum of 2 days.
+                # maximum_duration can be None if the only backuprun in 2 weeks
+                # is still running.
+                '{#ETA_MAX}': min(
+                    3600 * round((fileset.maximum_duration or 0) / 3600), 86400 * 2
+                ),
+                '{#PLANB}': hostname,
+            }
+            for fileset in qs
+        ]
         self.stdout.write(json.dumps(data) + '\n')
 
     def dump_zabbix_summary(self, qs):
@@ -96,7 +106,8 @@ class Command(BaseCommandWithZabbix):
         now = timezone.now()
 
         latest_success, oldest_success, latest_failure, oldest_failure = (
-            self._get_first_and_last_success_and_fail(qs, now))
+            self._get_first_and_last_success_and_fail(qs, now)
+        )
 
         def as_age(tm):
             return int((now - tm).total_seconds())
@@ -110,7 +121,8 @@ class Command(BaseCommandWithZabbix):
             'latest_failure': as_age(latest_failure),
             'oldest_failure': as_age(oldest_failure),
             'disabled': disqs.count(),
-            'hostname': hostname}
+            'hostname': hostname,
+        }
         self.stdout.write(json.dumps(data) + '\n')
 
     def _get_first_and_last_success_and_fail(self, qs, now):

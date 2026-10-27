@@ -65,33 +65,53 @@ class DatasetStorage:
 def get_server_datasets(server):
     ssh_opts = ['-oLogLevel=error']
     if os.environ.get('SSH_CONTROL_PATH'):
-        ssh_opts.extend([
-            '-oControlMaster=no',
-            '-oControlPath={}'.format(os.environ['SSH_CONTROL_PATH']),
-        ])
+        ssh_opts.extend(
+            [
+                '-oControlMaster=no',
+                '-oControlPath={}'.format(os.environ['SSH_CONTROL_PATH']),
+            ]
+        )
     return check_output(
-        ['ssh'] + ssh_opts + [server, 'planb', 'blist', '--double'],
-        text=True).splitlines()
+        ['ssh'] + ssh_opts + [server, 'planb', 'blist', '--double'], text=True
+    ).splitlines()
 
 
 def parse_args():
     parser = ArgumentParser(
         description='Fetch the double backup dataset list from a remote planb '
-                    'server. The datasets are kept in a persistent storage to '
-                    'prevent configuration changes from wiping the datasets. '
-                    'To permanently remove a dataset use the --discard flag.')
+        'server. The datasets are kept in a persistent storage to '
+        'prevent configuration changes from wiping the datasets. '
+        'To permanently remove a dataset use the --discard flag.'
+    )
     parser.add_argument(
-        'server', metavar='USER@HOST',
-        help='The backup server using SSH destination notation.')
+        'server',
+        metavar='USER@HOST',
+        help='The backup server using SSH destination notation.',
+    )
     parser.add_argument(
-        '-l', '--local', action='store_true',
-        help='Show the datasets from the persistent storage.')
+        '-l',
+        '--local',
+        action='store_true',
+        help='Show the datasets from the persistent storage.',
+    )
     parser.add_argument(
-        '-a', '--add', metavar='DATASET', action='extend', nargs='+',
-        default=[], help='Add a dataset to the persistent storage.')
+        '-a',
+        '--add',
+        metavar='DATASET',
+        action='extend',
+        nargs='+',
+        default=[],
+        help='Add a dataset to the persistent storage.',
+    )
     parser.add_argument(
-        '-d', '--discard', metavar='DATASET', action='extend', nargs='+',
-        default=[], help='Remove a dataset from the persistent storage.')
+        '-d',
+        '--discard',
+        metavar='DATASET',
+        action='extend',
+        nargs='+',
+        default=[],
+        help='Remove a dataset from the persistent storage.',
+    )
 
     return parser.parse_args()
 
@@ -123,7 +143,8 @@ def main():  # noqa: C901
         if local_only_set:
             print(
                 'WARNING: These do not have the double-backup flag anymore',
-                file=sys.stderr)
+                file=sys.stderr,
+            )
             for dataset in sorted(local_only_set):
                 print('-', dataset, file=sys.stderr)
             warning = True

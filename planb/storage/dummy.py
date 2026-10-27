@@ -5,10 +5,11 @@ from .base import Dataset, Storage
 
 
 class DummyStorage(Storage):
-    '''
+    """
     DummyStorage is a simple in-memory storage that will store the names and
     snapshots of any datasets you request from it.
-    '''
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._datasets = {}
@@ -22,8 +23,7 @@ class DummyStorage(Storage):
 
     def get_dataset(self, dataset_name):
         if dataset_name not in self._datasets:
-            self._datasets[dataset_name] = DummyDataset(
-                storage=self, name=dataset_name)
+            self._datasets[dataset_name] = DummyDataset(storage=self, name=dataset_name)
         return self._datasets[dataset_name]
 
     def snapshot_create(self, dataset_name, snapname):
@@ -57,8 +57,7 @@ class DummyDataset(Dataset):
         return 1001
 
     def get_snapshot_path(self, snapname):
-        snapshot = os.path.join(
-            self.temp_directory, '.snapshot', snapname, 'data')
+        snapshot = os.path.join(self.temp_directory, '.snapshot', snapname, 'data')
         if not os.path.exists(snapshot):
             os.makedirs(snapshot)
         return snapshot
@@ -87,11 +86,11 @@ class DummyDataset(Dataset):
 
     @property
     def temp_directory(self):
-        '''
+        """
         Create a safe temporary directory to play with.
         The directory will be destroyed when the Dataset object with the
         _temp_directory property is destroyed.
-        '''
+        """
         if self._temp_directory is None:
             self._temp_directory = TemporaryDirectory()
         return self._temp_directory.name

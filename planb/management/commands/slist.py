@@ -11,11 +11,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--stale', action='store_true',
-            help='List stale (unused) storage entries/datasets only')
+            '--stale',
+            action='store_true',
+            help='List stale (unused) storage entries/datasets only',
+        )
         parser.add_argument(
-            '-x', '--exclude', action='append', default=[],
-            help='Glob patterns to exclude')
+            '-x',
+            '--exclude',
+            action='append',
+            default=[],
+            help='Glob patterns to exclude',
+        )
 
         return super().add_arguments(parser)
 
@@ -31,12 +37,12 @@ class Command(BaseCommand):
         datasets.keep_only_leaves()
 
         for exclude in set(options['exclude']):
-            datasets = Datasets([
-                ds for ds in datasets if not fnmatch(ds.name, exclude)])
+            datasets = Datasets(
+                [ds for ds in datasets if not fnmatch(ds.name, exclude)]
+            )
 
         if options['stale']:
-            datasets = Datasets([
-                ds for ds in datasets if not ds.exists_in_database])
+            datasets = Datasets([ds for ds in datasets if not ds.exists_in_database])
 
         datasets.sort()
         self.dump_list(datasets)
@@ -57,22 +63,24 @@ class Command(BaseCommand):
                     # XXX: add temporary warning regarding cleanup
                     ret.append(
                         '; (when purging, do not forget to remove '
-                        'encryption keys from zfskeys dir)')
+                        'encryption keys from zfskeys dir)'
+                    )
                     ret.append('; (see planb-zfskeys-check contrib tool)')
 
             if fileset:
                 ret.append(
-                    '{dataset.name:54s}  {disk_usage:>8s}  '
-                    'id={fileset.id}'.format(
+                    '{dataset.name:54s}  {disk_usage:>8s}  id={fileset.id}'.format(
                         dataset=dataset,
                         disk_usage=human.bytes(dataset.disk_usage),
-                        fileset=fileset))
+                        fileset=fileset,
+                    )
+                )
             else:
                 ret.append(
-                    '{dataset.name:54s}  {disk_usage:>8s}  '
-                    'id=NONE'.format(
-                        dataset=dataset,
-                        disk_usage=human.bytes(dataset.disk_usage)))
+                    '{dataset.name:54s}  {disk_usage:>8s}  id=NONE'.format(
+                        dataset=dataset, disk_usage=human.bytes(dataset.disk_usage)
+                    )
+                )
 
         if ret:
             ret.extend(['', ''])

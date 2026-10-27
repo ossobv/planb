@@ -15,7 +15,7 @@ class lazysetting:
         return (
             '{cls.__module__}.{cls.__name__}'.format(cls=self.__class__),
             [],
-            kwargs
+            kwargs,
         )
 
     def __call__(self):

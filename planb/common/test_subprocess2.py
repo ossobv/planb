@@ -7,8 +7,8 @@ class Subprocess2Test(TestCase):
     def test_calledprocesserror_stderr_on_first_line(self):
         try:
             check_call(
-                ['/bin/ls', '/surely/this/dir/does/not/exist'],
-                env={'LC_ALL': 'C'})
+                ['/bin/ls', '/surely/this/dir/does/not/exist'], env={'LC_ALL': 'C'}
+            )
         except CalledProcessError as e:
             # /bin/ls: "/bin/ls: cannot access
             #   '/surely/this/dir/does/not/exist': No such file or
@@ -22,7 +22,10 @@ class Subprocess2Test(TestCase):
     def test_return_stderr(self):
         stderr = []
         stdout = check_output(
-            'echo IRstdout; echo IRstderr 1>&2', shell=True,
-            env={'LC_ALL': 'C'}, return_stderr=stderr)
+            'echo IRstdout; echo IRstderr 1>&2',
+            shell=True,
+            env={'LC_ALL': 'C'},
+            return_stderr=stderr,
+        )
         self.assertEqual(stdout, b'IRstdout\n')
         self.assertEqual(stderr, [b'IRstderr\n'])

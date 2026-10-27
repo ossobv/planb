@@ -21,7 +21,5 @@ def seconds(seconds_):
     if seconds_ < 60:
         return '{}s'.format(seconds_)
     if seconds_ < 86400:
-        return '{:d}h {:02.0f}m'.format(
-            seconds_ // 3600, round((seconds_ % 3600) / 60))
-    return '{:d}d {:1.0f}h'.format(
-        seconds_ // 86400, round((seconds_ % 86400) / 3600))
+        return '{:d}h {:02.0f}m'.format(seconds_ // 3600, round((seconds_ % 3600) / 60))
+    return '{:d}d {:1.0f}h'.format(seconds_ // 86400, round((seconds_ % 86400) / 3600))

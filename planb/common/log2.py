@@ -6,6 +6,7 @@ class AdminEmailHandler(log.AdminEmailHandler):
 
     Fix so subject cannot be ridiculously long.
     """
+
     def format_subject(self, subject):
         """
         Escape CR and LF characters.

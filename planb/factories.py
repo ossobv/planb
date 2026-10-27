@@ -16,8 +16,7 @@ class UserFactory(DjangoModelFactory):
 
     @classmethod
     def _create(cls, model_class, username, email, password, **kwargs):
-        instance = model_class.objects._create_user(
-            username, email, password, **kwargs)
+        instance = model_class.objects._create_user(username, email, password, **kwargs)
         instance.raw_password = password
         return instance
 
@@ -38,8 +37,9 @@ class FilesetFactory(DjangoModelFactory):
     @factory.lazy_attribute
     def friendly_name(self):
         # Set friendly name as the full hostname within the hostgroup domain.
-        return '.'.join((
-            self.host_prefix, self.host_suffix, self.hostgroup.name, self.tld))
+        return '.'.join(
+            (self.host_prefix, self.host_suffix, self.hostgroup.name, self.tld)
+        )
 
     storage_alias = 'dummy'
     hostgroup = factory.SubFactory(HostGroupFactory)

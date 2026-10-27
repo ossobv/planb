@@ -10,7 +10,9 @@ class PlanbAppConfig(AppConfig):
         # Monkeypatch the debug view ErrorReporter.
         from django.views import debug
         from .monkeypatch import PlanbExceptionReporter
+
         debug.ExceptionReporter = PlanbExceptionReporter
 
         from .checks import check_planb_settings
+
         checks.register(check_planb_settings)

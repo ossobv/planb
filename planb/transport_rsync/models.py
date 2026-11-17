@@ -313,9 +313,6 @@ class Config(AbstractTransport):
         rsync_flags, remote_shell = self.get_rsync_flags()
         data_dir = self.fileset.get_dataset().get_data_path()
 
-        version = rsync_version()
-        assert version >= (3, 2, 4), 'rsync version {} too low'.format(version)
-
         simple_args = (
             settings.PLANB_RSYNC_BIN,
             '--delete',
@@ -390,6 +387,9 @@ class Config(AbstractTransport):
             )
 
     def _do_actual_transport(self):
+        version = rsync_version()
+        assert version >= (3, 2, 4), 'rsync version {} too low'.format(version)
+
         cmd = self.generate_rsync_command()
         logger.info('Running %s: %s', self.fileset.friendly_name, argsjoin(cmd))
 

@@ -35,6 +35,16 @@ def message(
 class TaskTestCase(PlanbTestCase):
     maxDiff = 8192
 
+    def setUp(self):
+        super().setUp()
+        # RSYNC_BIN does not exist; pretend it is a recent enough rsync so
+        # the version check in _do_actual_transport passes.
+        patcher = patch(
+            'planb.transport_rsync.models.rsync_version', return_value=(3, 2, 7)
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def assertTransportCommand(self, mock_check_config, fileset, config):
         # Check the transport command.
         call = mock_check_config.call_args[0][0]

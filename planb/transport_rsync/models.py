@@ -19,6 +19,21 @@ from .rsync import RSYNC_ERR_VANISHED_SOURCE, RSYNC_EXITCODES
 logger = logging.getLogger(__name__)
 
 
+def rsync_version():
+    try:
+        version = (
+            check_output([settings.PLANB_RSYNC_BIN, '--version'])
+            .decode('utf-8'))
+        version = version.split('\n', 1)[0]
+        version = [ver for ver in version.split() if ver[0].isdigit()]
+        assert version, version
+        version = tuple(
+            (int(d) if d.isdigit() else d) for d in version[0].split('.'))
+    except Exception:
+        version = (0, 0, 0)
+    return version
+
+
 class TransportChoices(models.PositiveSmallIntegerField):
     SSH = 0
     RSYNC = 1
@@ -298,6 +313,9 @@ class Config(AbstractTransport):
         rsync_flags, remote_shell = self.get_rsync_flags()
         data_dir = self.fileset.get_dataset().get_data_path()
 
+        version = rsync_version()
+        assert version >= (3, 2, 4), 'rsync version {} too low'.format(version)
+
         simple_args = (
             settings.PLANB_RSYNC_BIN,
             '--delete',
@@ -305,10 +323,6 @@ class Config(AbstractTransport):
             # -a, --archive; equals -rlptgoD (no -H,-A,-X)
             '--recursive',  # -r
             '--links',  # -l
-            # > rsync 3.2.3 is affected by lack of:
-            # > https://github.com/WayneD/rsync/commit/
-            # >   9dd62525f3b98d692e031f22c02be8f775966503
-            # > see: https://bugs.gentoo.org/777483
             '--perms',  # -p
             '--times',  # -t
             # '--group' <-- not '-g'
@@ -316,10 +330,6 @@ class Config(AbstractTransport):
             # '--numeric-ids' <-- only useful if we use group/owner
             '--devices',  # -D (won't work without root though)
             '--specials',  # -D
-            # Work around rsync bug in 3.1.0. Possibly not needed when
-            # we (also) use --whole-file.
-            # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=741628
-            '--block-size=131072',  # 128k == MAX_BLOCK_SIZE (1 << 17)
             # We rarely update files and we have fast link everywhere.
             # Don't spend time on checking/transferring partial files.
             '--whole-file',

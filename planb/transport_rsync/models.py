@@ -333,6 +333,9 @@ class Config(AbstractTransport):
             # We rarely update files and we have fast link everywhere.
             # Don't spend time on checking/transferring partial files.
             '--whole-file',
+            # Overwrite at the same offsets so ZFS nopwrite can skip
+            # unchanged records and keep them shared with snapshots.
+            '--inplace',
             # Fix problems when we're not root, but we can download dirs
             # with improper perms because we're root remotely. rsync
             # could set up dir structures where files inside cannot be

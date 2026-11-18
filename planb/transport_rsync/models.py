@@ -21,14 +21,11 @@ logger = logging.getLogger(__name__)
 
 def rsync_version():
     try:
-        version = (
-            check_output([settings.PLANB_RSYNC_BIN, '--version'])
-            .decode('utf-8'))
+        version = check_output([settings.PLANB_RSYNC_BIN, '--version']).decode('utf-8')
         version = version.split('\n', 1)[0]
         version = [ver for ver in version.split() if ver[0].isdigit()]
         assert version, version
-        version = tuple(
-            (int(d) if d.isdigit() else d) for d in version[0].split('.'))
+        version = tuple((int(d) if d.isdigit() else d) for d in version[0].split('.'))
     except Exception:
         version = (0, 0, 0)
     return version

@@ -35,7 +35,7 @@ jobs:
           apt-get update
           apt-get install -qy --no-install-recommends \
             libsqlite3-0 python3-cffi-backend tzdata
-          uv tool install tox --with tox-gh-actions --with tox-uv
+          uv tool install "tox<4.67.14" --with tox-gh-actions --with tox-uv
 
       - name: Run tests with tox
         run: uvx tox -- -v

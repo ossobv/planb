@@ -18,7 +18,10 @@ RSYNC_EXITCODES = {
     20: 'Received SIGUSR1 or SIGINT',
     21: 'Some error returned by waitpid()',
     22: 'Error allocating core memory buffers',
+    # Not fine: now with --inplace, we should not accept this and make a
+    # snapshot of broken partial files.
     23: 'Partial transfer due to error',
+    # Fine: the next run will get the new state.
     24: 'Partial transfer due to vanished source files',
     25: 'The --max-delete limit stopped deletions',
     30: 'Timeout in data send/receive',

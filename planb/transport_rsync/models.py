@@ -337,7 +337,10 @@ class Config(AbstractTransport):
             # with improper perms because we're root remotely. rsync
             # could set up dir structures where files inside cannot be
             # accessible anymore. Make sure our user has rx access.
-            '--chmod=Du+rx',
+            # For files, we have the same problem now that we're using
+            # --inplace: our backup user needs u+w perms to update files.
+            # (Before --inplace, a fresh copy would be moved over it.)
+            '--chmod=Du+rx,Fu+w',
             # Limit bandwidth a bit by default.
             '--bwlimit=10M',
         )
